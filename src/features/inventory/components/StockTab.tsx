@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { ActionMenu } from '@/components/ui/ActionMenu'
+import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Spinner } from '@/components/ui/States'
 import { formatNumber } from '@/lib/utils'
@@ -13,11 +15,12 @@ import { StockAdjustModal } from './StockAdjustModal'
 import type { StockRow } from '@/pdf/StockReportPDF'
 
 export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'damaged' | 'quarantine'; title: string }) {
-  const { currentClientId, clients, can } = useAuth()
+  const { currentClientId, clients, can, isPlatformAdmin } = useAuth()
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [adjust, setAdjust] = useState(false)
+  const [deleting, setDeleting] = useState<any>(null)
   const client = clients.find(c => c.id === currentClientId)
 
   const load = () => {
@@ -48,6 +51,17 @@ export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'dam
     { key: 'reserved', header: 'Reserved', accessor: (r: any) => r.reserved_qty, className: 'text-right' }
   ]
 
+  // Delete is restricted to platform admins and requires password confirmation.
+  const actionCol = {
+    key: '__actions', header: '', className: 'w-px whitespace-nowrap',
+    render: (r: any) => (
+      <div className="flex justify-end" onClick={e => e.stopPropagation()}>
+        <ActionMenu items={[{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }]} />
+      </div>
+    )
+  }
+  const allColumns = isPlatformAdmin ? [...columns, actionCol] : columns
+
   const exportPDF = async () => {
     const data: StockRow[] = filtered.map(r => ({
       code: r.products?.material_code ?? '', name: r.products?.name ?? '', warehouse: r.warehouses?.code ?? '',
@@ -69,9 +83,16 @@ export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'dam
         </div>
       </div>
       <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
+        <DataTable columns={allColumns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
       </Card>
       <StockAdjustModal open={adjust} onClose={() => setAdjust(false)} onDone={() => { setAdjust(false); load() }} />
+      <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
+        name={deleting ? `stock · ${deleting.products?.name ?? deleting.products?.material_code ?? ''}` : undefined}
+        onConfirm={async () => {
+          const res = await supabase.from('inventory_stock').delete().eq('id', deleting.id)
+          if (!res.error) { setDeleting(null); load() }
+          return res
+        }} />
     </div>
   )
 }

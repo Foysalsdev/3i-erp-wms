@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { MasterDef } from '../registry'
 import { useRelationLabels, fieldDisplay } from '../masterUtils'
 import { useCollection } from '@/hooks/useCollection'
@@ -11,63 +11,12 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
+import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
+import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { initials, cn } from '@/lib/utils'
 import { MasterForm } from './MasterForm'
 import { MasterProfile } from './MasterProfile'
-
-interface MenuItem { icon: string; label: string; onClick: () => void; tone?: string }
-
-// Kebab (3-dot) menu. Rendered fixed-positioned so it is never clipped by the table's overflow.
-function ActionMenu({ items }: { items: MenuItem[] }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, left: 0 })
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDoc = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    const close = () => setOpen(false)
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    window.addEventListener('scroll', close, true)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-      window.removeEventListener('scroll', close, true)
-    }
-  }, [open])
-
-  const toggle = () => {
-    const r = btnRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: r.bottom + 4, left: r.right - 176 }) // 176 = w-44 menu width, right-aligned to button
-    setOpen(o => !o)
-  }
-
-  return (
-    <>
-      <button ref={btnRef} title="Actions" aria-label="Actions" aria-haspopup="menu" aria-expanded={open} onClick={toggle}
-        className={cn('rounded-md p-1.5 text-ink-faint transition-colors hover:bg-surface-sunken hover:text-brand-700', open && 'bg-surface-sunken text-ink')}>
-        <Icon name="more_vert" className="text-[18px]" />
-      </button>
-      {open && (
-        <div ref={menuRef} role="menu" style={{ top: pos.top, left: Math.max(8, pos.left) }}
-          className="fixed z-50 w-44 overflow-hidden rounded-lg border border-surface-line bg-surface py-1 shadow-card">
-          {items.map(it => (
-            <button key={it.label} role="menuitem" onClick={() => { setOpen(false); it.onClick() }}
-              className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink', it.tone)}>
-              <Icon name={it.icon} className="text-[18px]" /> {it.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </>
-  )
-}
 
 export function MasterList({ def }: { def: MasterDef }) {
   const { data, loading, refresh } = useCollection(def.table, { order: 'created_at' })
@@ -83,7 +32,6 @@ export function MasterList({ def }: { def: MasterDef }) {
   const [editing, setEditing] = useState<any>(null)
   const [selected, setSelected] = useState<{ row: any; tab: string } | null>(null)
   const [deleting, setDeleting] = useState<any>(null)
-  const [delBusy, setDelBusy] = useState(false)
   const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
 
   const filtered = useMemo(() => {
@@ -107,22 +55,6 @@ export function MasterList({ def }: { def: MasterDef }) {
     return <MasterProfile def={def} record={fresh} canEdit={canEdit} initialTab={selected.tab}
       onBack={() => setSelected(null)}
       onEdit={() => { setEditing(fresh); setModal(true) }} />
-  }
-
-  const confirmDelete = async () => {
-    if (!deleting) return
-    setDelBusy(true)
-    try {
-      const { error } = await supabase.from(def.table as any).delete().eq('id', deleting.id)
-      if (error) { notify('error', error.message); return }
-      notify('success', `${def.singular} deleted`)
-      setDeleting(null)
-      refresh()
-    } catch (e: any) {
-      notify('error', e?.message ?? 'Could not delete. Try again.')
-    } finally {
-      setDelBusy(false)
-    }
   }
 
   const rowActions = (row: any): MenuItem[] => [
@@ -207,15 +139,13 @@ export function MasterList({ def }: { def: MasterDef }) {
           onDone={() => { setModal(false); refresh() }} />
       </Modal>
 
-      <Modal open={!!deleting} onClose={() => setDeleting(null)} title={`Delete ${def.singular}`}>
-        <p className="text-sm text-ink-soft">
-          Are you sure you want to delete <b className="text-ink">{deleting?.[def.nameField]}</b>? This action cannot be undone.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
-          <Button variant="danger" icon="delete" loading={delBusy} onClick={confirmDelete}>Delete</Button>
-        </div>
-      </Modal>
+      <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
+        name={deleting ? `${def.singular} · ${deleting[def.nameField]}` : undefined}
+        onConfirm={async () => {
+          const res = await supabase.from(def.table as any).delete().eq('id', deleting.id)
+          if (!res.error) { setDeleting(null); refresh() }
+          return res
+        }} />
     </div>
   )
 }

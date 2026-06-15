@@ -16,6 +16,11 @@ export function StockAdjustModal({ open, onClose, onDone }: { open: boolean; onC
   const [saving, setSaving] = useState(false)
   const [f, setF] = useState<any>({ stock_status: 'good', direction: 'in', movement_type: 'ADJUST', qty: '' })
 
+  // Reset the form whenever the modal closes so it never reopens with stale input.
+  useEffect(() => {
+    if (!open) setF({ stock_status: 'good', direction: 'in', movement_type: 'ADJUST', qty: '' })
+  }, [open])
+
   useEffect(() => {
     if (!open || !clientId) return
     supabase.from('products').select('id,name,material_code').eq('client_id', clientId).then(({ data }) => setProducts(data ?? []))

@@ -31,7 +31,8 @@ h1,h2,h3,h4 { @apply font-display; }
 
 @layer components {
   .fiori-input {
-    @apply w-full rounded-lg border border-surface-line bg-surface px-3.5 py-2.5 text-sm text-ink
+    /* 16px on mobile prevents iOS Safari from auto-zooming on focus; 14px from sm up. */
+    @apply w-full rounded-lg border border-surface-line bg-surface px-3.5 py-2.5 text-base sm:text-sm text-ink
            placeholder:text-ink-faint outline-none transition-all
            focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-faint;
   }

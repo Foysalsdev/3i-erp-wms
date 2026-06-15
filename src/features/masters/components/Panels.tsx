@@ -15,7 +15,7 @@ export function NotesPanel({ entityType, entityId }: { entityType: string; entit
   const [body, setBody] = useState('')
   const load = () => supabase.from('notes').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
     .order('created_at', { ascending: false }).then(({ data }) => setRows(data ?? []))
-  useEffect(() => { load() }, [entityId])
+  useEffect(() => { load() }, [entityType, entityId])
   const add = async () => {
     if (!body.trim()) return
     await supabase.from('notes').insert({ client_id: clientId!, entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
@@ -47,7 +47,7 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
   const [busy, setBusy] = useState(false)
   const load = () => supabase.from('attachments').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
     .order('created_at', { ascending: false }).then(({ data }) => setRows(data ?? []))
-  useEffect(() => { load() }, [entityId])
+  useEffect(() => { load() }, [entityType, entityId])
 
   const upload = async (file: File) => {
     setBusy(true)

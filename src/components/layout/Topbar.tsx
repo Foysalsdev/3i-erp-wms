@@ -54,7 +54,19 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
                   </div>
                 </div>
                 {isPlatformAdmin && <p className="px-4 pt-2"><span className="inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 ring-1 ring-brand-100">PLATFORM ADMIN</span></p>}
-                <p className="px-4 py-2 text-[11px] text-ink-soft">Active client: <b className="text-ink">{current?.name}</b></p>
+                {/* Client switcher inside the menu — the only way to switch clients on mobile (the bar selector is hidden below sm). */}
+                <div className="px-4 py-2 sm:hidden">
+                  <label className="mb-1 block text-[11px] font-semibold text-ink-soft">Active client</label>
+                  <div className="relative flex items-center rounded-lg border border-surface-line bg-surface">
+                    <Icon name="domain" className="ml-2.5 text-[18px] text-ink-faint" />
+                    <select value={currentClientId ?? ''} onChange={e => setClient(e.target.value)}
+                      className="w-full appearance-none bg-transparent py-2 pl-2 pr-7 text-sm font-semibold text-ink outline-none">
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_internal ? ' (Internal)' : ''}</option>)}
+                    </select>
+                    <Icon name="expand_more" className="pointer-events-none absolute right-2 text-[18px] text-ink-faint" />
+                  </div>
+                </div>
+                <p className="px-4 py-2 text-[11px] text-ink-soft sm:block hidden">Active client: <b className="text-ink">{current?.name}</b></p>
                 <button onClick={signOut} className="flex w-full items-center gap-2 border-t border-surface-line px-4 py-2.5 text-sm font-semibold text-bad hover:bg-surface-sunken">
                   <Icon name="logout" className="text-[18px]" /> Sign out
                 </button>

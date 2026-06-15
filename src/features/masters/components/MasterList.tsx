@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MasterDef } from '../registry'
 import { useRelationLabels, fieldDisplay } from '../masterUtils'
 import { useCollection } from '@/hooks/useCollection'
@@ -15,12 +15,56 @@ import { initials, cn } from '@/lib/utils'
 import { MasterForm } from './MasterForm'
 import { MasterProfile } from './MasterProfile'
 
-function ActionBtn({ icon, label, tone, onClick }: { icon: string; label: string; tone?: string; onClick: (e: React.MouseEvent) => void }) {
+interface MenuItem { icon: string; label: string; onClick: () => void; tone?: string }
+
+// Kebab (3-dot) menu. Rendered fixed-positioned so it is never clipped by the table's overflow.
+function ActionMenu({ items }: { items: MenuItem[] }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const close = () => setOpen(false)
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [open])
+
+  const toggle = () => {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 4, left: r.right - 176 }) // 176 = w-44 menu width, right-aligned to button
+    setOpen(o => !o)
+  }
+
   return (
-    <button title={label} aria-label={label} onClick={onClick}
-      className={cn('rounded-md p-1.5 text-ink-faint transition-colors hover:bg-surface-sunken', tone)}>
-      <Icon name={icon} className="text-[18px]" />
-    </button>
+    <>
+      <button ref={btnRef} title="Actions" aria-label="Actions" aria-haspopup="menu" aria-expanded={open} onClick={toggle}
+        className={cn('rounded-md p-1.5 text-ink-faint transition-colors hover:bg-surface-sunken hover:text-brand-700', open && 'bg-surface-sunken text-ink')}>
+        <Icon name="more_vert" className="text-[18px]" />
+      </button>
+      {open && (
+        <div ref={menuRef} role="menu" style={{ top: pos.top, left: Math.max(8, pos.left) }}
+          className="fixed z-50 w-44 overflow-hidden rounded-lg border border-surface-line bg-surface py-1 shadow-card">
+          {items.map(it => (
+            <button key={it.label} role="menuitem" onClick={() => { setOpen(false); it.onClick() }}
+              className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink', it.tone)}>
+              <Icon name={it.icon} className="text-[18px]" /> {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -61,14 +105,18 @@ export function MasterList({ def }: { def: MasterDef }) {
       onEdit={() => { setEditing(fresh); setModal(true) }} />
   }
 
+  const rowActions = (row: any): MenuItem[] => [
+    { icon: 'visibility', label: 'View', onClick: () => setSelected({ row, tab: 'details' }) },
+    ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(row); setModal(true) } }] : []),
+    { icon: 'print', label: 'Print', onClick: () => printRecord(row) },
+    { icon: 'comment', label: 'Comment', onClick: () => setSelected({ row, tab: 'notes' }) }
+  ]
+
   const actionCol: Column<any> = {
     key: '__actions', header: 'Action', className: 'w-px whitespace-nowrap',
     render: (row: any) => (
-      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-        <ActionBtn icon="visibility" label="View" tone="hover:text-brand-700" onClick={() => setSelected({ row, tab: 'details' })} />
-        {canEdit && <ActionBtn icon="edit" label="Edit" tone="hover:text-brand-700" onClick={() => { setEditing(row); setModal(true) }} />}
-        <ActionBtn icon="print" label="Print" tone="hover:text-brand-700" onClick={() => printRecord(row)} />
-        <ActionBtn icon="comment" label="Comment" tone="hover:text-brand-700" onClick={() => setSelected({ row, tab: 'notes' })} />
+      <div className="flex items-center justify-end" onClick={e => e.stopPropagation()}>
+        <ActionMenu items={rowActions(row)} />
       </div>
     )
   }
@@ -123,11 +171,8 @@ export function MasterList({ def }: { def: MasterDef }) {
                     </div>
                   </button>
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-0.5 border-t border-surface-line pt-2">
-                  <ActionBtn icon="visibility" label="View" onClick={() => setSelected({ row: r, tab: 'details' })} />
-                  {canEdit && <ActionBtn icon="edit" label="Edit" onClick={() => { setEditing(r); setModal(true) }} />}
-                  <ActionBtn icon="print" label="Print" onClick={() => printRecord(r)} />
-                  <ActionBtn icon="comment" label="Comment" onClick={() => setSelected({ row: r, tab: 'notes' })} />
+                <div className="mt-3 flex items-center justify-end border-t border-surface-line pt-2" onClick={e => e.stopPropagation()}>
+                  <ActionMenu items={rowActions(r)} />
                 </div>
               </Card>
             )

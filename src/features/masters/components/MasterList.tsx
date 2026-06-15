@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MasterDef } from '../registry'
 import { useRelationLabels, fieldDisplay } from '../masterUtils'
 import { useCollection } from '@/hooks/useCollection'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { DataTable, type Column } from '@/components/ui/DataTable'
@@ -72,6 +73,7 @@ export function MasterList({ def }: { def: MasterDef }) {
   const { data, loading, refresh } = useCollection(def.table, { order: 'created_at' })
   const can = useAuth(s => s.can)
   const { clients, currentClientId } = useAuth()
+  const isAdmin = useAuth(s => s.isPlatformAdmin)
   const notify = useUI(s => s.notify)
   const rel = useRelationLabels(def)
   const canEdit = can('masters.create') || can('masters.edit')
@@ -80,6 +82,8 @@ export function MasterList({ def }: { def: MasterDef }) {
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [selected, setSelected] = useState<{ row: any; tab: string } | null>(null)
+  const [deleting, setDeleting] = useState<any>(null)
+  const [delBusy, setDelBusy] = useState(false)
   const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
 
   const filtered = useMemo(() => {
@@ -105,11 +109,29 @@ export function MasterList({ def }: { def: MasterDef }) {
       onEdit={() => { setEditing(fresh); setModal(true) }} />
   }
 
+  const confirmDelete = async () => {
+    if (!deleting) return
+    setDelBusy(true)
+    try {
+      const { error } = await supabase.from(def.table as any).delete().eq('id', deleting.id)
+      if (error) { notify('error', error.message); return }
+      notify('success', `${def.singular} deleted`)
+      setDeleting(null)
+      refresh()
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not delete. Try again.')
+    } finally {
+      setDelBusy(false)
+    }
+  }
+
   const rowActions = (row: any): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => setSelected({ row, tab: 'details' }) },
     ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(row); setModal(true) } }] : []),
     { icon: 'print', label: 'Print', onClick: () => printRecord(row) },
-    { icon: 'comment', label: 'Comment', onClick: () => setSelected({ row, tab: 'notes' }) }
+    { icon: 'comment', label: 'Comment', onClick: () => setSelected({ row, tab: 'notes' }) },
+    // Delete is restricted to platform admins only.
+    ...(isAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(row) }] : [])
   ]
 
   const actionCol: Column<any> = {
@@ -183,6 +205,16 @@ export function MasterList({ def }: { def: MasterDef }) {
       <Modal open={modal} onClose={() => setModal(false)} title={`${editing ? 'Edit' : 'New'} ${def.singular}`} size="lg">
         <MasterForm def={def} record={editing} onCancel={() => setModal(false)}
           onDone={() => { setModal(false); refresh() }} />
+      </Modal>
+
+      <Modal open={!!deleting} onClose={() => setDeleting(null)} title={`Delete ${def.singular}`}>
+        <p className="text-sm text-ink-soft">
+          Are you sure you want to delete <b className="text-ink">{deleting?.[def.nameField]}</b>? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="danger" icon="delete" loading={delBusy} onClick={confirmDelete}>Delete</Button>
+        </div>
       </Modal>
     </div>
   )

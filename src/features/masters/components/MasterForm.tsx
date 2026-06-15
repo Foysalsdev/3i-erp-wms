@@ -14,7 +14,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
   const notify = useUI(s => s.notify)
   const [saving, setSaving] = useState(false)
   const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string }[]>>({})
-  const { register, handleSubmit, watch, setValue } = useForm({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     defaultValues: record ?? { status: 'active', uom: 'PCS', unit: 'PCS' }
   })
 
@@ -32,26 +32,35 @@ export function MasterForm({ def, record, onDone, onCancel }:
   }, [def, clientId])
 
   const submit = async (values: any) => {
+    if (!clientId) { notify('error', 'No client selected. Pick a client first.'); return }
     setSaving(true)
-    def.fields.filter(f => f.type === 'number').forEach(f => {
-      values[f.name] = values[f.name] === '' || values[f.name] == null ? null : Number(values[f.name])
-    })
-    def.fields.filter(f => f.type === 'checkbox').forEach(f => { values[f.name] = !!values[f.name] })
-    def.fields.filter(f => f.relation || f.type === 'date').forEach(f => {
-      if (values[f.name] === '') values[f.name] = null
-    })
-    const payload = { ...values, client_id: clientId }
-    const res = record
-      ? await supabase.from(def.table as any).update(payload).eq('id', record.id)
-      : await supabase.from(def.table as any).insert(payload)
-    setSaving(false)
-    if (res.error) { notify('error', res.error.message); return }
-    notify('success', `${def.singular} ${record ? 'updated' : 'created'}`)
-    onDone()
+    try {
+      def.fields.filter(f => f.type === 'number').forEach(f => {
+        values[f.name] = values[f.name] === '' || values[f.name] == null ? null : Number(values[f.name])
+      })
+      def.fields.filter(f => f.type === 'checkbox').forEach(f => { values[f.name] = !!values[f.name] })
+      def.fields.filter(f => f.relation || f.type === 'date').forEach(f => {
+        if (values[f.name] === '') values[f.name] = null
+      })
+      const payload = { ...values, client_id: clientId }
+      const res = record
+        ? await supabase.from(def.table as any).update(payload).eq('id', record.id)
+        : await supabase.from(def.table as any).insert(payload)
+      if (res.error) { notify('error', res.error.message); return }
+      notify('success', `${def.singular} ${record ? 'updated' : 'created'}`)
+      onDone()
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not save. Check your connection and try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
+  // Surface validation failures so the form never fails silently.
+  const onInvalid = () => notify('error', 'Please fill in all required fields highlighted below.')
+
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-4">
+    <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {def.fields.map(f => {
           if (f.type === 'image')
@@ -64,7 +73,8 @@ export function MasterForm({ def, record, onDone, onCancel }:
             )
           const opts = f.relation ? (relOptions[f.name] ?? []) : (f.options?.map(o => ({ id: o, label: o })) ?? [])
           return (
-            <Field key={f.name} label={f.label} required={f.required} className={f.span2 ? 'sm:col-span-2' : ''}>
+            <Field key={f.name} label={f.label} required={f.required} className={f.span2 ? 'sm:col-span-2' : ''}
+              error={errors[f.name] ? `${f.label} is required` : undefined}>
               {f.type === 'textarea' ? <Textarea {...register(f.name, { required: f.required })} placeholder={f.placeholder} />
               : (f.type === 'select' || f.relation) ? (
                 <Select {...register(f.name, { required: f.required })}>

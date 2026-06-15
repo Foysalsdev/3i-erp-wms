@@ -14,7 +14,6 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { initials, cn } from '@/lib/utils'
 import { MasterForm } from './MasterForm'
 import { MasterProfile } from './MasterProfile'
-import { downloadRecordPDF } from '@/pdf/RecordPDF'
 
 function ActionBtn({ icon, label, tone, onClick }: { icon: string; label: string; tone?: string; onClick: (e: React.MouseEvent) => void }) {
   return (
@@ -45,13 +44,14 @@ export function MasterList({ def }: { def: MasterDef }) {
     return data.filter((r: any) => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
   }, [data, q, def])
 
-  const printRecord = (row: any) => {
+  const printRecord = async (row: any) => {
     const fields = def.fields.filter(f => f.type !== 'image').map(f => ({ label: f.label, value: fieldDisplay(def, row, f.name, rel) }))
-    downloadRecordPDF({
+    notify('info', 'Generating PDF…')
+    const { downloadRecordPDF } = await import('@/pdf/RecordPDF')
+    await downloadRecordPDF({
       client: clientName, title: row[def.nameField], code: `${def.singular} · ${row[def.codeField]}`,
       photo: def.imageField ? row[def.imageField] : undefined, fields
     })
-    notify('info', 'Generating PDF…')
   }
 
   if (selected) {

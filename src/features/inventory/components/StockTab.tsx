@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/States'
 import { formatNumber } from '@/lib/utils'
 import { STOCK_STATUS } from '@/lib/constants'
 import { StockAdjustModal } from './StockAdjustModal'
-import { downloadStockPDF, type StockRow } from '@/pdf/StockReportPDF'
+import type { StockRow } from '@/pdf/StockReportPDF'
 
 export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'damaged' | 'quarantine'; title: string }) {
   const { currentClientId, clients, can } = useAuth()
@@ -48,12 +48,13 @@ export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'dam
     { key: 'reserved', header: 'Reserved', accessor: (r: any) => r.reserved_qty, className: 'text-right' }
   ]
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     const data: StockRow[] = filtered.map(r => ({
       code: r.products?.material_code ?? '', name: r.products?.name ?? '', warehouse: r.warehouses?.code ?? '',
       status: r.stock_status, qty: Number(r.quantity)
     }))
-    downloadStockPDF(client?.name ?? '', data, title)
+    const { downloadStockPDF } = await import('@/pdf/StockReportPDF')
+    await downloadStockPDF(client?.name ?? '', data, title)
   }
 
   if (loading) return <Spinner label="Loading stock…" />

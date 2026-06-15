@@ -11,14 +11,19 @@ import { formatDateTime } from '@/lib/utils'
 
 export function NotesPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
   const clientId = useAuth(s => s.currentClientId)
+  const notify = useUI(s => s.notify)
   const [rows, setRows] = useState<any[]>([])
   const [body, setBody] = useState('')
   const load = () => supabase.from('notes').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
-    .order('created_at', { ascending: false }).then(({ data }) => setRows(data ?? []))
+    .order('created_at', { ascending: false }).then(({ data, error }) => {
+      if (error) notify('error', `Could not load notes: ${error.message}`)
+      setRows(data ?? [])
+    })
   useEffect(() => { load() }, [entityType, entityId])
   const add = async () => {
     if (!body.trim()) return
-    await supabase.from('notes').insert({ client_id: clientId!, entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
+    const { error } = await supabase.from('notes').insert({ client_id: clientId!, entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
+    if (error) { notify('error', error.message); return }
     setBody(''); load()
   }
   return (
@@ -46,7 +51,10 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
   const [rows, setRows] = useState<any[]>([])
   const [busy, setBusy] = useState(false)
   const load = () => supabase.from('attachments').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
-    .order('created_at', { ascending: false }).then(({ data }) => setRows(data ?? []))
+    .order('created_at', { ascending: false }).then(({ data, error }) => {
+      if (error) notify('error', `Could not load attachments: ${error.message}`)
+      setRows(data ?? [])
+    })
   useEffect(() => { load() }, [entityType, entityId])
 
   const upload = async (file: File) => {

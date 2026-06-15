@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
+import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
@@ -16,6 +17,7 @@ import type { StockRow } from '@/pdf/StockReportPDF'
 
 export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'damaged' | 'quarantine'; title: string }) {
   const { currentClientId, clients, can, isPlatformAdmin } = useAuth()
+  const notify = useUI(s => s.notify)
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
@@ -30,7 +32,10 @@ export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'dam
       .select('*, products(name,material_code,restock_level), warehouses(name,code), locations(location_code)')
       .eq('client_id', currentClientId)
     if (statusFilter) query = query.eq('stock_status', statusFilter)
-    query.then(({ data }) => { setRows(data ?? []); setLoading(false) })
+    query.then(({ data, error }) => {
+      if (error) notify('error', `Could not load stock: ${error.message}`)
+      setRows(data ?? []); setLoading(false)
+    })
   }
   useEffect(load, [currentClientId, statusFilter])
 

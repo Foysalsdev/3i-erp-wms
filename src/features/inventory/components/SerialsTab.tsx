@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
+import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
@@ -15,6 +16,7 @@ const tone: Record<string, any> = { in_stock: 'positive', reserved: 'info', deli
 export function SerialsTab() {
   const clientId = useAuth(s => s.currentClientId)
   const isAdmin = useAuth(s => s.isPlatformAdmin)
+  const notify = useUI(s => s.notify)
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
@@ -25,7 +27,10 @@ export function SerialsTab() {
     setLoading(true)
     supabase.from('serial_numbers').select('*, products(name,material_code), warehouses(code)')
       .eq('client_id', clientId).order('created_at', { ascending: false }).limit(500)
-      .then(({ data }) => { setRows(data ?? []); setLoading(false) })
+      .then(({ data, error }) => {
+        if (error) notify('error', `Could not load serials: ${error.message}`)
+        setRows(data ?? []); setLoading(false)
+      })
   }
   useEffect(load, [clientId])
 

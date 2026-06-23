@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="104" fill="#ffffff"/>
+  <text x="256" y="330" font-family="'Plus Jakarta Sans','Segoe UI',Arial,sans-serif" font-weight="800" font-size="300" fill="#1c1c1c" text-anchor="middle">W</text>
+  <path d="M392 150 C300 92 150 120 110 200 C95 232 108 262 150 270 C112 245 130 196 196 160 C268 121 360 120 392 150 Z" fill="#eeb111"/>
+</svg>

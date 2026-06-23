@@ -1,0 +1,103 @@
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/store/auth'
+import { useUI } from '@/store/ui'
+import { Card } from '@/components/ui/Card'
+import { DataTable } from '@/components/ui/DataTable'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { ActionMenu } from '@/components/ui/ActionMenu'
+import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
+import { SearchBar } from '@/components/shared/SearchBar'
+import { Spinner } from '@/components/ui/States'
+import { formatNumber } from '@/lib/utils'
+import { STOCK_STATUS } from '@/lib/constants'
+import { StockAdjustModal } from './StockAdjustModal'
+import type { StockRow } from '@/pdf/StockReportPDF'
+
+export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'damaged' | 'quarantine'; title: string }) {
+  const { currentClientId, clients, can, isPlatformAdmin } = useAuth()
+  const notify = useUI(s => s.notify)
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
+  const [adjust, setAdjust] = useState(false)
+  const [deleting, setDeleting] = useState<any>(null)
+  const client = clients.find(c => c.id === currentClientId)
+
+  const load = () => {
+    if (!currentClientId) return
+    setLoading(true)
+    let query = supabase.from('inventory_stock')
+      .select('*, products(name,material_code,restock_level), warehouses(name,code), locations(location_code)')
+      .eq('client_id', currentClientId)
+    if (statusFilter) query = query.eq('stock_status', statusFilter)
+    query.then(({ data, error }) => {
+      if (error) notify('error', `Could not load stock: ${error.message}`)
+      setRows(data ?? []); setLoading(false)
+    })
+  }
+  useEffect(load, [currentClientId, statusFilter])
+
+  const filtered = useMemo(() => {
+    if (!q.trim()) return rows
+    const t = q.toLowerCase()
+    return rows.filter(r => (r.products?.name ?? '').toLowerCase().includes(t) || (r.products?.material_code ?? '').toLowerCase().includes(t))
+  }, [rows, q])
+
+  const columns = [
+    { key: 'code', header: 'Material Code', accessor: (r: any) => r.products?.material_code, sortable: true, className: 'font-medium' },
+    { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name, sortable: true },
+    { key: 'wh', header: 'Warehouse', accessor: (r: any) => r.warehouses?.code },
+    { key: 'loc', header: 'Location', accessor: (r: any) => r.locations?.location_code ?? '—' },
+    { key: 'status', header: 'Condition', render: (r: any) => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{r.stock_status}</Badge> },
+    { key: 'qty', header: 'On Hand', accessor: (r: any) => r.quantity, sortable: true, className: 'text-right font-medium',
+      render: (r: any) => <span className={Number(r.quantity) <= Number(r.products?.restock_level ?? 0) ? 'text-horizon-critical font-semibold' : ''}>{formatNumber(r.quantity)}</span> },
+    { key: 'reserved', header: 'Reserved', accessor: (r: any) => r.reserved_qty, className: 'text-right' }
+  ]
+
+  // Delete is restricted to platform admins and requires password confirmation.
+  const actionCol = {
+    key: '__actions', header: '', className: 'w-px whitespace-nowrap',
+    render: (r: any) => (
+      <div className="flex justify-end" onClick={e => e.stopPropagation()}>
+        <ActionMenu items={[{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }]} />
+      </div>
+    )
+  }
+  const allColumns = isPlatformAdmin ? [...columns, actionCol] : columns
+
+  const exportPDF = async () => {
+    const data: StockRow[] = filtered.map(r => ({
+      code: r.products?.material_code ?? '', name: r.products?.name ?? '', warehouse: r.warehouses?.code ?? '',
+      status: r.stock_status, qty: Number(r.quantity)
+    }))
+    const { downloadStockPDF } = await import('@/pdf/StockReportPDF')
+    await downloadStockPDF(client?.name ?? '', data, title)
+  }
+
+  if (loading) return <Spinner label="Loading stock…" />
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search product…" /></div>
+        <span className="text-sm text-horizon-muted">{filtered.length} records</span>
+        <div className="ml-auto flex gap-2">
+          <Button variant="secondary" icon="picture_as_pdf" onClick={exportPDF}>PDF</Button>
+          {can('inventory.adjust') && <Button icon="add" onClick={() => setAdjust(true)}>Post Movement</Button>}
+        </div>
+      </div>
+      <Card className="overflow-hidden">
+        <DataTable columns={allColumns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
+      </Card>
+      <StockAdjustModal open={adjust} onClose={() => setAdjust(false)} onDone={() => { setAdjust(false); load() }} />
+      <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
+        name={deleting ? `stock · ${deleting.products?.name ?? deleting.products?.material_code ?? ''}` : undefined}
+        onConfirm={async () => {
+          const res = await supabase.from('inventory_stock').delete().eq('id', deleting.id)
+          if (!res.error) { setDeleting(null); load() }
+          return res
+        }} />
+    </div>
+  )
+}

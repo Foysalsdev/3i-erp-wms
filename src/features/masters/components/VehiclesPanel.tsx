@@ -1,0 +1,62 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/store/auth'
+import { useUI } from '@/store/ui'
+import { Button } from '@/components/ui/Button'
+import { Field, Input, Select } from '@/components/ui/Field'
+import { Modal } from '@/components/ui/Modal'
+import { Badge } from '@/components/ui/Badge'
+import { EmptyState } from '@/components/ui/States'
+import { formatDate } from '@/lib/utils'
+
+// Multi-vehicle support under a transport vendor.
+export function VehiclesPanel({ vendorId }: { vendorId: string }) {
+  const clientId = useAuth(s => s.currentClientId)
+  const notify = useUI(s => s.notify)
+  const [rows, setRows] = useState<any[]>([])
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState<any>({ status: 'active' })
+  const load = () => supabase.from('vehicles').select('*').eq('vendor_id', vendorId).then(({ data }) => setRows(data ?? []))
+  useEffect(() => { load() }, [vendorId])
+
+  const save = async () => {
+    if (!form.vehicle_number) { notify('error', 'Vehicle number required'); return }
+    const { error } = await supabase.from('vehicles').insert({ ...form, vendor_id: vendorId, client_id: clientId })
+    if (error) { notify('error', error.message); return }
+    setOpen(false); setForm({ status: 'active' }); load(); notify('success', 'Vehicle added')
+  }
+  const F = (k: string, label: string, type = 'text') =>
+    <Field label={label}><Input type={type} value={form[k] ?? ''} onChange={e => setForm((f: any) => ({ ...f, [k]: e.target.value }))} /></Field>
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end"><Button size="sm" icon="add" onClick={() => setOpen(true)}>Add Vehicle</Button></div>
+      {rows.length === 0 ? <EmptyState icon="local_shipping" title="No vehicles" /> :
+        <div className="grid gap-3 sm:grid-cols-2">
+          {rows.map(v => (
+            <div key={v.id} className="rounded-card border border-horizon-line p-3 text-sm">
+              <div className="flex items-center justify-between"><b>{v.vehicle_number}</b><Badge tone={v.status === 'active' ? 'positive' : 'neutral'}>{v.status}</Badge></div>
+              <p className="text-horizon-muted">{v.vehicle_type} · {v.capacity}</p>
+              <p>Driver: {v.driver_name ?? '—'} ({v.driver_phone ?? '—'})</p>
+              <p className="text-[11px] text-horizon-muted">License exp: {formatDate(v.license_expiry)} · Fitness: {formatDate(v.fitness_expiry)} · Insurance: {formatDate(v.insurance_expiry)}</p>
+            </div>
+          ))}
+        </div>}
+      <Modal open={open} onClose={() => setOpen(false)} title="Add Vehicle">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {F('vehicle_type', 'Vehicle Type')}
+          {F('capacity', 'Vehicle Size / Capacity')}
+          {F('vehicle_number', 'Vehicle Number')}
+          {F('driver_name', 'Assigned Driver Name')}
+          {F('driver_phone', 'Driver Phone')}
+          {F('license_number', 'Driving License Number')}
+          {F('license_expiry', 'License Expiry', 'date')}
+          {F('fitness_expiry', 'Fitness Expiry', 'date')}
+          {F('insurance_expiry', 'Insurance Expiry', 'date')}
+          <Field label="Status"><Select value={form.status} onChange={e => setForm((f: any) => ({ ...f, status: e.target.value }))}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
+        </div>
+        <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button icon="save" onClick={save}>Save</Button></div>
+      </Modal>
+    </div>
+  )
+}

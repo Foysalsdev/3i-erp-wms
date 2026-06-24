@@ -6,7 +6,7 @@ import { formatNumber } from '@/lib/utils'
 
 export interface PickProduct {
   id: string; material_code: string; name: string
-  barcode?: string | null; category?: string | null; uom?: string | null
+  barcode?: string | null; category?: string | null; uom?: string | null; plant?: string | null
 }
 
 export interface LineRow {
@@ -22,8 +22,9 @@ export interface LineRow {
 
 const num = (v: number | string | undefined): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
-// Simple line entry: type (or scan) a material code, give a quantity, Add.
-// Description / Category / Unit stay in the master and print on the document.
+// Fast document-style entry: type/scan a material code + qty, or paste a
+// Material+Qty block straight from Excel (one row per line). UoM / Category /
+// Plant are pulled from the product master and shown on each line (SAP-style).
 export function LineItems({ rows, onChange, products, locations, variant }:
   {
     rows: LineRow[]
@@ -37,6 +38,7 @@ export function LineItems({ rows, onChange, products, locations, variant }:
   const [qty, setQty] = useState('')
   const [open, setOpen] = useState(false)
   const [acIdx, setAcIdx] = useState(0)
+  const [pasteNote, setPasteNote] = useState('')
   const codeRef = useRef<HTMLInputElement>(null)
   const qtyRef = useRef<HTMLInputElement>(null)
 
@@ -58,7 +60,7 @@ export function LineItems({ rows, onChange, products, locations, variant }:
     const idx = rows.findIndex(r => r.product_id === p.id)
     if (idx >= 0) onChange(rows.map((r, i) => i === idx ? { ...r, qty: num(r.qty) + q } : r))
     else onChange([...rows, { product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', stock_status: 'good', location_id: '' }])
-    setCode(''); setQty(''); setOpen(false); setAcIdx(0)
+    setCode(''); setQty(''); setOpen(false); setAcIdx(0); setPasteNote('')
     requestAnimationFrame(() => codeRef.current?.focus())
   }
   const commitAdd = () => {
@@ -69,29 +71,33 @@ export function LineItems({ rows, onChange, products, locations, variant }:
   const setRow = (i: number, patch: Partial<LineRow>) => onChange(rows.map((r, idx) => idx === i ? { ...r, ...patch } : r))
   const removeRow = (i: number) => onChange(rows.filter((_, idx) => idx !== i))
 
+  // Paste a Material+Qty block from Excel (tab / comma / semicolon separated; one product per line).
   const onPaste = (e: RClip<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text'); if (!/[\n\t]/.test(text)) return
     e.preventDefault()
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-    const next = [...rows]; let added = 0
+    const next = [...rows]; let added = 0, skipped = 0
     for (const line of lines) {
       const cells = line.split(/\t|,|;/).map(c => c.trim())
-      const p = byCode(cells[0]); if (!p) continue
+      const p = byCode(cells[0]); if (!p) { skipped++; continue }
       const q = num(cells[1]) || 1
       const idx = next.findIndex(r => r.product_id === p.id)
       if (idx >= 0) next[idx] = { ...next[idx], qty: num(next[idx].qty) + q }
       else next.push({ product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', stock_status: 'good', location_id: '' })
       added++
     }
-    if (added) { onChange(next); setCode('') }
+    if (added) { onChange(next); setCode(''); setQty('') }
+    setPasteNote(`${added} line(s) added${skipped ? ` · ${skipped} unknown code(s) skipped` : ''}`)
+    requestAnimationFrame(() => codeRef.current?.focus())
   }
 
+  const meta = (p?: PickProduct) => [p?.uom, p?.category, p?.plant].filter(Boolean).join(' · ')
   const totalQty = rows.reduce((s, r) => s + num(r.qty), 0)
   const accent = valid ? 'border-ok ring-1 ring-ok/40' : (code.trim() ? 'border-bad/50' : 'border-surface-line')
 
   return (
     <div className="space-y-3">
-      <h4 className="text-sm font-medium text-ink">Line items <span className="font-normal text-ink-faint">— enter material code &amp; qty</span></h4>
+      <h4 className="text-sm font-medium text-ink">Line items <span className="font-normal text-ink-faint">— type / scan a code, or paste a Material + Qty block from Excel</span></h4>
 
       <div className="flex flex-wrap items-start gap-2">
         <div className="relative min-w-[200px] flex-1">
@@ -111,14 +117,14 @@ export function LineItems({ rows, onChange, products, locations, variant }:
               {matches.map((p, si) => (
                 <button key={p.id} type="button" onMouseDown={e => { e.preventDefault(); setCode(p.material_code); setOpen(false); requestAnimationFrame(() => qtyRef.current?.focus()) }}
                   className={'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ' + (si === acIdx ? 'bg-brand-50' : 'hover:bg-surface-sunken')}>
-                  <span className="font-mono font-medium text-ink">{p.material_code}</span><span className="truncate text-ink-soft">{p.name}</span>
+                  <span className="font-mono font-medium text-ink">{p.material_code}</span><span className="truncate text-ink-soft">{p.name}{meta(p) ? ' · ' + meta(p) : ''}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
         <input ref={qtyRef} type="number" step="any" value={qty} placeholder="Qty"
-          onChange={e => setQty(e.target.value)}
+          onChange={e => setQty(e.target.value)} onPaste={onPaste}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitAdd() } }}
           className="fiori-input w-24 text-right" />
         <button type="button" onClick={commitAdd} disabled={!valid}
@@ -126,6 +132,7 @@ export function LineItems({ rows, onChange, products, locations, variant }:
           <Icon name="add" className="text-[18px]" /> Add
         </button>
       </div>
+      {pasteNote && <p className="text-xs font-medium text-brand-700">{pasteNote}</p>}
 
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-surface-line py-6 text-center text-sm text-ink-faint">No items yet — add a material code above</p>
@@ -135,10 +142,11 @@ export function LineItems({ rows, onChange, products, locations, variant }:
             const p = byId[r.product_id]
             return (
               <div key={i} className="flex flex-wrap items-center gap-3 px-3 py-2 hover:bg-surface-sunken/40">
+                <span className="w-7 shrink-0 text-center text-xs font-medium text-ink-faint">{i + 1}</span>
                 <Icon name="check_circle" className="text-[16px] text-ok" />
                 <div className="min-w-0 flex-1">
                   <div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div>
-                  <div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{p?.uom ? ' · ' + p.uom : ''}</div>
+                  <div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div>
                 </div>
                 {isGrn && (
                   <label className="flex items-center gap-1 text-xs text-ink-faint">Exp
@@ -162,12 +170,13 @@ export function LineItems({ rows, onChange, products, locations, variant }:
               </div>
             )
           })}
-          <div className="flex justify-end gap-2 bg-surface-sunken px-3 py-2 text-sm">
-            <span className="text-ink-soft">Total qty:</span><span className="font-semibold text-ink">{formatNumber(totalQty)}</span>
+          <div className="flex justify-end gap-4 bg-surface-sunken px-3 py-2 text-sm">
+            <span className="text-ink-soft">{rows.length} line(s)</span>
+            <span><span className="text-ink-soft">Total qty:</span> <span className="font-semibold text-ink">{formatNumber(totalQty)}</span></span>
           </div>
         </div>
       )}
-      <p className="text-xs text-ink-faint">Tip: scan a barcode, or paste a Material + Qty block from Excel into the code box.</p>
+      <p className="text-xs text-ink-faint">Tip: in Excel select two columns (Material code &amp; Qty), copy, then paste into the code or qty box — every row is added automatically.</p>
     </div>
   )
 }

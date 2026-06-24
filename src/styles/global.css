@@ -39,3 +39,8 @@ h1,h2,h3,h4 { @apply font-display; }
   .fiori-label { @apply mb-1.5 block text-xs font-semibold text-ink-soft; }
   .fiori-card { @apply rounded-xl bg-surface ring-1 ring-surface-line shadow-soft; }
 }
+
+/* Minimal number fields: no up/down spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }

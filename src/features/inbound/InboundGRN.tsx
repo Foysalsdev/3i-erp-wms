@@ -51,7 +51,7 @@ export function InboundGRN() {
     if (!currentClientId) return
     supabase.from('suppliers').select('id,supplier_code,name').eq('client_id', currentClientId).then(({ data }) => setSuppliers(data ?? []))
     supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('products').select('id,material_code,name,barcode,category,uom').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
+    supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
   }, [currentClientId])
 
   const supplierName = (id: string) => { const s = suppliers.find(x => x.id === id); return s ? `${s.supplier_code} — ${s.name}` : '—' }

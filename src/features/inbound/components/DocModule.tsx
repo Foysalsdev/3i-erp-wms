@@ -13,14 +13,15 @@ import { Badge } from '@/components/ui/Badge'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
+import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { Spinner } from '@/components/ui/States'
-import { formatDate, cn } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { downloadGatePassPDF } from '@/pdf/GatePassPDF'
 
 export function DocModule({ config }: { config: DocConfig }) {
   const { clientId, suppliers, customers, warehouses, products, locations, transporters, vehicles, drivers } = useInboundData()
-  const { can, clients, currentClientId } = useAuth()
+  const { can, clients, currentClientId, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
   const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
   const canEdit = can('inbound.create') || can('inbound.edit')
@@ -221,16 +222,22 @@ export function DocModule({ config }: { config: DocConfig }) {
     ...(party ? [{ key: 'party', header: partyLabel, render: (r: any) => partyMap[r[partyField]]?.split(' — ')[1] ?? '—' }] : []),
     { key: 'wh', header: 'Warehouse', render: (r: any) => warehouses.find(w => w.id === r.warehouse_id)?.label?.split(' — ')[0] ?? '—' },
     { key: 'status', header: 'Status', render: (r: any) => <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge> },
-    { key: '__a', header: 'Action', className: 'w-px whitespace-nowrap', render: (r: any) => (
-      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-        <Act icon="visibility" label="View" onClick={() => openDoc(r, true)} />
-        {canEdit && r.status === 'draft' && <Act icon="edit" label="Edit" onClick={() => openDoc(r, false)} />}
-        <Act icon="print" label="Print" onClick={() => printDoc(r)} />
-        {canPost && r.status === 'draft' && <Act icon="task_alt" label="Post" tone="hover:text-ok" onClick={() => post(r)} />}
-        {canEdit && r.status === 'draft' && <Act icon="delete" label="Delete" tone="hover:text-bad" onClick={() => del(r)} />}
+    { key: '__actions', header: 'Action', className: 'w-px whitespace-nowrap text-right', render: (r: any) => (
+      <div className="flex justify-end" onClick={e => e.stopPropagation()}>
+        <ActionMenu items={rowActions(r)} />
       </div>
     ) }
   ]
+
+  // Per-row actions, collapsed into the shared 3-dot (kebab) menu.
+  const rowActions = (r: any): MenuItem[] => [
+    { icon: 'visibility', label: 'View', onClick: () => openDoc(r, true) },
+    ...(canEdit && r.status === 'draft' ? [{ icon: 'edit', label: 'Edit', onClick: () => openDoc(r, false) }] : []),
+    { icon: 'print', label: 'Print', onClick: () => printDoc(r) },
+    ...(canPost && r.status === 'draft' ? [{ icon: 'task_alt', label: 'Post', tone: '!text-ok hover:!text-ok hover:!bg-ok/10', onClick: () => post(r) }] : []),
+    ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => del(r) }] : [])
+  ]
+
 
   return (
     <div className="space-y-4">
@@ -243,10 +250,4 @@ export function DocModule({ config }: { config: DocConfig }) {
       </Card>
     </div>
   )
-}
-
-function Act({ icon, label, tone, onClick }: { icon: string; label: string; tone?: string; onClick: () => void }) {
-  return <button title={label} aria-label={label} onClick={onClick}
-    className={cn('rounded-md p-1.5 text-ink-faint transition-colors hover:bg-surface-sunken hover:text-brand-700', tone)}>
-    <Icon name={icon} className="text-[18px]" /></button>
 }

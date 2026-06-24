@@ -15,7 +15,8 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Select, Input, Textarea } from '@/components/ui/Field'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
-import { formatNumber, formatDate } from '@/lib/utils'
+import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
+import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
@@ -190,6 +191,33 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
   const [saving, setSaving] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
   const posted = !!record?.posted_at
+  const [vehs, setVehs] = useState<any[]>(vehicles)
+  const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
+  const createVehicle = async (name: string) => {
+    const { data, error } = await (supabase as any).from('vehicles').insert({ client_id: clientId, vehicle_number: name }).select('*').single()
+    if (error) { notify('error', error.message); return null }
+    setVehs(v => [...v, data]); return { id: data.id, label: data.vehicle_number, sublabel: data.vehicle_type }
+  }
+
+  // Pick a sales order -> pull its customer, warehouse, PO, SAP invoice and lines
+  // (so nothing is typed twice). Each line keeps its so_item_id for tracking.
+  const [sos, setSos] = useState<any[]>([])
+  useEffect(() => {
+    if (!clientId) return
+    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
+  }, [clientId])
+  const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
+  const selectSO = async (soId: string) => {
+    const so = sos.find((x: any) => x.id === soId)
+    if (!so) { set({ sales_order_id: soId }); return }
+    const { data: items } = await supabase.from('sales_order_items').select('id,product_id,qty,delivered_qty,unit_price').eq('so_id', soId)
+    set({ sales_order_id: soId, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
+      po_no: so.reference_no || h.po_no, invoice_no: so.billing_doc_no || so.invoice_no || h.invoice_no })
+    setLines((items ?? []).map((it: any) => ({
+      product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
+      unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id
+    })))
+  }
 
   useEffect(() => {
     if (!h.warehouse_id) { setLocations([]); return }
@@ -209,7 +237,7 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
     try {
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       const header = {
-        client_id: clientId, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
+        client_id: clientId, sales_order_id: h.sales_order_id || null, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
         vehicle_id: h.vehicle_id || null, driver_name: h.driver_name || null, invoice_no: invoice,
         challan_date: h.challan_date || today(), total_qty: totalQty,
         po_no: h.po_no || null, dispatch_time: h.dispatch_time || null, lock_no: h.lock_no || null,
@@ -232,7 +260,7 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
       await supabase.from('delivery_challan_items').delete().eq('challan_id', challanId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
         client_id: clientId, challan_id: challanId, product_id: r.product_id, qty: Number(r.qty) || 0,
-        unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null
+        unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null, so_item_id: (r as any).so_item_id || null
       }))
       if (payloadLines.length) {
         const { error } = await supabase.from('delivery_challan_items').insert(payloadLines)
@@ -253,6 +281,9 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Challan No: </span><span className="font-semibold">{record.challan_no}</span>{posted && <span className="ml-2"><Badge tone="positive">Issued - stock out</Badge></span>}</div>}
         {posted && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">This challan is issued and stock is deducted. Editing lines will not change posted stock.</p>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Sales Order (auto-fills customer, items, PO & invoice)" className="sm:col-span-2">
+            <Combobox items={sos.map((o: any) => ({ id: o.id, label: o.so_no, sublabel: customers.find((c: any) => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
+          </Field>
           <Field label="Customer" required>
             <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
           </Field>
@@ -265,10 +296,7 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
           <Field label="SAP Invoice No" required><Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" /></Field>
           <Field label="Challan Date" required><Input type="date" value={h.challan_date ?? ''} onChange={e => set({ challan_date: e.target.value })} /></Field>
           <Field label="Vehicle">
-            <Select value={h.vehicle_id ?? ''} onChange={e => set({ vehicle_id: e.target.value })}>
-              <option value="">-</option>
-              {vehicles.map((v: any) => <option key={v.id} value={v.id}>{v.vehicle_number}{v.vehicle_type ? ' - ' + v.vehicle_type : ''}</option>)}
-            </Select>
+            <CreatableCombobox items={vehItems} value={h.vehicle_id ?? ''} onChange={(id: string) => set({ vehicle_id: id })} onCreate={createVehicle} noun="vehicle" placeholder="DM TA 00-0000" format={formatVehicleNo} />
           </Field>
           <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_name: e.target.value })} /></Field>
           <Field label="PO No"><Input value={h.po_no ?? ''} onChange={e => set({ po_no: e.target.value })} /></Field>

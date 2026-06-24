@@ -18,6 +18,7 @@ export interface LineRow {
   unit_price: number | string
   stock_status?: string
   location_id?: string
+  so_item_id?: string
 }
 
 const num = (v: number | string | undefined): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }

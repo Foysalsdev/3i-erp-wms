@@ -24,7 +24,10 @@ export const OP_RELATIONS: Record<string, OpRelation> = {
   goods_receipts:    { table: 'goods_receipts', code: 'grn_no' },
   pick_lists:        { table: 'pick_lists', code: 'pick_no' },
   dispatches:        { table: 'dispatches', code: 'dispatch_no' },
-  sales_orders:      { table: 'sales_orders', code: 'so_no' }
+  sales_orders:      { table: 'sales_orders', code: 'so_no' },
+  drivers:           { table: 'drivers', code: 'driver_code', name: 'name' },
+  couriers:          { table: 'couriers', code: 'courier_code', name: 'name' },
+  trips:             { table: 'trips', code: 'trip_no' }
 }
 
 export interface OpFieldDef {
@@ -74,6 +77,8 @@ const S = {
   dispatched:  { value: 'dispatched', label: 'Dispatched', tone: 'info' as const },
   delivered:   { value: 'delivered', label: 'Delivered', tone: 'positive' as const },
   open:        { value: 'open', label: 'Open', tone: 'critical' as const },
+  allocated:   { value: 'allocated', label: 'Allocated', tone: 'info' as const },
+  booked:      { value: 'booked', label: 'Booked', tone: 'info' as const },
   assigned:    { value: 'assigned', label: 'Assigned', tone: 'info' as const },
   inTransit:   { value: 'in_transit', label: 'In Transit', tone: 'info' as const },
   closed:      { value: 'closed', label: 'Closed', tone: 'positive' as const },
@@ -268,6 +273,86 @@ export const OPERATIONS: Record<string, OpDef> = {
       { name: 'request_date', label: 'Request Date', type: 'date', required: true },
       { name: 'required_date', label: 'Required Date', type: 'date' },
       { name: 'status', label: 'Status', type: 'select', options: ['open', 'assigned', 'in_transit', 'completed', 'closed', 'cancelled'], required: true },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+    ],
+    listColumns: []
+  },
+  'vehicle-allocation': {
+    key: 'vehicle-allocation', module: 'transport', table: 'vehicle_allocations', docType: 'VALLOC', numberField: 'allocation_no',
+    title: 'Vehicle Allocation', singular: 'Allocation', icon: 'local_shipping', permission: 'transport',
+    statuses: [S.allocated, S.inTransit, S.delivered, S.closed, S.cancelled], openStatuses: ['allocated', 'in_transit'],
+    searchFields: ['allocation_no'],
+    fields: [
+      { name: 'so_id', label: 'Sales Order', type: 'relation', relation: 'sales_orders' },
+      { name: 'transport_vendor_id', label: 'Transport Vendor', type: 'relation', relation: 'transport_vendors' },
+      { name: 'vehicle_id', label: 'Vehicle', type: 'relation', relation: 'vehicles' },
+      { name: 'driver_id', label: 'Driver', type: 'relation', relation: 'drivers' },
+      { name: 'allocation_date', label: 'Allocation Date', type: 'date', required: true },
+      { name: 'status', label: 'Status', type: 'select', options: ['allocated', 'in_transit', 'delivered', 'closed', 'cancelled'], required: true },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+    ],
+    listColumns: []
+  },
+  'trip': {
+    key: 'trip', module: 'transport', table: 'trips', docType: 'TRIP', numberField: 'trip_no',
+    title: 'Trip Management', singular: 'Trip', icon: 'route', permission: 'transport',
+    statuses: [S.open, S.inTransit, S.completed, S.closed, S.cancelled], openStatuses: ['open', 'in_transit'],
+    searchFields: ['trip_no', 'origin', 'destination'],
+    fields: [
+      { name: 'vehicle_id', label: 'Vehicle', type: 'relation', relation: 'vehicles' },
+      { name: 'driver_id', label: 'Driver', type: 'relation', relation: 'drivers' },
+      { name: 'transport_vendor_id', label: 'Transport Vendor', type: 'relation', relation: 'transport_vendors' },
+      { name: 'origin', label: 'Origin', type: 'text' },
+      { name: 'destination', label: 'Destination', type: 'text' },
+      { name: 'trip_date', label: 'Trip Date', type: 'date', required: true },
+      { name: 'status', label: 'Status', type: 'select', options: ['open', 'in_transit', 'completed', 'closed', 'cancelled'], required: true },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+    ],
+    listColumns: []
+  },
+  'courier': {
+    key: 'courier', module: 'transport', table: 'courier_shipments', docType: 'CSHIP', numberField: 'shipment_no',
+    title: 'Courier Management', singular: 'Courier Shipment', icon: 'local_post_office', permission: 'transport',
+    statuses: [S.booked, S.inTransit, S.delivered, S.closed, S.cancelled], openStatuses: ['booked', 'in_transit'],
+    searchFields: ['shipment_no', 'tracking_no'],
+    fields: [
+      { name: 'courier_id', label: 'Courier', type: 'relation', relation: 'couriers' },
+      { name: 'so_id', label: 'Sales Order', type: 'relation', relation: 'sales_orders' },
+      { name: 'tracking_no', label: 'Tracking No', type: 'text' },
+      { name: 'charge', label: 'Charge', type: 'number' },
+      { name: 'dispatch_date', label: 'Dispatch Date', type: 'date', required: true },
+      { name: 'status', label: 'Status', type: 'select', options: ['booked', 'in_transit', 'delivered', 'closed', 'cancelled'], required: true },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+    ],
+    listColumns: []
+  },
+  'trip-closure': {
+    key: 'trip-closure', module: 'transport', table: 'trip_closures', docType: 'TCLOSE', numberField: 'closure_no',
+    title: 'Trip Closure', singular: 'Trip Closure', icon: 'task_alt', permission: 'transport',
+    statuses: [S.closed, S.verified, S.cancelled], openStatuses: ['closed'],
+    searchFields: ['closure_no'],
+    fields: [
+      { name: 'trip_id', label: 'Trip', type: 'relation', relation: 'trips' },
+      { name: 'end_date', label: 'End Date', type: 'date' },
+      { name: 'actual_km', label: 'Actual KM', type: 'number' },
+      { name: 'fuel_cost', label: 'Fuel Cost', type: 'number' },
+      { name: 'other_expenses', label: 'Other Expenses', type: 'number' },
+      { name: 'status', label: 'Status', type: 'select', options: ['closed', 'verified', 'cancelled'], required: true },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+    ],
+    listColumns: []
+  },
+  'pod-collection': {
+    key: 'pod-collection', module: 'transport', table: 'pod_collections', docType: 'PODC', numberField: 'pod_no',
+    title: 'POD Collection', singular: 'POD', icon: 'fact_check', permission: 'transport',
+    statuses: [S.received, S.verified, S.disputed], openStatuses: ['received'],
+    searchFields: ['pod_no', 'received_by'],
+    fields: [
+      { name: 'so_id', label: 'Sales Order', type: 'relation', relation: 'sales_orders' },
+      { name: 'trip_id', label: 'Trip', type: 'relation', relation: 'trips' },
+      { name: 'received_by', label: 'Received By', type: 'text' },
+      { name: 'received_date', label: 'Received Date', type: 'date', required: true },
+      { name: 'status', label: 'Status', type: 'select', options: ['received', 'verified', 'disputed'], required: true },
       { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
     ],
     listColumns: []

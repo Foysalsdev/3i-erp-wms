@@ -7,7 +7,7 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/States'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatVehicleNo } from '@/lib/utils'
 
 // Multi-vehicle support under a transport vendor.
 export function VehiclesPanel({ vendorId }: { vendorId: string }) {
@@ -46,7 +46,7 @@ export function VehiclesPanel({ vendorId }: { vendorId: string }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {F('vehicle_type', 'Vehicle Type')}
           {F('capacity', 'Vehicle Size / Capacity')}
-          {F('vehicle_number', 'Vehicle Number')}
+          <Field label="Vehicle Number"><Input value={form.vehicle_number ?? ''} placeholder="DM TA 00-0000" onChange={e => setForm((f: any) => ({ ...f, vehicle_number: formatVehicleNo(e.target.value) }))} /></Field>
           {F('driver_name', 'Assigned Driver Name')}
           {F('driver_phone', 'Driver Phone')}
           {F('license_number', 'Driving License Number')}

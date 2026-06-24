@@ -23,6 +23,7 @@ export interface FieldDef {
   placeholder?: string
   span2?: boolean
   help?: string
+  format?: 'vehicleNo'
 }
 
 export interface MasterDef {
@@ -188,6 +189,27 @@ export const MASTERS: Record<string, MasterDef> = {
       { key: 'status', header: 'Status', render: statusBadge }
     ]
   },
+  couriers: {
+    key: 'couriers', table: 'couriers', title: 'Courier Master', singular: 'Courier',
+    icon: 'local_post_office', codeField: 'courier_code', nameField: 'name', subField: 'contact_person',
+    searchFields: ['name', 'courier_code', 'phone'],
+    fields: [
+      { name: 'courier_code', label: 'Courier Code', type: 'text', required: true },
+      { name: 'name', label: 'Courier Name', type: 'text', required: true, span2: true },
+      { name: 'contact_person', label: 'Contact Person', type: 'text' },
+      { name: 'phone', label: 'Phone', type: 'text' },
+      { name: 'email', label: 'Email', type: 'text' },
+      { name: 'tracking_url', label: 'Tracking URL', type: 'text', span2: true },
+      { name: 'status', label: 'Status', type: 'select', options: STATUS, required: true }
+    ],
+    listColumns: [
+      { key: 'courier_code', header: 'Code', accessor: r => r.courier_code, sortable: true, className: 'font-medium' },
+      { key: 'name', header: 'Courier', accessor: r => r.name, sortable: true },
+      { key: 'contact_person', header: 'Contact', accessor: r => r.contact_person },
+      { key: 'phone', header: 'Phone', accessor: r => r.phone },
+      { key: 'status', header: 'Status', render: statusBadge }
+    ]
+  },
   drivers: {
     key: 'drivers', table: 'drivers', title: 'Driver Master', singular: 'Driver',
     icon: 'badge', codeField: 'driver_code', nameField: 'name', subField: 'phone', imageField: 'photo_url',
@@ -217,7 +239,7 @@ export const MASTERS: Record<string, MasterDef> = {
     searchFields: ['vehicle_number', 'vehicle_type', 'capacity'],
     fields: [
       { name: 'photo_url', label: 'Vehicle Photo', type: 'image' },
-      { name: 'vehicle_number', label: 'Vehicle Number', type: 'text', required: true },
+      { name: 'vehicle_number', label: 'Vehicle Number', type: 'text', required: true, format: 'vehicleNo', placeholder: 'DM TA 00-0000' },
       { name: 'vehicle_type', label: 'Vehicle Type', type: 'select', options: ['Covered Van', 'Pickup', 'Truck', 'Mini Truck', 'Trailer', 'Van'] },
       { name: 'capacity', label: 'Capacity', type: 'text' },
       { name: 'vendor_id', label: 'Transporter', type: 'select', relation: 'transport_vendors' },
@@ -370,6 +392,6 @@ export const MASTERS: Record<string, MasterDef> = {
 }
 
 export const MASTER_ORDER = [
-  'products', 'customers', 'suppliers', 'employees', 'transporters', 'drivers', 'vehicles',
+  'products', 'customers', 'suppliers', 'employees', 'transporters', 'couriers', 'drivers', 'vehicles',
   'warehouses', 'zones', 'locations', 'service-providers', 'assets', 'non-inventory'
 ]

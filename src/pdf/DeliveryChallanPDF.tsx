@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
+import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 
 const s = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#212326' },
@@ -6,7 +6,7 @@ const s = StyleSheet.create({
   brand: { fontSize: 16, fontWeight: 'bold', color: '#1f3a93' },
   title: { fontSize: 17, fontWeight: 'bold' },
   titleSub: { fontSize: 9, marginTop: 2 },
-  company: { marginBottom: 8 },
+  company: { marginTop: 14, marginBottom: 8 },
   companyName: { fontWeight: 'bold', fontSize: 9 },
   sub: { fontSize: 8, color: '#3a3a3a' },
   hr: { borderBottomWidth: 1, borderBottomColor: '#bbb', marginVertical: 6 },
@@ -19,13 +19,13 @@ const s = StyleSheet.create({
   r: { flexDirection: 'row', marginBottom: 2 },
   rk: { width: 78, fontSize: 8, color: '#444' },
   rv: { fontSize: 9, flex: 1 },
-  tHead: { flexDirection: 'row', borderWidth: 0.7, borderColor: '#333', backgroundColor: '#f2f2f0' },
+  tHead: { flexDirection: 'row', alignItems: 'center', borderWidth: 0.7, borderColor: '#333', backgroundColor: '#f2f2f0' },
   th: { fontSize: 8, fontWeight: 'bold', padding: 3, borderRightWidth: 0.5, borderRightColor: '#999' },
-  tr: { flexDirection: 'row', borderWidth: 0.7, borderTopWidth: 0, borderColor: '#333' },
+  tr: { flexDirection: 'row', alignItems: 'center', borderWidth: 0.7, borderTopWidth: 0, borderColor: '#333' },
   td: { fontSize: 8, padding: 3, borderRightWidth: 0.5, borderRightColor: '#ccc' },
   totalRow: { flexDirection: 'row', borderWidth: 0.7, borderTopWidth: 0, borderColor: '#333', paddingVertical: 3 },
   notes: { marginTop: 14, fontSize: 9, fontWeight: 'bold', textAlign: 'center' },
-  sign: { marginTop: 22, fontSize: 9, fontWeight: 'bold', textAlign: 'center' },
+  sign: { marginTop: 22, fontSize: 9, fontWeight: 'bold', textAlign: 'right' },
   signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 60 },
   footer: { position: 'absolute', bottom: 18, left: 28, right: 28, fontSize: 7, color: '#777', textAlign: 'center' }
 })
@@ -47,7 +47,7 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
     <Document>
       <Page size="A4" style={s.page}>
         <View style={s.topRow}>
-          <Text style={s.brand}>Whirlpool</Text>
+          <Image src="/whirlpool-logo.png" style={{ width: 118, height: 39 }} />
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={s.title}>DELIVERY CHALLAN</Text>
             <Text style={s.titleSub}>Delivery Challan# - {challan.challan_no}</Text>
@@ -55,9 +55,8 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
         </View>
 
         <View style={s.company}>
-          <Text style={s.companyName}>Company Name: {COMPANY.name}</Text>
+          <Text style={s.companyName}>{COMPANY.name}</Text>
           {COMPANY.lines.map((l, i) => <Text key={i} style={s.sub}>{l}</Text>)}
-          <Text style={s.sub}>{COMPANY.bin}</Text>
         </View>
         <View style={s.hr} />
 
@@ -86,29 +85,29 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
         </View>
 
         <View style={s.tHead}>
-          <Text style={[s.th, { width: '6%' }]}>SL</Text>
-          <Text style={[s.th, { width: '32%' }]}>Description</Text>
-          <Text style={[s.th, { width: '16%' }]}>Material Code</Text>
-          <Text style={[s.th, { width: '14%' }]}>Category</Text>
-          <Text style={[s.th, { width: '8%', textAlign: 'right' }]}>Qty</Text>
-          <Text style={[s.th, { width: '8%' }]}>Unit</Text>
-          <Text style={[s.th, { width: '16%' }]}>Remarks</Text>
+          <Text style={[s.th, { width: '5%' }]}>SL</Text>
+          <Text style={[s.th, { width: '41%' }]}>Description</Text>
+          <Text style={[s.th, { width: '14%' }]}>Material Code</Text>
+          <Text style={[s.th, { width: '13%' }]}>Category</Text>
+          <Text style={[s.th, { width: '7%', textAlign: 'right' }]}>Qty</Text>
+          <Text style={[s.th, { width: '7%' }]}>Unit</Text>
+          <Text style={[s.th, { width: '13%' }]}>Remarks</Text>
         </View>
         {(items || []).map((it: any) => (
           <View key={it.sl} style={s.tr}>
-            <Text style={[s.td, { width: '6%' }]}>{it.sl}</Text>
-            <Text style={[s.td, { width: '32%' }]}>{it.description}</Text>
-            <Text style={[s.td, { width: '16%' }]}>{it.material_code}</Text>
-            <Text style={[s.td, { width: '14%' }]}>{it.category}</Text>
-            <Text style={[s.td, { width: '8%', textAlign: 'right' }]}>{it.qty}</Text>
-            <Text style={[s.td, { width: '8%' }]}>{it.unit}</Text>
-            <Text style={[s.td, { width: '16%' }]}>{it.remarks}</Text>
+            <Text style={[s.td, { width: '5%' }]}>{it.sl}</Text>
+            <Text style={[s.td, { width: '41%', fontSize: 7.5 }]}>{it.description}</Text>
+            <Text style={[s.td, { width: '14%' }]}>{it.material_code}</Text>
+            <Text style={[s.td, { width: '13%' }]}>{it.category}</Text>
+            <Text style={[s.td, { width: '7%', textAlign: 'right' }]}>{it.qty}</Text>
+            <Text style={[s.td, { width: '7%' }]}>{it.unit}</Text>
+            <Text style={[s.td, { width: '13%' }]}>{it.remarks}</Text>
           </View>
         ))}
         <View style={s.totalRow}>
-          <Text style={{ width: '76%', textAlign: 'right', paddingRight: 6, fontWeight: 'bold' }}>Total =</Text>
-          <Text style={{ width: '8%', textAlign: 'right', fontWeight: 'bold' }}>{total}</Text>
-          <Text style={{ width: '16%' }}></Text>
+          <Text style={{ width: '73%', textAlign: 'right', paddingRight: 6, fontWeight: 'bold' }}>Total =</Text>
+          <Text style={{ width: '7%', textAlign: 'right', fontWeight: 'bold' }}>{total}</Text>
+          <Text style={{ width: '20%' }}></Text>
         </View>
 
         <Text style={s.notes}>Notes: Acknowledgement receipt of Goods: Goods received in following described order and condition</Text>

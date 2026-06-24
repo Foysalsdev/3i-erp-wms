@@ -7,6 +7,7 @@ import { RELATIONS, type MasterDef } from '../registry'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
 import { ImageUpload } from './ImageUpload'
+import { formatVehicleNo } from '@/lib/utils'
 
 export function MasterForm({ def, record, onDone, onCancel }:
   { def: MasterDef; record?: any; onDone: () => void; onCancel: () => void }) {
@@ -87,8 +88,12 @@ export function MasterForm({ def, record, onDone, onCancel }:
                   <option value="">Select…</option>
                   {opts.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
                 </Select>
-              ) : <Input type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'} step="any"
-                    {...register(f.name, { required: f.required })} placeholder={f.placeholder} />}
+              ) : (() => {
+                const reg = register(f.name, { required: f.required })
+                return <Input type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'} step="any"
+                  {...reg} placeholder={f.placeholder}
+                  onChange={f.format === 'vehicleNo' ? (e: any) => { e.target.value = formatVehicleNo(e.target.value); reg.onChange(e) } : reg.onChange} />
+              })()}
               {f.help && <p className="mt-1 text-[11px] text-ink-faint">{f.help}</p>}
             </Field>
           )

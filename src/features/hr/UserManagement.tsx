@@ -23,6 +23,8 @@ export function UserManagement() {
   const [userRoles, setUserRoles] = useState<Record<string, string>>({})
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<any>(null)
+  const [adding, setAdding] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -61,7 +63,9 @@ export function UserManagement() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search name / email / division…" /></div>
         <span className="text-sm text-ink-soft">{rows.length} users</span>
-        {!isPlatformAdmin && <span className="ml-auto text-xs text-ink-faint">Only an admin can edit other users.</span>}
+        {isPlatformAdmin
+          ? <Button className="ml-auto" icon="person_add" onClick={() => setAdding({ status: 'active' })}>Add User</Button>
+          : <span className="ml-auto text-xs text-ink-faint">Only an admin can edit other users.</span>}
       </div>
       <Card className="overflow-hidden">
         <DataTable columns={columns} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No users yet" />
@@ -99,6 +103,47 @@ export function UserManagement() {
           </div>
         </Modal>
       )}
+
+      {adding && (
+        <Modal open onClose={() => setAdding(null)} title="Add User" size="md">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Full Name" className="sm:col-span-2"><Input value={adding.full_name ?? ''} onChange={e => setAdding((x: any) => ({ ...x, full_name: e.target.value }))} placeholder="e.g. Karim Uddin" /></Field>
+              <Field label="Email" required><Input type="email" value={adding.email ?? ''} onChange={e => setAdding((x: any) => ({ ...x, email: e.target.value }))} placeholder="user@company.com" /></Field>
+              <Field label="Temp Password" required><Input value={adding.password ?? ''} onChange={e => setAdding((x: any) => ({ ...x, password: e.target.value }))} placeholder="min 6 characters" /></Field>
+              <Field label="Designation"><Input value={adding.designation ?? ''} onChange={e => setAdding((x: any) => ({ ...x, designation: e.target.value }))} placeholder="e.g. Sales Officer" /></Field>
+              <Field label="Division"><Input value={adding.division ?? ''} onChange={e => setAdding((x: any) => ({ ...x, division: e.target.value }))} placeholder="e.g. Dhaka" /></Field>
+              <Field label="Role" className="sm:col-span-2">
+                <Select value={adding.role_id ?? ''} onChange={e => setAdding((x: any) => ({ ...x, role_id: e.target.value }))}>
+                  <option value="">— No role —</option>
+                  {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <p className="text-xs text-ink-faint">The user logs in with this email + temp password (you can ask them to change it later).</p>
+            <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
+              <Button variant="ghost" onClick={() => setAdding(null)}>Cancel</Button>
+              <Button icon="person_add" loading={busy} onClick={async () => {
+                if (!adding.email || !adding.password) { notify('error', 'Email and temp password are required'); return }
+                setBusy(true)
+                try {
+                  const { data, error } = await supabase.functions.invoke('admin-create-user', { body: {
+                    email: adding.email, password: adding.password, full_name: adding.full_name || null,
+                    designation: adding.designation || null, division: adding.division || null,
+                    role_id: adding.role_id || null, client_id: currentClientId
+                  } })
+                  let msg = ''
+                  if (error) { try { const j = await (error as any).context?.json?.(); msg = j?.error || error.message } catch { msg = error.message } }
+                  else if ((data as any)?.error) msg = (data as any).error
+                  if (msg) { notify('error', msg); return }
+                  notify('success', `User ${adding.email} created`); setAdding(null); load()
+                } finally { setBusy(false) }
+              }}>Create User</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </div>
   )
 }

@@ -21,6 +21,7 @@ export function SalesReport() {
   const [delivered, setDelivered] = useState<Record<string, number>>({})
   const [customers, setCustomers] = useState<Record<string, string>>({})
   const [people, setPeople] = useState<Record<string, string>>({})
+  const [peopleDiv, setPeopleDiv] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!currentClientId) return
@@ -29,7 +30,7 @@ export function SalesReport() {
       supabase.from('sales_orders').select('id,customer_id,created_by,total_qty,total_amount,status').eq('client_id', currentClientId),
       supabase.from('sales_order_items').select('so_id,delivered_qty').eq('client_id', currentClientId),
       supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId),
-      supabase.from('profiles').select('id,full_name')
+      supabase.from('profiles').select('id,full_name,division')
     ]).then(([o, it, c, p]) => {
       setOrders(o.data ?? [])
       const d: Record<string, number> = {}
@@ -37,8 +38,8 @@ export function SalesReport() {
       setDelivered(d)
       const cm: Record<string, string> = {}; (c.data ?? []).forEach((r: any) => { cm[r.id] = `${r.customer_code} — ${r.name}` })
       setCustomers(cm)
-      const pm: Record<string, string> = {}; (p.data ?? []).forEach((r: any) => { pm[r.id] = r.full_name || '—' })
-      setPeople(pm)
+      const pm: Record<string, string> = {}; const pd: Record<string, string> = {}; (p.data ?? []).forEach((r: any) => { pm[r.id] = r.full_name || '—'; pd[r.id] = r.division || '' })
+      setPeople(pm); setPeopleDiv(pd)
       setLoading(false)
     })
   }, [currentClientId])
@@ -48,7 +49,8 @@ export function SalesReport() {
     for (const o of orders) {
       const key = by === 'customer' ? (o.customer_id || 'none') : (o.created_by || 'none')
       const name = by === 'customer' ? (customers[o.customer_id] ?? '— (no customer)') : (people[o.created_by] ?? '— (unknown)')
-      const g = agg[key] ?? (agg[key] = { group: name, orders: 0, order_qty: 0, order_value: 0, invoiced_qty: 0, delivered_qty: 0 })
+      const division = by === 'salesman' ? (peopleDiv[o.created_by] || '—') : ''
+      const g = agg[key] ?? (agg[key] = { group: name, division, orders: 0, order_qty: 0, order_value: 0, invoiced_qty: 0, delivered_qty: 0 })
       g.orders += 1
       g.order_qty += n(o.total_qty)
       g.order_value += n(o.total_amount)
@@ -57,10 +59,11 @@ export function SalesReport() {
     }
     return Object.values(agg).map((g: any) => ({ ...g, pending_qty: Math.max(0, g.order_qty - g.delivered_qty) }))
       .sort((a, b) => b.order_qty - a.order_qty)
-  }, [orders, delivered, customers, people, by])
+  }, [orders, delivered, customers, people, peopleDiv, by])
 
   const cols: RepCol[] = [
     { key: 'group', header: by === 'customer' ? 'Customer' : 'Salesman' },
+    ...(by === 'salesman' ? [{ key: 'division', header: 'Division', width: '12%' } as RepCol] : []),
     { key: 'orders', header: 'Orders', align: 'right', width: '9%' },
     { key: 'order_qty', header: 'Order Qty', align: 'right', width: '12%' },
     { key: 'order_value', header: 'Order Value', align: 'right', width: '14%' },

@@ -76,7 +76,7 @@ export function UserManagement() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Designation"><Input value={editing.designation ?? ''} onChange={e => setEditing((x: any) => ({ ...x, designation: e.target.value }))} placeholder="e.g. Sales Officer" /></Field>
-              <Field label="Division"><Input value={editing.division ?? ''} onChange={e => setEditing((x: any) => ({ ...x, division: e.target.value }))} placeholder="e.g. Dhaka" /></Field>
+              <Field label="Division (salesman only)"><Input value={editing.division ?? ''} onChange={e => setEditing((x: any) => ({ ...x, division: e.target.value }))} placeholder="e.g. Dhaka" /></Field>
               <Field label="Role" className="sm:col-span-2">
                 <Select value={editing.role_id ?? ''} onChange={e => setEditing((x: any) => ({ ...x, role_id: e.target.value }))} disabled={editing.is_platform_admin}>
                   <option value="">— No role —</option>
@@ -112,7 +112,7 @@ export function UserManagement() {
               <Field label="Email" required><Input type="email" value={adding.email ?? ''} onChange={e => setAdding((x: any) => ({ ...x, email: e.target.value }))} placeholder="user@company.com" /></Field>
               <Field label="Temp Password" required><Input value={adding.password ?? ''} onChange={e => setAdding((x: any) => ({ ...x, password: e.target.value }))} placeholder="min 6 characters" /></Field>
               <Field label="Designation"><Input value={adding.designation ?? ''} onChange={e => setAdding((x: any) => ({ ...x, designation: e.target.value }))} placeholder="e.g. Sales Officer" /></Field>
-              <Field label="Division"><Input value={adding.division ?? ''} onChange={e => setAdding((x: any) => ({ ...x, division: e.target.value }))} placeholder="e.g. Dhaka" /></Field>
+              <Field label="Division (salesman only)"><Input value={adding.division ?? ''} onChange={e => setAdding((x: any) => ({ ...x, division: e.target.value }))} placeholder="e.g. Dhaka" /></Field>
               <Field label="Role" className="sm:col-span-2">
                 <Select value={adding.role_id ?? ''} onChange={e => setAdding((x: any) => ({ ...x, role_id: e.target.value }))}>
                   <option value="">— No role —</option>

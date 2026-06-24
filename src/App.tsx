@@ -16,11 +16,12 @@ const InventoryPage = lazy(() => import('@/features/inventory/pages/InventoryPag
 const OperationsModulePage = lazy(() => import('@/features/operations/pages/OperationsModulePage').then(m => ({ default: m.OperationsModulePage })))
 const InboundPage = lazy(() => import('@/features/inbound/InboundPage'))
 const OutboundPage = lazy(() => import('@/features/outbound/OutboundPage'))
+const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'))
 
 // Modules still served by the generic operational register page.
 const OPERATIONS_MODULES = ['transport', 'finance']
 // Modules still rendered as navigation scaffolds.
-const PLACEHOLDERS = ['reverse', 'asset', 'hr', 'reports', 'settings']
+const PLACEHOLDERS = ['reverse', 'asset', 'hr', 'settings']
 
 export default function App() {
   const { session, loading, init } = useAuth()
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/inventory/:tab?" element={<RequirePermission perm="inventory.view"><InventoryPage /></RequirePermission>} />
             <Route path="/inbound/:tab?" element={<RequirePermission perm="inbound.view"><InboundPage /></RequirePermission>} />
             <Route path="/outbound/:tab?" element={<RequirePermission perm="outbound.view"><OutboundPage /></RequirePermission>} />
+            <Route path="/reports/:tab?" element={<RequirePermission perm="reports.view"><ReportsPage /></RequirePermission>} />
             {OPERATIONS_MODULES.map(key => {
               const m = MODULES.find(x => x.key === key)!
               return <Route key={key} path={`/${key}/:tab?`} element={

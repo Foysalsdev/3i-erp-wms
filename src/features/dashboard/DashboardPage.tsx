@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
+import SalesmanBoard from './SalesmanBoard'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/States'
@@ -47,7 +48,7 @@ function OpTile({ icon, label, value, to, alert }:
   )
 }
 
-export default function DashboardPage() {
+function AdminDashboard() {
   const { currentClientId, clients, profile } = useAuth()
   const { tab } = useParams()
   const nav = useNavigate()
@@ -259,4 +260,11 @@ function OperationalDashboard({ ops }: { ops: Record<string, number> }) {
       </div>
     </div>
   )
+}
+
+// Sales-only users (outbound access, no inventory access, not admin) get their
+// own Order Board; everyone else gets the executive/operational dashboard.
+export default function DashboardPage() {
+  const salesOnly = useAuth(s => !s.isPlatformAdmin && s.permissions.has('outbound.view') && !s.permissions.has('inventory.view'))
+  return salesOnly ? <SalesmanBoard /> : <AdminDashboard />
 }

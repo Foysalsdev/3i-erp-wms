@@ -19,6 +19,7 @@ export interface LineRow {
   stock_status?: string
   location_id?: string
   so_item_id?: string
+  remarks?: string
 }
 
 const num = (v: number | string | undefined): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
@@ -26,14 +27,16 @@ const num = (v: number | string | undefined): number => { const n = Number(v); r
 // Fast document-style entry: type/scan a material code + qty, or paste a
 // Material+Qty block straight from Excel (one row per line). UoM / Category /
 // Plant are pulled from the product master and shown on each line (SAP-style).
-export function LineItems({ rows, onChange, products, locations, variant }:
+export function LineItems({ rows, onChange, products, locations, variant, stock }:
   {
     rows: LineRow[]
     onChange: (rows: LineRow[]) => void
     products: PickProduct[]
     locations?: { id: string; location_code: string }[]
     variant: 'po' | 'grn' | 'out'
+    stock?: Record<string, number>
   }) {
+  const avail = (pid?: string) => (pid && stock) ? (stock[pid] ?? 0) : undefined
   const isGrn = variant === 'grn'
   const [code, setCode] = useState('')
   const [qty, setQty] = useState('')
@@ -60,7 +63,7 @@ export function LineItems({ rows, onChange, products, locations, variant }:
   const addRow = (p: PickProduct, q: number) => {
     const idx = rows.findIndex(r => r.product_id === p.id)
     if (idx >= 0) onChange(rows.map((r, i) => i === idx ? { ...r, qty: num(r.qty) + q } : r))
-    else onChange([...rows, { product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', stock_status: 'good', location_id: '' }])
+    else onChange([...rows, { product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', stock_status: 'good', location_id: '', remarks: '' }])
     setCode(''); setQty(''); setOpen(false); setAcIdx(0); setPasteNote('')
     requestAnimationFrame(() => codeRef.current?.focus())
   }
@@ -98,7 +101,7 @@ export function LineItems({ rows, onChange, products, locations, variant }:
 
   return (
     <div className="space-y-3">
-      <h4 className="text-sm font-medium text-ink">Line items <span className="font-normal text-ink-faint">— type / scan a code, or paste a Material + Qty block from Excel</span></h4>
+      <h4 className="text-sm font-medium text-ink-soft">Line items</h4>
 
       <div className="flex flex-wrap items-start gap-2">
         <div className="relative min-w-[200px] flex-1">
@@ -124,10 +127,13 @@ export function LineItems({ rows, onChange, products, locations, variant }:
             </div>
           )}
         </div>
-        <input ref={qtyRef} type="number" step="any" value={qty} placeholder="Qty"
-          onChange={e => setQty(e.target.value)} onPaste={onPaste}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitAdd() } }}
-          className="fiori-input w-24 text-right" />
+        <div className="flex flex-col items-end">
+          <input ref={qtyRef} type="number" step="any" value={qty} placeholder="Qty"
+            onChange={e => setQty(e.target.value)} onPaste={onPaste}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitAdd() } }}
+            className="fiori-input w-24 text-right" />
+          {valid && stock && <span className={'mt-1 text-[11px] font-medium ' + ((avail(valid.id) ?? 0) > 0 ? 'text-ok' : 'text-bad')}>Saleable: {formatNumber(avail(valid.id) ?? 0)}</span>}
+        </div>
         <button type="button" onClick={commitAdd} disabled={!valid}
           className="inline-flex h-[42px] items-center gap-1 rounded-lg bg-brand-500 px-4 text-sm font-medium text-coal-900 disabled:opacity-40">
           <Icon name="add" className="text-[18px]" /> Add
@@ -137,47 +143,54 @@ export function LineItems({ rows, onChange, products, locations, variant }:
 
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-surface-line py-6 text-center text-sm text-ink-faint">No items yet — add a material code above</p>
+      ) : isGrn ? (
+        <div className="overflow-x-auto rounded-lg border border-surface-line">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-surface-line bg-surface-sunken text-left text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+                <th className="w-8 px-3 py-2 text-center">#</th><th className="px-3 py-2">Item</th>
+                <th className="w-16 px-2 py-2 text-right">Exp</th><th className="w-28 px-2 py-2">Condition</th><th className="w-32 px-2 py-2">Location</th><th className="w-20 px-2 py-2 text-right">Recd</th><th className="w-10 px-2 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => { const p = byId[r.product_id]; return (
+                <tr key={i} className="border-b border-surface-line/70 last:border-0">
+                  <td className="px-3 py-2 text-center text-xs text-ink-faint">{i + 1}</td>
+                  <td className="px-3 py-2"><div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div><div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div></td>
+                  <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.expected_qty ?? ''} onChange={e => setRow(i, { expected_qty: e.target.value })} className="fiori-input h-8 w-16 text-right" /></td>
+                  <td className="px-2 py-2"><Select value={r.stock_status ?? 'good'} onChange={e => setRow(i, { stock_status: e.target.value })} className="h-8 w-full text-xs"><option value="good">Good</option><option value="damaged">Damaged</option><option value="quarantine">Quarantine</option></Select></td>
+                  <td className="px-2 py-2"><Select value={r.location_id ?? ''} onChange={e => setRow(i, { location_id: e.target.value })} className="h-8 w-full text-xs"><option value="">Location</option>{(locations ?? []).map(l => <option key={l.id} value={l.id}>{l.location_code}</option>)}</Select></td>
+                  <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-20 text-right" /></td>
+                  <td className="px-2 py-2 text-center"><button type="button" onClick={() => removeRow(i)} className="rounded-md p-1.5 text-ink-faint hover:bg-bad/10 hover:text-bad" title="Remove"><Icon name="close" className="text-[16px]" /></button></td>
+                </tr> )})}
+            </tbody>
+          </table>
+          <div className="flex justify-between border-t border-surface-line bg-surface-sunken px-3 py-2 text-xs text-ink-soft"><span>{rows.length} line(s)</span><span>Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span></div>
+        </div>
       ) : (
         <div className="divide-y divide-surface-line overflow-hidden rounded-lg border border-surface-line">
           {rows.map((r, i) => {
             const p = byId[r.product_id]
+            const a = avail(r.product_id)
             return (
-              <div key={i} className="flex flex-wrap items-center gap-3 px-3 py-2 hover:bg-surface-sunken/40">
-                <span className="w-7 shrink-0 text-center text-xs font-medium text-ink-faint">{i + 1}</span>
-                <Icon name="check_circle" className="text-[16px] text-ok" />
-                <div className="min-w-0 flex-1">
-                  <div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div>
-                  <div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div>
+              <div key={i} className="px-3 py-2.5">
+                <div className="flex items-center gap-3">
+                  <span className="w-4 shrink-0 text-center text-xs text-ink-faint">{i + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div>
+                    <div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div>
+                  </div>
+                  {stock && a !== undefined && <span className={'shrink-0 text-xs ' + (a < num(r.qty) ? 'text-bad' : 'text-ink-faint')}>Avail {formatNumber(a)}</span>}
+                  <input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-16 shrink-0 text-right" placeholder="Qty" />
+                  <button type="button" onClick={() => removeRow(i)} className="shrink-0 rounded-md p-1.5 text-ink-faint hover:bg-bad/10 hover:text-bad" title="Remove"><Icon name="close" className="text-[16px]" /></button>
                 </div>
-                {isGrn && (
-                  <label className="flex items-center gap-1 text-xs text-ink-faint">Exp
-                    <input type="number" step="any" value={r.expected_qty ?? ''} onChange={e => setRow(i, { expected_qty: e.target.value })} className="fiori-input h-8 w-16 text-right" />
-                  </label>
-                )}
-                {isGrn && (
-                  <Select value={r.stock_status ?? 'good'} onChange={e => setRow(i, { stock_status: e.target.value })} className="h-8 w-28 text-xs">
-                    <option value="good">Good</option><option value="damaged">Damaged</option><option value="quarantine">Quarantine</option>
-                  </Select>
-                )}
-                {isGrn && (
-                  <Select value={r.location_id ?? ''} onChange={e => setRow(i, { location_id: e.target.value })} className="h-8 w-32 text-xs">
-                    <option value="">Location</option>{(locations ?? []).map(l => <option key={l.id} value={l.id}>{l.location_code}</option>)}
-                  </Select>
-                )}
-                <label className="flex items-center gap-1 text-xs text-ink-faint">{isGrn ? 'Recd' : 'Qty'}
-                  <input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-20 text-right" />
-                </label>
-                <button type="button" onClick={() => removeRow(i)} className="rounded p-1 text-ink-faint hover:bg-bad/10 hover:text-bad"><Icon name="close" className="text-[16px]" /></button>
+                <input value={r.remarks ?? ''} onChange={e => setRow(i, { remarks: e.target.value })} placeholder="Remarks (optional)" className="fiori-input mt-2 h-8 w-full text-xs" />
               </div>
             )
           })}
-          <div className="flex justify-end gap-4 bg-surface-sunken px-3 py-2 text-sm">
-            <span className="text-ink-soft">{rows.length} line(s)</span>
-            <span><span className="text-ink-soft">Total qty:</span> <span className="font-semibold text-ink">{formatNumber(totalQty)}</span></span>
-          </div>
+          <div className="flex justify-between bg-surface-sunken px-3 py-2 text-xs text-ink-soft"><span>{rows.length} line(s)</span><span>Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span></div>
         </div>
       )}
-      <p className="text-xs text-ink-faint">Tip: in Excel select two columns (Material code &amp; Qty), copy, then paste into the code or qty box — every row is added automatically.</p>
     </div>
   )
 }

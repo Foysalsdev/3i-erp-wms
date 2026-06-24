@@ -17,7 +17,7 @@ import { Field, Select, Input, Textarea } from '@/components/ui/Field'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
 import { PickScan } from './PickScan'
-import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
+import { formatNumber, formatDate, formatDateTime, formatVehicleNo } from '@/lib/utils'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
@@ -64,6 +64,8 @@ export function OutboundSalesOrders() {
   const { data, loading, refresh } = useCollection('sales_orders', { order: 'created_at' })
   const { currentClientId, can, isPlatformAdmin, clients } = useAuth()
   const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  // Warehouse/dispatch actions are hidden from sales-only users (no inventory access).
+  const dispatchAccess = isPlatformAdmin || can('inventory.view')
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
   const [q, setQ] = useState('')
@@ -162,9 +164,9 @@ export function OutboundSalesOrders() {
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             { icon: 'print', label: 'Print', onClick: () => printSO(r) },
             { icon: 'mail', label: 'Mail', onClick: () => mailSO(r) },
-            ...(canEdit ? [{ icon: 'qr_code_scanner', label: 'Pick & Scan', onClick: () => setPicking(r) }] : []),
-            ...(canEdit ? [{ icon: 'local_shipping', label: 'Assign Logistics', onClick: () => setAssigning(r) }] : []),
-            ...(canEdit && !['delivered', 'closed', 'cancelled', 'draft'].includes(r.status) ? [{ icon: 'block', label: 'Close remaining', onClick: () => closeRemaining(r) }] : []),
+            ...(canEdit && dispatchAccess ? [{ icon: 'qr_code_scanner', label: 'Pick & Scan', onClick: () => setPicking(r) }] : []),
+            ...(canEdit && dispatchAccess ? [{ icon: 'local_shipping', label: 'Assign Logistics', onClick: () => setAssigning(r) }] : []),
+            ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled', 'draft'].includes(r.status) ? [{ icon: 'block', label: 'Close remaining', onClick: () => closeRemaining(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
         </div>
@@ -239,6 +241,17 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
     } finally { setGenning(false) }
   }
 
+  // Saleable stock per product (good available = quantity - reserved), shown beside qty.
+  const [stockMap, setStockMap] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (!clientId) return
+    supabase.from('inventory_stock').select('product_id,quantity,reserved_qty').eq('client_id', clientId).eq('stock_status', 'good').then(({ data }) => {
+      const m: Record<string, number> = {}
+      ;(data ?? []).forEach((r: any) => { m[r.product_id] = (m[r.product_id] ?? 0) + (Number(r.quantity) || 0) - (Number(r.reserved_qty) || 0) })
+      setStockMap(m)
+    })
+  }, [clientId])
+
   const save = async () => {
     setSaving(true)
     try {
@@ -266,10 +279,11 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
         client_id: clientId, so_id: soId, product_id: r.product_id,
         qty: Number(r.qty) || 0, unit_price: Number(r.unit_price) || 0,
-        line_total: (Number(r.qty) || 0) * (Number(r.unit_price) || 0)
+        line_total: (Number(r.qty) || 0) * (Number(r.unit_price) || 0),
+        remarks: (r as any).remarks || null
       }))
       if (payloadLines.length) {
-        const { error } = await supabase.from('sales_order_items').insert(payloadLines)
+        const { error } = await (supabase as any).from('sales_order_items').insert(payloadLines)
         if (error) throw error
       }
       notify('success', `Sales Order ${record ? 'updated' : 'created'}`)
@@ -286,7 +300,6 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
       <fieldset disabled={readOnly} className="m-0 border-0 p-0">
       <div className="space-y-4">
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">SO No: </span><span className="font-semibold">{record.so_no}</span></div>}
-        <OrderStepper status={h.status ?? 'pending'} />
         {record && (() => {
           const dt = (record.__items ?? []).reduce((a: number, l: any) => a + Number(l.delivered_qty || 0), 0)
           const ot = (record.__items ?? []).reduce((a: number, l: any) => a + Number(l.qty || 0), 0)
@@ -326,7 +339,7 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
           <Field label="Remarks" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
         </div>
 
-        <LineItems rows={lines} onChange={setLines} products={products} variant="po" />
+        <LineItems rows={lines} onChange={setLines} products={products} variant="po" stock={stockMap} />
       </div>
       </fieldset>
 
@@ -451,6 +464,8 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
   const [allocs, setAllocs] = useState<any[]>([])
   const [shipments, setShipments] = useState<any[]>([])
   const [pods, setPods] = useState<any[]>([])
+  const [events, setEvents] = useState<any[]>([])
+  const [names, setNames] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!so?.id) return
@@ -458,6 +473,8 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
     ;(supabase as any).from('vehicle_allocations').select('allocation_no,status,allocation_date').eq('so_id', so.id).then(({ data }: any) => setAllocs(data ?? []))
     ;(supabase as any).from('courier_shipments').select('shipment_no,status,tracking_no,dispatch_date').eq('so_id', so.id).then(({ data }: any) => setShipments(data ?? []))
     ;(supabase as any).from('pod_collections').select('pod_no,status,received_by,received_date').eq('so_id', so.id).then(({ data }: any) => setPods(data ?? []))
+    supabase.from('audit_logs').select('id,action,new_data,changed_by,changed_at').eq('table_name', 'sales_orders').eq('record_id', so.id).order('changed_at', { ascending: true }).then(({ data }) => setEvents(data ?? []))
+    supabase.from('profiles').select('id,full_name').then(({ data }) => { const m: Record<string, string> = {}; (data ?? []).forEach((r: any) => { m[r.id] = r.full_name || '—' }); setNames(m) })
   }, [so?.id])
 
   const productName = (id: string) => products.find((p: any) => p.id === id)?.name ?? id
@@ -479,8 +496,6 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
   return (
     <Modal open onClose={onClose} title={`Sales Order — ${so.so_no}`} size="lg">
       <div className="space-y-5">
-        <OrderStepper status={so.status ?? 'pending'} />
-
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
           <Stat label="Customer" value={customerName} />
           <Stat label="Order Date" value={formatDate(so.order_date)} />
@@ -534,10 +549,31 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
           </div>
         </Section>
 
-        <Section title="Activity History">
-          <div className="rounded-xl border border-surface-line p-3.5">
-            <TimelinePanel table="sales_orders" recordId={so.id} />
-          </div>
+        <Section title="Progress History — who & when">
+          {events.length === 0 ? (
+            <p className="rounded-xl border border-surface-line p-3.5 text-sm text-ink-faint">No history yet — events appear here as each step happens.</p>
+          ) : (
+            <div className="space-y-0 rounded-xl border border-surface-line p-3.5">
+              {events.map((e: any, i: number) => {
+                const status = (e.new_data && e.new_data.status) ? e.new_data.status : null
+                const label = e.action === 'INSERT' ? 'Order created' : status ? `Status \u2192 ${status}` : 'Updated'
+                return (
+                  <div key={e.id} className="flex gap-3 pb-3">
+                    <div className="flex flex-col items-center">
+                      <span className={'flex h-7 w-7 items-center justify-center rounded-full ' + (e.action === 'INSERT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>
+                        <Icon name={e.action === 'INSERT' ? 'add' : 'edit'} className="text-[15px]" />
+                      </span>
+                      {i < events.length - 1 && <span className="my-1 w-px flex-1 bg-surface-line" />}
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium text-ink">{label}</p>
+                      <p className="text-[11px] text-ink-faint">{formatDateTime(e.changed_at)} · by {names[e.changed_by] ?? '\u2014'}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </Section>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">

@@ -4,6 +4,7 @@ import { useUI } from '@/store/ui'
 import { Icon } from '@/components/ui/Icon'
 import { initials } from '@/lib/utils'
 import { GlobalSearch } from './GlobalSearch'
+import { NotificationBell } from './NotificationBell'
 
 export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const { profile, clients, currentClientId, setClient, signOut, isPlatformAdmin } = useAuth()
@@ -36,7 +37,7 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
         <button onClick={toggleTheme} title="Toggle theme" className="rounded-lg p-2 text-ink-soft hover:bg-surface-sunken">
           <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} />
         </button>
-        <button className="relative rounded-lg p-2 text-ink-soft hover:bg-surface-sunken"><Icon name="notifications" /><span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-surface" /></button>
+        <NotificationBell />
 
         <div className="relative">
           <button onClick={() => setMenu(m => !m)} className="flex items-center gap-2 rounded-full p-0.5 ring-1 ring-surface-line hover:ring-brand-300">

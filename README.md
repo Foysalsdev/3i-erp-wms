@@ -138,9 +138,16 @@ src/
 
 ---
 
-## Deployment (Vercel)
+## Deployment (Cloudflare Pages)
 
-`vercel.json` is included (SPA rewrites, Vite framework). Import the repo into Vercel and set the two `VITE_SUPABASE_*` environment variables. Build command `npm run build`, output `dist`.
+Connect the repo in **Cloudflare Pages** with:
+
+- **Framework preset:** Vite (or None)
+- **Build command:** `npm run build`
+- **Build output directory:** `dist`
+- **Environment variables:** set the two `VITE_SUPABASE_*` values (and any optional `VITE_GOOGLE_*` keys) for both Production and Preview.
+
+`public/_redirects` provides the SPA fallback (`/* → /index.html 200`) so client-side routes resolve on direct load/refresh, and `public/_headers` sets asset caching + baseline security headers. Both are copied to the `dist` root at build time.
 
 ---
 

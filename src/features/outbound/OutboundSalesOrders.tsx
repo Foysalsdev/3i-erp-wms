@@ -23,41 +23,25 @@ import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
 import { DocTimeline } from '@/components/shared/DocTimeline'
+import { WorkflowPanel } from './WorkflowPanel'
+import { workflowState } from './workflow'
 
 const SO_STATUS = ['draft', 'pending', 'approved', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => ['delivered', 'closed'].includes(s) ? 'positive' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : ['dispatched', 'packed', 'picking'].includes(s) ? 'info' : 'critical'
 
-const STAGES = ['Order', 'Picked', 'Invoiced', 'Dispatched', 'Delivered']
-const stageIndex = (s: string): number => {
-  if (['draft', 'pending', 'approved'].includes(s)) return 0
-  if (['picking', 'packed'].includes(s)) return 1
-  if (s === 'invoiced') return 2
-  if (s === 'dispatched') return 3
-  if (['delivered', 'closed'].includes(s)) return 4
-  return -1
-}
-
-// Inline progress tracker shown on each sales order (no separate tab needed).
-function OrderStepper({ status }: { status: string }) {
-  if (status === 'cancelled') return <div className="mb-1"><Badge tone="negative">Cancelled</Badge></div>
-  const current = stageIndex(status)
+// Compact "what's next & who owns it" cell for the order list (WES #6).
+function NextActionCell({ order }: { order: any }) {
+  const wf = workflowState(order)
+  if (wf.cancelled) return <span className="text-xs text-ink-faint">—</span>
+  const done = !wf.next
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-surface-sunken px-3 py-2">
-      {STAGES.map((label, i) => {
-        const done = i <= current
-        return (
-          <div key={label} className="flex flex-1 items-center" style={{ minWidth: 56 }}>
-            <div className="flex flex-col items-center gap-1">
-              <div className={'flex h-6 w-6 items-center justify-center rounded-full text-[12px] ' + (done ? 'bg-brand-500 text-white' : 'bg-surface text-ink-faint border border-surface-line')}>
-                {done ? <Icon name="check" className="text-[14px]" /> : <span>{i + 1}</span>}
-              </div>
-              <span className={'whitespace-nowrap text-[10px] ' + (i === current ? 'font-semibold text-ink' : 'text-ink-faint')}>{label}</span>
-            </div>
-            {i < STAGES.length - 1 && <div className={'mx-1 h-0.5 flex-1 rounded ' + (i < current ? 'bg-brand-500' : 'bg-surface-line')} />}
-          </div>
-        )
-      })}
+    <div className="min-w-0">
+      <div className="flex items-center gap-1 text-xs">
+        <span className={'truncate ' + (done ? 'text-ink-faint' : 'text-ink')}>{wf.action}</span>
+        {wf.overdue && <Badge tone="negative">Overdue</Badge>}
+      </div>
+      {!done && <div className="truncate text-[11px] text-ink-faint">{wf.role}</div>}
     </div>
   )
 }
@@ -158,6 +142,7 @@ export function OutboundSalesOrders() {
     { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
     { key: 'total_amount', header: 'Amount', accessor: (r: any) => formatNumber(r.total_amount), className: 'text-right' },
     { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+    { key: 'next_action', header: 'Next Action', render: (r: any) => <NextActionCell order={r} /> },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
       render: (r: any) => (
@@ -503,6 +488,10 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
           <Stat label="Total Qty" value={formatNumber(so.total_qty)} />
           <Stat label="Total Amount" value={formatNumber(so.total_amount)} />
         </div>
+
+        <Section title="Workflow">
+          <WorkflowPanel order={so} />
+        </Section>
 
         {(so.sap_so_no || so.outbound_delivery_no || so.transfer_order_no || so.billing_doc_no) && (
           <Section title="SAP References">

@@ -22,6 +22,7 @@ import { formatNumber, formatDate, formatDateTime, formatVehicleNo } from '@/lib
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
+import { DocTimeline } from '@/components/shared/DocTimeline'
 
 const SO_STATUS = ['draft', 'pending', 'approved', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
@@ -466,8 +467,6 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
   const [allocs, setAllocs] = useState<any[]>([])
   const [shipments, setShipments] = useState<any[]>([])
   const [pods, setPods] = useState<any[]>([])
-  const [events, setEvents] = useState<any[]>([])
-  const [names, setNames] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!so?.id) return
@@ -475,8 +474,6 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
     ;(supabase as any).from('vehicle_allocations').select('allocation_no,status,allocation_date').eq('so_id', so.id).then(({ data }: any) => setAllocs(data ?? []))
     ;(supabase as any).from('courier_shipments').select('shipment_no,status,tracking_no,dispatch_date').eq('so_id', so.id).then(({ data }: any) => setShipments(data ?? []))
     ;(supabase as any).from('pod_collections').select('pod_no,status,received_by,received_date').eq('so_id', so.id).then(({ data }: any) => setPods(data ?? []))
-    supabase.from('audit_logs').select('id,action,new_data,changed_by,changed_at').eq('table_name', 'sales_orders').eq('record_id', so.id).order('changed_at', { ascending: true }).then(({ data }) => setEvents(data ?? []))
-    supabase.from('profiles').select('id,full_name').then(({ data }) => { const m: Record<string, string> = {}; (data ?? []).forEach((r: any) => { m[r.id] = r.full_name || '—' }); setNames(m) })
   }, [so?.id])
 
   const productName = (id: string) => products.find((p: any) => p.id === id)?.name ?? id
@@ -551,31 +548,8 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
           </div>
         </Section>
 
-        <Section title="Progress History — who & when">
-          {events.length === 0 ? (
-            <p className="rounded-xl border border-surface-line p-3.5 text-sm text-ink-faint">No history yet — events appear here as each step happens.</p>
-          ) : (
-            <div className="space-y-0 rounded-xl border border-surface-line p-3.5">
-              {events.map((e: any, i: number) => {
-                const status = (e.new_data && e.new_data.status) ? e.new_data.status : null
-                const label = e.action === 'INSERT' ? 'Order created' : status ? `Status \u2192 ${status}` : 'Updated'
-                return (
-                  <div key={e.id} className="flex gap-3 pb-3">
-                    <div className="flex flex-col items-center">
-                      <span className={'flex h-7 w-7 items-center justify-center rounded-full ' + (e.action === 'INSERT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>
-                        <Icon name={e.action === 'INSERT' ? 'add' : 'edit'} className="text-[15px]" />
-                      </span>
-                      {i < events.length - 1 && <span className="my-1 w-px flex-1 bg-surface-line" />}
-                    </div>
-                    <div className="text-sm">
-                      <p className="font-medium text-ink">{label}</p>
-                      <p className="text-[11px] text-ink-faint">{formatDateTime(e.changed_at)} · by {names[e.changed_by] ?? '\u2014'}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+        <Section title="Progress History — who, when & what changed">
+          <DocTimeline table="sales_orders" recordId={so.id} />
         </Section>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">

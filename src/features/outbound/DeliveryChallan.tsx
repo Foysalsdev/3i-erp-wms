@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { Field, Select, Input, Textarea } from '@/components/ui/Field'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
@@ -28,7 +29,7 @@ export function DeliveryChallan() {
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
   const canPost = can('outbound.approve') || can('outbound.post') || isPlatformAdmin
-  const [q, setQ] = useState('')
+  const [q, setQ] = useUrlSearch()
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
@@ -53,7 +54,8 @@ export function DeliveryChallan() {
     const t = q.toLowerCase()
     return (data as any[]).filter(r =>
       String(r.challan_no ?? '').toLowerCase().includes(t) ||
-      String(r.invoice_no ?? '').toLowerCase().includes(t))
+      String(r.invoice_no ?? '').toLowerCase().includes(t) ||
+      String(r.po_no ?? '').toLowerCase().includes(t))
   }, [data, q])
 
   // Issue the challan: deduct stock for every line, then auto-create a linked gate pass.

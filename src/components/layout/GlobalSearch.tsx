@@ -91,9 +91,27 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
         }) as Hit[]
       }))
 
-      const [m, x] = await Promise.all([masterHits, txnHits])
-      // Documents first (most specific), then masters.
-      setHits([...x.flat(), ...m.flat()])
+      // Vehicle number → the documents that moved on that vehicle (challans &
+      // gate passes), so a vehicle search reveals its operational history.
+      const vehicleHits = (async (): Promise<Hit[]> => {
+        const { data: vehs } = await supabase.from('vehicles').select('id,vehicle_number')
+          .eq('client_id', clientId).ilike('vehicle_number', `%${safe}%`).limit(3)
+        if (!vehs || vehs.length === 0) return []
+        const ids = vehs.map((v: any) => v.id)
+        const vmap: Record<string, string> = Object.fromEntries(vehs.map((v: any) => [v.id, v.vehicle_number]))
+        const [{ data: ch }, { data: gp }] = await Promise.all([
+          supabase.from('delivery_challans').select('challan_no,vehicle_id,challan_date').eq('client_id', clientId).in('vehicle_id', ids).limit(8),
+          supabase.from('gate_passes').select('gate_pass_no,vehicle_id,gate_out_date').eq('client_id', clientId).in('vehicle_id', ids).limit(8)
+        ])
+        const out: Hit[] = []
+        ;(ch ?? []).forEach((c: any) => out.push({ cat: 'Vehicle', icon: 'local_shipping', label: c.challan_no, sub: `Delivery Challan · Vehicle ${vmap[c.vehicle_id] ?? ''}`, path: `/outbound/delivery-challan?q=${encodeURIComponent(c.challan_no)}` }))
+        ;(gp ?? []).forEach((g: any) => out.push({ cat: 'Vehicle', icon: 'door_front', label: g.gate_pass_no, sub: `Gate Pass · Vehicle ${vmap[g.vehicle_id] ?? ''}`, path: `/outbound/gate-pass?q=${encodeURIComponent(g.gate_pass_no)}` }))
+        return out
+      })()
+
+      const [m, x, v] = await Promise.all([masterHits, txnHits, vehicleHits])
+      // Documents first (most specific), then vehicle-linked docs, then masters.
+      setHits([...x.flat(), ...v, ...m.flat()])
       setLoading(false)
     }, 250)
     return () => clearTimeout(t)

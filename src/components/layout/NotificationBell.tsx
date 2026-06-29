@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Icon } from '@/components/ui/Icon'
 import { OPERATIONS } from '@/features/operations/registry'
+import { workflowState } from '@/features/outbound/workflow'
 import { formatNumber } from '@/lib/utils'
 
 // A notification surfaces something that needs attention right now. With no
@@ -69,6 +70,28 @@ export function NotificationBell() {
           tone: 'warn'
         })
       })
+
+      // Outbound workflow alerts — derived automatically from sales-order state
+      // (WES #2 "notify automatically", #6 "workflow-driven").
+      if (can('outbound.view')) {
+        const { data: orders } = await supabase.from('sales_orders')
+          .select('status, order_date, required_date')
+          .eq('client_id', currentClientId)
+          .not('status', 'in', '(delivered,closed,cancelled)')
+        const list = (orders ?? []) as any[]
+        const overdue = list.filter(o => workflowState(o).overdue).length
+        const awaitingPick = list.filter(o => ['pending', 'approved'].includes(o.status)).length
+        if (overdue > 0) items.push({
+          id: 'so:overdue', icon: 'schedule',
+          title: `${formatNumber(overdue)} overdue sales order${overdue > 1 ? 's' : ''}`,
+          detail: 'Past expected completion', count: overdue, to: '/outbound/sales-order', tone: 'warn'
+        })
+        if (awaitingPick > 0) items.push({
+          id: 'so:pick', icon: 'shopping_cart_checkout',
+          title: `${formatNumber(awaitingPick)} order${awaitingPick > 1 ? 's' : ''} awaiting pick & scan`,
+          detail: 'Ready to pick', count: awaitingPick, to: '/outbound/sales-order', tone: 'info'
+        })
+      }
 
       // Low-stock alert (items at or below their restock level).
       if (can('inventory.view')) {

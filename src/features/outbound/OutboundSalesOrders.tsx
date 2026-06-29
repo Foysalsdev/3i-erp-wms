@@ -23,6 +23,7 @@ import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
 import { DocTimeline } from '@/components/shared/DocTimeline'
+import { DocVersions } from '@/components/shared/DocVersions'
 import { WorkflowPanel } from './WorkflowPanel'
 import { workflowState } from './workflow'
 
@@ -539,6 +540,10 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
 
         <Section title="Progress History — who, when & what changed">
           <DocTimeline table="sales_orders" recordId={so.id} />
+        </Section>
+
+        <Section title="Document Versions">
+          <DocVersions table="sales_orders" recordId={so.id} />
         </Section>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">

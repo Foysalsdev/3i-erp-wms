@@ -12,6 +12,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { DocTimeline } from '@/components/shared/DocTimeline'
+import { DocVersions } from '@/components/shared/DocVersions'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
@@ -407,6 +408,10 @@ function ChallanOverview({ challan, customerName, vehicles, products, canEdit, o
 
         <Section title="Activity — who, when & what changed">
           <DocTimeline table="delivery_challans" recordId={challan.id} />
+        </Section>
+
+        <Section title="Document Versions">
+          <DocVersions table="delivery_challans" recordId={challan.id} />
         </Section>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">

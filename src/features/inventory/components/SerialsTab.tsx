@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { Spinner } from '@/components/ui/States'
 import { formatDate } from '@/lib/utils'
 
@@ -19,7 +20,7 @@ export function SerialsTab() {
   const notify = useUI(s => s.notify)
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useUrlSearch()
   const [deleting, setDeleting] = useState<any>(null)
 
   const load = () => {

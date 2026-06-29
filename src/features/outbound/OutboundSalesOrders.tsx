@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { Field, Select, Input, Textarea } from '@/components/ui/Field'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
@@ -21,41 +22,27 @@ import { formatNumber, formatDate, formatDateTime, formatVehicleNo } from '@/lib
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
+import { DocTimeline } from '@/components/shared/DocTimeline'
+import { DocVersions } from '@/components/shared/DocVersions'
+import { WorkflowPanel } from './WorkflowPanel'
+import { workflowState } from './workflow'
 
 const SO_STATUS = ['draft', 'pending', 'approved', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => ['delivered', 'closed'].includes(s) ? 'positive' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : ['dispatched', 'packed', 'picking'].includes(s) ? 'info' : 'critical'
 
-const STAGES = ['Order', 'Picked', 'Invoiced', 'Dispatched', 'Delivered']
-const stageIndex = (s: string): number => {
-  if (['draft', 'pending', 'approved'].includes(s)) return 0
-  if (['picking', 'packed'].includes(s)) return 1
-  if (s === 'invoiced') return 2
-  if (s === 'dispatched') return 3
-  if (['delivered', 'closed'].includes(s)) return 4
-  return -1
-}
-
-// Inline progress tracker shown on each sales order (no separate tab needed).
-function OrderStepper({ status }: { status: string }) {
-  if (status === 'cancelled') return <div className="mb-1"><Badge tone="negative">Cancelled</Badge></div>
-  const current = stageIndex(status)
+// Compact "what's next & who owns it" cell for the order list (WES #6).
+function NextActionCell({ order, ownerName }: { order: any; ownerName?: string | null }) {
+  const wf = workflowState(order)
+  if (wf.cancelled) return <span className="text-xs text-ink-faint">—</span>
+  const done = !wf.next
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-surface-sunken px-3 py-2">
-      {STAGES.map((label, i) => {
-        const done = i <= current
-        return (
-          <div key={label} className="flex flex-1 items-center" style={{ minWidth: 56 }}>
-            <div className="flex flex-col items-center gap-1">
-              <div className={'flex h-6 w-6 items-center justify-center rounded-full text-[12px] ' + (done ? 'bg-brand-500 text-white' : 'bg-surface text-ink-faint border border-surface-line')}>
-                {done ? <Icon name="check" className="text-[14px]" /> : <span>{i + 1}</span>}
-              </div>
-              <span className={'whitespace-nowrap text-[10px] ' + (i === current ? 'font-semibold text-ink' : 'text-ink-faint')}>{label}</span>
-            </div>
-            {i < STAGES.length - 1 && <div className={'mx-1 h-0.5 flex-1 rounded ' + (i < current ? 'bg-brand-500' : 'bg-surface-line')} />}
-          </div>
-        )
-      })}
+    <div className="min-w-0">
+      <div className="flex items-center gap-1 text-xs">
+        <span className={'truncate ' + (done ? 'text-ink-faint' : 'text-ink')}>{wf.action}</span>
+        {wf.overdue && <Badge tone="negative">Overdue</Badge>}
+      </div>
+      {!done && <div className="truncate text-[11px] text-ink-faint">{ownerName || wf.role}</div>}
     </div>
   )
 }
@@ -68,7 +55,7 @@ export function OutboundSalesOrders() {
   const dispatchAccess = isPlatformAdmin || can('inventory.view')
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
-  const [q, setQ] = useState('')
+  const [q, setQ] = useUrlSearch()
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [picking, setPicking] = useState<any>(null)
@@ -80,6 +67,7 @@ export function OutboundSalesOrders() {
   const [vehicles, setVehicles] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
   const [transporters, setTransporters] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
   const [assigning, setAssigning] = useState<any>(null)
   const [overview, setOverview] = useState<any>(null)
 
@@ -92,14 +80,17 @@ export function OutboundSalesOrders() {
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     ;(supabase as any).from('drivers').select('id,driver_code,name').eq('client_id', currentClientId).then(({ data }: any) => setDrivers(data ?? []))
     ;(supabase as any).from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).then(({ data }: any) => setTransporters(data ?? []))
+    supabase.from('profiles').select('id,full_name').eq('status', 'active').then(({ data }) => setUsers(data ?? []))
   }, [currentClientId])
 
   const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
+  const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
 
   const rows = useMemo(() => {
     if (!q.trim()) return data as any[]
     const t = q.toLowerCase()
-    return (data as any[]).filter(r => String(r.so_no ?? '').toLowerCase().includes(t) || String(r.reference_no ?? '').toLowerCase().includes(t))
+    const fields = ['so_no', 'reference_no', 'invoice_no', 'sap_so_no', 'outbound_delivery_no', 'transfer_order_no', 'billing_doc_no']
+    return (data as any[]).filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
   }, [data, q])
 
   const closeRemaining = async (r: any) => {
@@ -155,6 +146,7 @@ export function OutboundSalesOrders() {
     { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
     { key: 'total_amount', header: 'Amount', accessor: (r: any) => formatNumber(r.total_amount), className: 'text-right' },
     { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+    { key: 'next_action', header: 'Next Action', render: (r: any) => <NextActionCell order={r} ownerName={userName(r.assigned_to)} /> },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
       render: (r: any) => (
@@ -188,7 +180,7 @@ export function OutboundSalesOrders() {
       </Card>
 
       {modal && (
-        <SOForm record={editing} customers={customers} warehouses={warehouses} products={products}
+        <SOForm record={editing} customers={customers} warehouses={warehouses} products={products} users={users}
           clientId={currentClientId!} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
@@ -207,6 +199,7 @@ export function OutboundSalesOrders() {
 
       {overview && (
         <SOOverview so={overview} customerName={customerName(overview.customer_id)} products={products}
+          ownerName={userName(overview.assigned_to)}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
           onClose={() => setOverview(null)} />
       )}
@@ -222,7 +215,7 @@ export function OutboundSalesOrders() {
   )
 }
 
-function SOForm({ record, customers, warehouses, products, clientId, notify, onClose, onDone }: any) {
+function SOForm({ record, customers, warehouses, products, users, clientId, notify, onClose, onDone }: any) {
   const [h, setH] = useState<any>(record ?? { order_date: today(), status: 'pending' })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [saving, setSaving] = useState(false)
@@ -261,6 +254,7 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
         client_id: clientId, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
         reference_no: h.reference_no || null, order_date: h.order_date || today(), required_date: h.required_date || null,
         total_qty: totalQty, total_amount: totalAmount, status: h.status || 'pending', remarks: h.remarks || null,
+        assigned_to: h.assigned_to || null,
         sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
         transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null
       }
@@ -330,6 +324,9 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
             <Select value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
               {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
             </Select>
+          </Field>
+          <Field label="Owner (responsible)">
+            <Combobox items={(users ?? []).map((u: any) => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />
           </Field>
           <div className="sm:col-span-2 mt-1 border-t border-surface-line pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">SAP References (enter once when invoiced)</p></div>
           <Field label="SAP Sales Order No"><Input value={h.sap_so_no ?? ''} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006426" /></Field>
@@ -459,13 +456,11 @@ function AssignLogistics({ so, couriers, vehicles, drivers, transporters, client
   )
 }
 
-function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: any) {
+function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, onClose }: any) {
   const [items, setItems] = useState<any[]>([])
   const [allocs, setAllocs] = useState<any[]>([])
   const [shipments, setShipments] = useState<any[]>([])
   const [pods, setPods] = useState<any[]>([])
-  const [events, setEvents] = useState<any[]>([])
-  const [names, setNames] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!so?.id) return
@@ -473,8 +468,6 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
     ;(supabase as any).from('vehicle_allocations').select('allocation_no,status,allocation_date').eq('so_id', so.id).then(({ data }: any) => setAllocs(data ?? []))
     ;(supabase as any).from('courier_shipments').select('shipment_no,status,tracking_no,dispatch_date').eq('so_id', so.id).then(({ data }: any) => setShipments(data ?? []))
     ;(supabase as any).from('pod_collections').select('pod_no,status,received_by,received_date').eq('so_id', so.id).then(({ data }: any) => setPods(data ?? []))
-    supabase.from('audit_logs').select('id,action,new_data,changed_by,changed_at').eq('table_name', 'sales_orders').eq('record_id', so.id).order('changed_at', { ascending: true }).then(({ data }) => setEvents(data ?? []))
-    supabase.from('profiles').select('id,full_name').then(({ data }) => { const m: Record<string, string> = {}; (data ?? []).forEach((r: any) => { m[r.id] = r.full_name || '—' }); setNames(m) })
   }, [so?.id])
 
   const productName = (id: string) => products.find((p: any) => p.id === id)?.name ?? id
@@ -503,7 +496,12 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
           <Stat label="Status" value={<Badge tone={tone(so.status)}>{so.status}</Badge>} />
           <Stat label="Total Qty" value={formatNumber(so.total_qty)} />
           <Stat label="Total Amount" value={formatNumber(so.total_amount)} />
+          <Stat label="Owner" value={ownerName || '— unassigned'} />
         </div>
+
+        <Section title="Workflow">
+          <WorkflowPanel order={so} responsibleName={ownerName} />
+        </Section>
 
         {(so.sap_so_no || so.outbound_delivery_no || so.transfer_order_no || so.billing_doc_no) && (
           <Section title="SAP References">
@@ -549,31 +547,12 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
           </div>
         </Section>
 
-        <Section title="Progress History — who & when">
-          {events.length === 0 ? (
-            <p className="rounded-xl border border-surface-line p-3.5 text-sm text-ink-faint">No history yet — events appear here as each step happens.</p>
-          ) : (
-            <div className="space-y-0 rounded-xl border border-surface-line p-3.5">
-              {events.map((e: any, i: number) => {
-                const status = (e.new_data && e.new_data.status) ? e.new_data.status : null
-                const label = e.action === 'INSERT' ? 'Order created' : status ? `Status \u2192 ${status}` : 'Updated'
-                return (
-                  <div key={e.id} className="flex gap-3 pb-3">
-                    <div className="flex flex-col items-center">
-                      <span className={'flex h-7 w-7 items-center justify-center rounded-full ' + (e.action === 'INSERT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>
-                        <Icon name={e.action === 'INSERT' ? 'add' : 'edit'} className="text-[15px]" />
-                      </span>
-                      {i < events.length - 1 && <span className="my-1 w-px flex-1 bg-surface-line" />}
-                    </div>
-                    <div className="text-sm">
-                      <p className="font-medium text-ink">{label}</p>
-                      <p className="text-[11px] text-ink-faint">{formatDateTime(e.changed_at)} · by {names[e.changed_by] ?? '\u2014'}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+        <Section title="Progress History — who, when & what changed">
+          <DocTimeline table="sales_orders" recordId={so.id} />
+        </Section>
+
+        <Section title="Document Versions">
+          <DocVersions table="sales_orders" recordId={so.id} />
         </Section>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">

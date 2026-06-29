@@ -5,8 +5,13 @@ import { OUTBOUND_STAGES, workflowState } from './workflow'
 
 // WES #6 "Workflow Driven": shows where an order is, what's next, who owns the
 // pending action and when it's expected — so a user never has to guess.
-export function WorkflowPanel({ order }: { order: { status: string; order_date?: string | null; required_date?: string | null } }) {
+export function WorkflowPanel({ order, responsibleName }: {
+  order: { status: string; order_date?: string | null; required_date?: string | null }
+  responsibleName?: string | null
+}) {
   const wf = workflowState(order)
+  // A named owner (if assigned) takes precedence over the stage's default role.
+  const responsible = !wf.cancelled && wf.next && responsibleName ? responsibleName : wf.role
 
   if (wf.cancelled) {
     return (
@@ -56,7 +61,7 @@ export function WorkflowPanel({ order }: { order: { status: string; order_date?:
         </div>
         <div className="rounded-lg border border-surface-line bg-surface p-3">
           <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Responsible</p>
-          <p className="mt-0.5 flex items-center gap-1 text-sm font-medium text-ink"><Icon name="badge" className="text-[16px] text-ink-faint" />{wf.role}</p>
+          <p className="mt-0.5 flex items-center gap-1 text-sm font-medium text-ink"><Icon name="badge" className="text-[16px] text-ink-faint" />{responsible}</p>
         </div>
         <div className="rounded-lg border border-surface-line bg-surface p-3">
           <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Expected Completion</p>

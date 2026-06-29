@@ -124,7 +124,7 @@ export type Database = {
         Row: {
           id: string; client_id: string; so_no: string; customer_id: string | null; warehouse_id: string | null
           reference_no: string | null; order_date: string; required_date: string | null; total_qty: number; total_amount: number
-          invoice_no: string | null
+          invoice_no: string | null; assigned_to: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['sales_orders']['Row']> & { client_id: string; so_no: string }

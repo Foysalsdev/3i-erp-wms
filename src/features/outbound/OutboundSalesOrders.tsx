@@ -32,7 +32,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => ['delivered', 'closed'].includes(s) ? 'positive' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : ['dispatched', 'packed', 'picking'].includes(s) ? 'info' : 'critical'
 
 // Compact "what's next & who owns it" cell for the order list (WES #6).
-function NextActionCell({ order }: { order: any }) {
+function NextActionCell({ order, ownerName }: { order: any; ownerName?: string | null }) {
   const wf = workflowState(order)
   if (wf.cancelled) return <span className="text-xs text-ink-faint">—</span>
   const done = !wf.next
@@ -42,7 +42,7 @@ function NextActionCell({ order }: { order: any }) {
         <span className={'truncate ' + (done ? 'text-ink-faint' : 'text-ink')}>{wf.action}</span>
         {wf.overdue && <Badge tone="negative">Overdue</Badge>}
       </div>
-      {!done && <div className="truncate text-[11px] text-ink-faint">{wf.role}</div>}
+      {!done && <div className="truncate text-[11px] text-ink-faint">{ownerName || wf.role}</div>}
     </div>
   )
 }
@@ -67,6 +67,7 @@ export function OutboundSalesOrders() {
   const [vehicles, setVehicles] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
   const [transporters, setTransporters] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
   const [assigning, setAssigning] = useState<any>(null)
   const [overview, setOverview] = useState<any>(null)
 
@@ -79,9 +80,11 @@ export function OutboundSalesOrders() {
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     ;(supabase as any).from('drivers').select('id,driver_code,name').eq('client_id', currentClientId).then(({ data }: any) => setDrivers(data ?? []))
     ;(supabase as any).from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).then(({ data }: any) => setTransporters(data ?? []))
+    supabase.from('profiles').select('id,full_name').eq('status', 'active').then(({ data }) => setUsers(data ?? []))
   }, [currentClientId])
 
   const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
+  const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
 
   const rows = useMemo(() => {
     if (!q.trim()) return data as any[]
@@ -143,7 +146,7 @@ export function OutboundSalesOrders() {
     { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
     { key: 'total_amount', header: 'Amount', accessor: (r: any) => formatNumber(r.total_amount), className: 'text-right' },
     { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
-    { key: 'next_action', header: 'Next Action', render: (r: any) => <NextActionCell order={r} /> },
+    { key: 'next_action', header: 'Next Action', render: (r: any) => <NextActionCell order={r} ownerName={userName(r.assigned_to)} /> },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
       render: (r: any) => (
@@ -177,7 +180,7 @@ export function OutboundSalesOrders() {
       </Card>
 
       {modal && (
-        <SOForm record={editing} customers={customers} warehouses={warehouses} products={products}
+        <SOForm record={editing} customers={customers} warehouses={warehouses} products={products} users={users}
           clientId={currentClientId!} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
@@ -196,6 +199,7 @@ export function OutboundSalesOrders() {
 
       {overview && (
         <SOOverview so={overview} customerName={customerName(overview.customer_id)} products={products}
+          ownerName={userName(overview.assigned_to)}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
           onClose={() => setOverview(null)} />
       )}
@@ -211,7 +215,7 @@ export function OutboundSalesOrders() {
   )
 }
 
-function SOForm({ record, customers, warehouses, products, clientId, notify, onClose, onDone }: any) {
+function SOForm({ record, customers, warehouses, products, users, clientId, notify, onClose, onDone }: any) {
   const [h, setH] = useState<any>(record ?? { order_date: today(), status: 'pending' })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [saving, setSaving] = useState(false)
@@ -250,6 +254,7 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
         client_id: clientId, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
         reference_no: h.reference_no || null, order_date: h.order_date || today(), required_date: h.required_date || null,
         total_qty: totalQty, total_amount: totalAmount, status: h.status || 'pending', remarks: h.remarks || null,
+        assigned_to: h.assigned_to || null,
         sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
         transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null
       }
@@ -319,6 +324,9 @@ function SOForm({ record, customers, warehouses, products, clientId, notify, onC
             <Select value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
               {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
             </Select>
+          </Field>
+          <Field label="Owner (responsible)">
+            <Combobox items={(users ?? []).map((u: any) => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />
           </Field>
           <div className="sm:col-span-2 mt-1 border-t border-surface-line pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">SAP References (enter once when invoiced)</p></div>
           <Field label="SAP Sales Order No"><Input value={h.sap_so_no ?? ''} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006426" /></Field>
@@ -448,7 +456,7 @@ function AssignLogistics({ so, couriers, vehicles, drivers, transporters, client
   )
 }
 
-function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: any) {
+function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, onClose }: any) {
   const [items, setItems] = useState<any[]>([])
   const [allocs, setAllocs] = useState<any[]>([])
   const [shipments, setShipments] = useState<any[]>([])
@@ -488,10 +496,11 @@ function SOOverview({ so, customerName, products, canEdit, onEdit, onClose }: an
           <Stat label="Status" value={<Badge tone={tone(so.status)}>{so.status}</Badge>} />
           <Stat label="Total Qty" value={formatNumber(so.total_qty)} />
           <Stat label="Total Amount" value={formatNumber(so.total_amount)} />
+          <Stat label="Owner" value={ownerName || '— unassigned'} />
         </div>
 
         <Section title="Workflow">
-          <WorkflowPanel order={so} />
+          <WorkflowPanel order={so} responsibleName={ownerName} />
         </Section>
 
         {(so.sap_so_no || so.outbound_delivery_no || so.transfer_order_no || so.billing_doc_no) && (

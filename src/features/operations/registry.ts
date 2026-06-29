@@ -357,6 +357,45 @@ export const OPERATIONS: Record<string, OpDef> = {
     ],
     listColumns: []
   },
+  'billing': {
+    key: 'billing', module: 'transport', table: 'transport_bills', docType: 'TBILL', numberField: 'bill_no',
+    title: 'Transport Bill', singular: 'Transport Bill', icon: 'receipt_long', permission: 'transport',
+    statuses: [S.draft, S.pending, S.billed, S.paid, S.cancelled], openStatuses: ['draft', 'pending', 'billed'],
+    searchFields: ['bill_no'],
+    fields: [
+      { name: 'transport_vendor_id', label: 'Transport Vendor', type: 'relation', relation: 'transport_vendors' },
+      { name: 'trip_id', label: 'Trip', type: 'relation', relation: 'trips' },
+      { name: 'bill_date', label: 'Bill Date', type: 'date', required: true },
+      { name: 'due_date', label: 'Due Date', type: 'date' },
+      { name: 'amount', label: 'Amount', type: 'number' },
+      { name: 'tax', label: 'Tax', type: 'number' },
+      { name: 'total', label: 'Total', type: 'number' },
+      { name: 'status', label: 'Status', type: 'select', options: ['draft', 'pending', 'billed', 'paid', 'cancelled'], required: true },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+    ],
+    listColumns: []
+  },
+  'freight-cost': {
+    key: 'freight-cost', module: 'transport', table: 'freight_costs', docType: 'FRT', numberField: 'doc_no',
+    title: 'Freight Cost', singular: 'Freight Cost', icon: 'paid', permission: 'transport',
+    statuses: [S.draft, S.verified, S.billed, S.cancelled], openStatuses: ['draft', 'verified'],
+    searchFields: ['doc_no', 'origin', 'destination'],
+    fields: [
+      { name: 'trip_id', label: 'Trip', type: 'relation', relation: 'trips' },
+      { name: 'vehicle_id', label: 'Vehicle', type: 'relation', relation: 'vehicles' },
+      { name: 'origin', label: 'Origin', type: 'text' },
+      { name: 'destination', label: 'Destination', type: 'text' },
+      { name: 'cost_date', label: 'Cost Date', type: 'date', required: true },
+      { name: 'freight_amount', label: 'Freight Amount', type: 'number' },
+      { name: 'fuel_cost', label: 'Fuel Cost', type: 'number' },
+      { name: 'toll_cost', label: 'Toll Cost', type: 'number' },
+      { name: 'other_cost', label: 'Other Cost', type: 'number' },
+      { name: 'total_cost', label: 'Total Cost', type: 'number' },
+      { name: 'status', label: 'Status', type: 'select', options: ['draft', 'verified', 'billed', 'cancelled'], required: true },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+    ],
+    listColumns: []
+  },
   'customer-billing': {
     key: 'customer-billing', module: 'finance', table: 'billing_invoices', docType: 'INV', numberField: 'invoice_no',
     title: 'Billing Invoice', singular: 'Invoice', icon: 'receipt_long', permission: 'finance',

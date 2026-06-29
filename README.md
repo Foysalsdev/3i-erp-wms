@@ -61,8 +61,8 @@ npm run build && npm run preview
 ### Environment variables (`.env`)
 
 ```
-VITE_SUPABASE_URL=https://kstwbkwbsozaboceksmy.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_YesQ-jUpbdeIzXzvZkfS1A_SyP1L4vw
+VITE_SUPABASE_URL=your_supabase_url_here
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 # optional Google Drive attachment integration
 VITE_GOOGLE_CLIENT_ID=
 VITE_GOOGLE_API_KEY=

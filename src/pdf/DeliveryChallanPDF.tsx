@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
+import { getCompanyInfo } from '@/lib/settings'
 
 const s = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#212326' },
@@ -30,24 +31,19 @@ const s = StyleSheet.create({
   footer: { position: 'absolute', bottom: 18, left: 28, right: 28, fontSize: 7, color: '#777', textAlign: 'center' }
 })
 
-const COMPANY = {
-  name: 'WHIRLPOOL BANGLADESH LIMITED',
-  lines: ['Central Warehouse,', 'Chanpur,Madanpur,Narayangonj-1410,Dhaka'],
-  bin: 'BIN: 012-0213-16511845',
-  footer: 'Regd. Office: WHIRLPOOL BANGLADESH LIMITED - (Wakil Tower) 6th Floor 8th Floor; TA 131, Gulshan Badda Link Road; Dhaka-1212.'
-}
-
 function Row({ k, v }: { k: string; v?: string }) {
   return <View style={s.r}><Text style={s.rk}>{k}</Text><Text style={s.rv}>{v || ''}</Text></View>
 }
 
 function Doc({ challan, customerName, vehicleNo, items }: any) {
+  const company = getCompanyInfo()
+  const companyLines = (company.address || '').split('\n').filter(Boolean)
   const total = (items || []).reduce((a: number, it: any) => a + (Number(it.qty) || 0), 0)
   return (
     <Document>
       <Page size="A4" style={s.page}>
         <View style={s.topRow}>
-          <Image src="/whirlpool-logo.png" style={{ width: 118, height: 39 }} />
+          <Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 118, height: 39 }} />
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={s.title}>DELIVERY CHALLAN</Text>
             <Text style={s.titleSub}>Delivery Challan# - {challan.challan_no}</Text>
@@ -55,8 +51,9 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
         </View>
 
         <View style={s.company}>
-          <Text style={s.companyName}>{COMPANY.name}</Text>
-          {COMPANY.lines.map((l, i) => <Text key={i} style={s.sub}>{l}</Text>)}
+          <Text style={s.companyName}>{company.name}</Text>
+          {companyLines.map((l, i) => <Text key={i} style={s.sub}>{l}</Text>)}
+          {company.bin ? <Text style={s.sub}>{company.bin}</Text> : null}
         </View>
         <View style={s.hr} />
 
@@ -114,7 +111,7 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
         <Text style={s.sign}>Receiver Sign with Seal &amp; Date..</Text>
         <View style={s.signRow}><Text>security</Text><Text>Authorised by</Text></View>
 
-        <Text style={s.footer} fixed>{COMPANY.footer}</Text>
+        <Text style={s.footer} fixed>{company.footer}</Text>
       </Page>
     </Document>
   )

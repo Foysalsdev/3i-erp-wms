@@ -25,7 +25,12 @@ export const OUTBOUND_STAGES: WfStage[] = [
     action: 'Order complete', role: '—', slaDays: 0 }
 ]
 
-const TOTAL_SLA = OUTBOUND_STAGES.reduce((s, st) => s + st.slaDays, 0)
+// Per-client SLA overrides primed from Settings → Workflow (see lib/settings).
+// When unset the hard-coded stage defaults apply.
+let slaOverrides: Record<string, number> | null = null
+export function setWorkflowSla(overrides: Record<string, number> | null) { slaOverrides = overrides }
+const stageSla = (st: WfStage) => slaOverrides?.[st.key] ?? st.slaDays
+const totalSla = () => OUTBOUND_STAGES.reduce((s, st) => s + stageSla(st), 0)
 
 export const isCancelled = (status: string) => status === 'cancelled'
 export const isDone = (status: string) => ['delivered', 'closed'].includes(status)
@@ -64,7 +69,7 @@ export function workflowState(order: { status: string; order_date?: string | nul
   // Expected completion of the whole order: the customer required date if set,
   // otherwise the order date + total workflow SLA.
   const base = order.order_date ? new Date(order.order_date) : null
-  const expected = order.required_date ? new Date(order.required_date) : (base ? addDays(base, TOTAL_SLA) : null)
+  const expected = order.required_date ? new Date(order.required_date) : (base ? addDays(base, totalSla()) : null)
   const overdue = !done && !!expected && expected.getTime() < Date.now()
 
   return {

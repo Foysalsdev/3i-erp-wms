@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import type { DocMeta, DocLine } from './DocumentPDF'
+import { getCompanyInfo } from '@/lib/settings'
 
 const s = StyleSheet.create({
   page: { padding: 30, fontSize: 10, fontFamily: 'Helvetica', color: '#212326' },
@@ -21,13 +22,14 @@ const s = StyleSheet.create({
 })
 
 function GatePass({ client, docNo, meta, lines }: { client: string; docNo: string; meta: DocMeta[]; lines: DocLine[] }) {
+  const company = getCompanyInfo()
   const totalQty = lines.reduce((a, l) => a + l.qty, 0)
   return (
     <Document>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
-          <Image src="/whirlpool-logo.png" style={{ width: 118, height: 39 }} />
-          <View><Text style={s.sub}>Whirlpool WH · {client}</Text><Text style={s.sub}>Security Gate Pass</Text></View>
+          <Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 118, height: 39 }} />
+          <View><Text style={s.sub}>{company.name} · {client}</Text><Text style={s.sub}>Security Gate Pass</Text></View>
         </View>
         <View style={s.banner}><Text style={s.bannerT}>GATE PASS</Text></View>
         <Text style={s.docNo}>{docNo}</Text>
@@ -51,7 +53,7 @@ function GatePass({ client, docNo, meta, lines }: { client: string; docNo: strin
           <Text style={s.signBox}>Driver / Receiver</Text>
           <Text style={s.signBox}>Security Guard (Gate Out)</Text>
         </View>
-        <Text style={s.footer} render={({ pageNumber, totalPages }) => `Whirlpool WH  ·  ${docNo}  ·  Security Gate Pass  ·  Page ${pageNumber}/${totalPages}`} fixed />
+        <Text style={s.footer} render={({ pageNumber, totalPages }) => `${company.name}  ·  ${docNo}  ·  Security Gate Pass  ·  Page ${pageNumber}/${totalPages}`} fixed />
       </Page>
     </Document>
   )

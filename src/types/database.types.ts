@@ -429,6 +429,25 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['warehouses']['Row']>
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          id: string; client_id: string; category: string; data: Json
+          created_at: string; updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['app_settings']['Row']> & { client_id: string; category: string }
+        Update: Partial<Database['public']['Tables']['app_settings']['Row']>
+        Relationships: []
+      }
+      document_templates: {
+        Row: {
+          id: string; client_id: string; channel: string; code: string; name: string
+          subject: string | null; body: string; is_active: boolean
+          created_at: string; updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['document_templates']['Row']> & { client_id: string; channel: string; code: string; name: string }
+        Update: Partial<Database['public']['Tables']['document_templates']['Row']>
+        Relationships: []
+      }
     }
     Views: { [_ in never]: never }
     Functions: { [_ in never]: never }

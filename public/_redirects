@@ -1,4 +1,0 @@
-# Cloudflare Pages — SPA fallback.
-# Serve index.html for any non-asset path so client-side routes
-# (e.g. /outbound/sales-order) resolve on direct load / refresh.
-/*    /index.html   200

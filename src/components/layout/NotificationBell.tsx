@@ -5,6 +5,7 @@ import { useAuth } from '@/store/auth'
 import { Icon } from '@/components/ui/Icon'
 import { OPERATIONS } from '@/features/operations/registry'
 import { workflowState } from '@/features/outbound/workflow'
+import { loadSettings, type NotificationSettings } from '@/lib/settings'
 import { formatNumber } from '@/lib/utils'
 
 // A notification surfaces something that needs attention right now. With no
@@ -48,9 +49,12 @@ export function NotificationBell() {
     setLoading(true)
     try {
       const items: Notice[] = []
+      // Notification preferences (Settings → Notifications) decide which alert
+      // families surface for this client.
+      const prefs = await loadSettings<NotificationSettings>(currentClientId, 'notifications')
 
       // Open/pending documents per accessible operational module.
-      const opDefs = Object.values(OPERATIONS).filter(def => can(`${def.permission}.view`))
+      const opDefs = prefs.pendingDocs ? Object.values(OPERATIONS).filter(def => can(`${def.permission}.view`)) : []
       const counts = await Promise.all(opDefs.map(async def => {
         const { count } = await supabase.from(def.table as any)
           .select('id', { count: 'exact', head: true })
@@ -81,12 +85,12 @@ export function NotificationBell() {
         const list = (orders ?? []) as any[]
         const overdue = list.filter(o => workflowState(o).overdue).length
         const awaitingPick = list.filter(o => ['pending', 'approved'].includes(o.status)).length
-        if (overdue > 0) items.push({
+        if (prefs.overdueOrders && overdue > 0) items.push({
           id: 'so:overdue', icon: 'schedule',
           title: `${formatNumber(overdue)} overdue sales order${overdue > 1 ? 's' : ''}`,
           detail: 'Past expected completion', count: overdue, to: '/outbound/sales-order', tone: 'warn'
         })
-        if (awaitingPick > 0) items.push({
+        if (prefs.awaitingPick && awaitingPick > 0) items.push({
           id: 'so:pick', icon: 'shopping_cart_checkout',
           title: `${formatNumber(awaitingPick)} order${awaitingPick > 1 ? 's' : ''} awaiting pick & scan`,
           detail: 'Ready to pick', count: awaitingPick, to: '/outbound/sales-order', tone: 'info'
@@ -94,7 +98,7 @@ export function NotificationBell() {
       }
 
       // Low-stock alert (items at or below their restock level).
-      if (can('inventory.view')) {
+      if (prefs.lowStock && can('inventory.view')) {
         const [{ data: products }, { data: stock }] = await Promise.all([
           supabase.from('products').select('id, restock_level').eq('client_id', currentClientId),
           supabase.from('inventory_stock').select('product_id, quantity').eq('client_id', currentClientId)

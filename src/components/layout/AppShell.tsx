@@ -3,13 +3,30 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { useUI } from '@/store/ui'
+import { useAuth } from '@/store/auth'
+import { primeCompanyInfo, loadSettings, type WorkflowSettings } from '@/lib/settings'
+import { setWorkflowSla } from '@/features/outbound/workflow'
 
 export function AppShell() {
   const [mobileNav, setMobileNav] = useState(false)
+  const currentClientId = useAuth(s => s.currentClientId)
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault() } }
     window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
   }, [])
+
+  // Prime the per-client configuration consumed outside the React tree:
+  // company profile for PDFs and the outbound workflow SLA overrides.
+  useEffect(() => {
+    if (!currentClientId) { setWorkflowSla(null); return }
+    let active = true
+    primeCompanyInfo(currentClientId)
+    loadSettings<WorkflowSettings>(currentClientId, 'workflow').then(wf => {
+      if (active) setWorkflowSla(Object.fromEntries(wf.stages.map(s => [s.key, s.slaDays])))
+    })
+    return () => { active = false }
+  }, [currentClientId])
+
   useUI()
   return (
     <div className="flex h-full overflow-hidden">

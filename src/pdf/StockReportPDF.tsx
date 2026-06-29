@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
+import { getCompanyInfo } from '@/lib/settings'
 
 const s = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#1d2d3e' },
@@ -15,12 +16,13 @@ const s = StyleSheet.create({
 export interface StockRow { code: string; name: string; warehouse: string; status: string; qty: number }
 
 function Report({ client, rows, title }: { client: string; rows: StockRow[]; title: string }) {
+  const company = getCompanyInfo()
   const total = rows.reduce((a, r) => a + r.qty, 0)
   return (
     <Document>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
-          <View><Image src="/whirlpool-logo.png" style={{ width: 120, height: 40, marginBottom: 3 }} /><Text style={{ fontSize: 8, color: '#556b82' }}>ERP + WMS · {client}</Text></View>
+          <View><Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 120, height: 40, marginBottom: 3 }} /><Text style={{ fontSize: 8, color: '#556b82' }}>{company.name} · {client}</Text></View>
           <View><Text style={s.meta}>Generated: {new Date().toLocaleString('en-GB')}</Text><Text style={s.meta}>Confidential</Text></View>
         </View>
         <Text style={s.title}>{title}</Text>
@@ -35,7 +37,7 @@ function Report({ client, rows, title }: { client: string; rows: StockRow[]; tit
         <View style={[s.row, { borderTopWidth: 1, borderTopColor: '#0033A0' }]}>
           <Text style={s.c1}></Text><Text style={s.c2}></Text><Text style={s.c3}></Text><Text style={[s.c4, { fontWeight: 'bold' }]}>Total</Text><Text style={[s.c5, { fontWeight: 'bold' }]}>{total.toLocaleString()}</Text>
         </View>
-        <Text style={s.footer} render={({ pageNumber, totalPages }) => `Whirlpool WH  ·  Page ${pageNumber} / ${totalPages}`} fixed />
+        <Text style={s.footer} render={({ pageNumber, totalPages }) => `${company.name}  ·  Page ${pageNumber} / ${totalPages}`} fixed />
       </Page>
     </Document>
   )

@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
+import { getCompanyInfo } from '@/lib/settings'
 
 const s = StyleSheet.create({
   page: { padding: 32, fontSize: 10, fontFamily: 'Helvetica', color: '#212326' },
@@ -20,11 +21,12 @@ export interface RecordField { label: string; value: string }
 
 function Doc({ client, title, code, photo, fields }:
   { client: string; title: string; code?: string; photo?: string; fields: RecordField[] }) {
+  const company = getCompanyInfo()
   return (
     <Document>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
-          <View><Image src="/whirlpool-logo.png" style={{ width: 120, height: 40, marginBottom: 3 }} /><Text style={s.sub}>ERP + WMS · {client}</Text></View>
+          <View><Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 120, height: 40, marginBottom: 3 }} /><Text style={s.sub}>{company.name} · {client}</Text></View>
           <View><Text style={s.metaR}>Generated: {new Date().toLocaleString('en-GB')}</Text><Text style={s.metaR}>Confidential</Text></View>
         </View>
         <View style={s.titleRow}>
@@ -34,7 +36,7 @@ function Doc({ client, title, code, photo, fields }:
         {fields.map((f, i) => (
           <View key={i} style={s.row}><Text style={s.label}>{f.label}</Text><Text style={s.value}>{f.value || '—'}</Text></View>
         ))}
-        <Text style={s.footer} render={({ pageNumber, totalPages }) => `Whirlpool WH  ·  Page ${pageNumber} / ${totalPages}`} fixed />
+        <Text style={s.footer} render={({ pageNumber, totalPages }) => `${company.name}  ·  Page ${pageNumber} / ${totalPages}`} fixed />
       </Page>
     </Document>
   )

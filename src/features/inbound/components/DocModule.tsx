@@ -19,13 +19,15 @@ import { formatDate } from '@/lib/utils'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { downloadGatePassPDF } from '@/pdf/GatePassPDF'
 
-export function DocModule({ config }: { config: DocConfig }) {
+// `permModule` lets the same document engine power different sidebar modules
+// (inbound, outbound, reverse) while gating actions on that module's RBAC keys.
+export function DocModule({ config, permModule = 'inbound' }: { config: DocConfig; permModule?: string }) {
   const { clientId, suppliers, customers, warehouses, products, locations, transporters, vehicles, drivers } = useInboundData()
   const { can, clients, currentClientId, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
   const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
-  const canEdit = can('inbound.create') || can('inbound.edit')
-  const canPost = can('inbound.post')
+  const canEdit = can(`${permModule}.create`) || can(`${permModule}.edit`)
+  const canPost = can(`${permModule}.post`)
 
   const [docs, setDocs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -135,7 +137,8 @@ export function DocModule({ config }: { config: DocConfig }) {
 
   const post = async (doc: any) => {
     if (config.postRpc) {
-      const { error } = await (supabase as any).schema('app').rpc(config.postRpc, { [config.postParam!]: doc.id })
+      // Public wrappers (see migration 18) expose the app.post_* routines to PostgREST.
+      const { error } = await (supabase as any).rpc(config.postRpc, { [config.postParam!]: doc.id })
       if (error) { notify('error', error.message); return }
     } else {
       const { error } = await supabase.from(config.table as any).update({ status: 'posted' }).eq('id', doc.id)

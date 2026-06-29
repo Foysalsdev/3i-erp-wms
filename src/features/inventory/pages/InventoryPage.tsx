@@ -11,8 +11,9 @@ import { AdjustmentTab } from '../components/AdjustmentTab'
 import { TransferTab } from '../components/TransferTab'
 import { HoldTab } from '../components/HoldTab'
 import { CountTab } from '../components/CountTab'
+import { FifoTab } from '../components/FifoTab'
 
-const IMPLEMENTED = ['stock', 'ledger', 'serials', 'damaged', 'quarantine', 'transfer', 'adjustment', 'cycle-count', 'physical-verification', 'hold']
+const IMPLEMENTED = ['stock', 'ledger', 'serials', 'damaged', 'quarantine', 'transfer', 'adjustment', 'cycle-count', 'physical-verification', 'hold', 'fifo']
 
 export default function InventoryPage() {
   const { tab } = useParams()
@@ -35,10 +36,11 @@ export default function InventoryPage() {
       {active === 'hold' && <HoldTab />}
       {active === 'cycle-count' && <CountTab countType="cycle" title="Cycle Counts" singular="Cycle Count" />}
       {active === 'physical-verification' && <CountTab countType="physical" title="Physical Verifications" singular="Physical Verification" />}
+      {active === 'fifo' && <FifoTab />}
       {!IMPLEMENTED.includes(active) && (
         <Card className="p-2">
-          <EmptyState icon="construction" title={label}
-            hint="Lot/Batch tracking, FIFO and FEFO need batch & expiry attributes on stock — being scoped next." />
+          <EmptyState icon="info" title={label}
+            hint="Lot/Batch tracking and FEFO depend on batch numbers and expiry dates, which don't apply to this serial-tracked appliance operation. FIFO (age-based) is available in the FIFO tab." />
         </Card>
       )}
     </div>

@@ -8,12 +8,21 @@ import { SalesReport } from '../components/SalesReport'
 import { InventoryReport } from '../components/InventoryReport'
 import { StockMovementReport } from '../components/StockMovementReport'
 import { TransportReport } from '../components/TransportReport'
+import { StockAgingReport } from '../components/StockAgingReport'
+import { InventoryValuationReport } from '../components/InventoryValuationReport'
+import { InboundReport, AssetReport, FinanceReport, HrReport } from '../components/RegisterReports'
 
 const REPORTS: Record<string, () => JSX.Element> = {
   outbound: SalesReport,
   inventory: InventoryReport,
   'stock-movement': StockMovementReport,
-  transport: TransportReport
+  transport: TransportReport,
+  'stock-aging': StockAgingReport,
+  'inventory-valuation': InventoryValuationReport,
+  inbound: InboundReport,
+  asset: AssetReport,
+  finance: FinanceReport,
+  hr: HrReport
 }
 
 export default function ReportsPage() {
@@ -31,7 +40,7 @@ export default function ReportsPage() {
       {Report ? <Report /> : (
         <Card className="p-2">
           <EmptyState icon="construction" title={label}
-            hint="This report is on the roadmap. The four core reports (Outbound Sales, Inventory, Stock Movement, Transport) are live now — pick one of those tabs." />
+            hint="The Custom Report Builder (ad-hoc column/filter designer) is the one remaining report and is on the roadmap. All ten standard reports are live — pick any other tab." />
         </Card>
       )}
     </div>

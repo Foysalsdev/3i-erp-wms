@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -184,13 +185,18 @@ export function DeliveryChallan() {
   )
 }
 
-function ChallanForm({ record, customers, warehouses, vehicles, products, clientId, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft' })
+// `lockSo` opens the form straight from an order: customer / warehouse / invoice /
+// PO are pulled in and locked, and the lines default to the still-pending qty.
+export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, clientId, notify, onClose, onDone }: any) {
+  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport' })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [more, setMore] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
   const posted = !!record?.posted_at
+  const mode: 'transport' | 'courier' = h.delivery_method === 'courier' ? 'courier' : 'transport'
+  const locked = !!lockSo && !record   // creating a new challan from a specific order
   const [vehs, setVehs] = useState<any[]>(vehicles)
   const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
   const createVehicle = async (name: string) => {
@@ -199,25 +205,32 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
     setVehs(v => [...v, data]); return { id: data.id, label: data.vehicle_number, sublabel: data.vehicle_type }
   }
 
-  // Pick a sales order -> pull its customer, warehouse, PO, SAP invoice and lines
-  // (so nothing is typed twice). Each line keeps its so_item_id for tracking.
-  const [sos, setSos] = useState<any[]>([])
-  useEffect(() => {
-    if (!clientId) return
-    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
-  }, [clientId])
   const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
-  const selectSO = async (soId: string) => {
-    const so = sos.find((x: any) => x.id === soId)
-    if (!so) { set({ sales_order_id: soId }); return }
-    const { data: items } = await supabase.from('sales_order_items').select('id,product_id,qty,delivered_qty,unit_price').eq('so_id', soId)
-    set({ sales_order_id: soId, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
-      po_no: so.reference_no || h.po_no, invoice_no: so.billing_doc_no || so.invoice_no || h.invoice_no })
+  // Pull an order's customer, warehouse, PO, SAP invoice and still-pending lines
+  // (so nothing is typed twice). Each line keeps its so_item_id for tracking.
+  const loadFromSO = async (so: any) => {
+    const { data: items } = await supabase.from('sales_order_items').select('id,product_id,qty,delivered_qty,unit_price').eq('so_id', so.id)
+    setH((x: any) => ({ ...x, sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
+      po_no: so.reference_no || x.po_no, invoice_no: so.billing_doc_no || so.invoice_no || x.invoice_no }))
     setLines((items ?? []).map((it: any) => ({
       product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
       unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id
-    })))
+    })).filter((l: any) => l.qty > 0))
   }
+
+  // Order picker (only when not locked to a specific order).
+  const [sos, setSos] = useState<any[]>([])
+  useEffect(() => {
+    if (!clientId || locked) return
+    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
+  }, [clientId, locked])
+  const selectSO = async (soId: string) => {
+    const so = sos.find((x: any) => x.id === soId)
+    if (!so) { set({ sales_order_id: soId }); return }
+    await loadFromSO(so)
+  }
+  // When opened from an order, pre-fill once on mount.
+  useEffect(() => { if (lockSo && !record) loadFromSO(lockSo) /* eslint-disable-next-line */ }, [])
 
   useEffect(() => {
     if (!h.warehouse_id) { setLocations([]); return }
@@ -238,22 +251,31 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       const header = {
         client_id: clientId, sales_order_id: h.sales_order_id || null, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
-        vehicle_id: h.vehicle_id || null, driver_name: h.driver_name || null, invoice_no: invoice,
-        challan_date: h.challan_date || today(), total_qty: totalQty,
-        po_no: h.po_no || null, dispatch_time: h.dispatch_time || null, lock_no: h.lock_no || null,
-        driver_phone: h.driver_phone || null, transport_vendor: h.transport_vendor || null, prepared_by: h.prepared_by || null,
+        invoice_no: invoice, challan_date: h.challan_date || today(), total_qty: totalQty, po_no: h.po_no || null,
+        delivery_method: mode,
+        // transport details
+        vehicle_id: mode === 'transport' ? (h.vehicle_id || null) : null,
+        driver_name: mode === 'transport' ? (h.driver_name || null) : null,
+        driver_phone: mode === 'transport' ? (h.driver_phone || null) : null,
+        transport_vendor: mode === 'transport' ? (h.transport_vendor || null) : null,
+        lock_no: mode === 'transport' ? (h.lock_no || null) : null,
+        // courier details
+        courier_name: mode === 'courier' ? (h.courier_name || null) : null,
+        courier_tracking_no: mode === 'courier' ? (h.courier_tracking_no || null) : null,
+        // optional extras
+        dispatch_time: h.dispatch_time || null, prepared_by: h.prepared_by || null,
         receiver_name: h.receiver_name || null, receiver_phone: h.receiver_phone || null,
         unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null,
         status: h.status || 'draft', remarks: h.remarks || null
       }
       let challanId = record?.id
       if (record) {
-        const { error } = await supabase.from('delivery_challans').update(header).eq('id', record.id)
+        const { error } = await supabase.from('delivery_challans').update(header as any).eq('id', record.id)
         if (error) throw error
       } else {
         const challan_no = await nextDocNumber(clientId, 'DC')
         if (!challan_no) throw new Error('Could not generate challan number')
-        const { data, error } = await supabase.from('delivery_challans').insert({ ...header, challan_no }).select('id').single()
+        const { data, error } = await supabase.from('delivery_challans').insert({ ...header, challan_no } as any).select('id').single()
         if (error) throw error
         challanId = data.id
       }
@@ -275,42 +297,88 @@ function ChallanForm({ record, customers, warehouses, vehicles, products, client
     }
   }
 
+  const ModeButton = ({ m, icon, label }: any) => (
+    <button type="button" onClick={() => set({ delivery_method: m })}
+      className={'flex-1 rounded-lg border px-3 py-2 text-sm font-medium ' + (mode === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-line text-ink-soft hover:bg-surface-sunken')}>
+      <Icon name={icon} className="mr-1 text-[18px]" /> {label}
+    </button>
+  )
+
   return (
-    <Modal open onClose={onClose} title={`${record ? 'Edit' : 'New'} Delivery Challan`} size="lg">
+    <Modal open onClose={onClose} title={`${record ? 'Edit' : lockSo ? 'Plan Delivery' : 'New'} Delivery Challan${lockSo ? ' — ' + lockSo.so_no : ''}`} size="lg">
       <div className="space-y-4">
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Challan No: </span><span className="font-semibold">{record.challan_no}</span>{posted && <span className="ml-2"><Badge tone="positive">Issued - stock out</Badge></span>}</div>}
         {posted && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">This challan is issued and stock is deducted. Editing lines will not change posted stock.</p>}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Sales Order (auto-fills customer, items, PO & invoice)" className="sm:col-span-2">
-            <Combobox items={sos.map((o: any) => ({ id: o.id, label: o.so_no, sublabel: customers.find((c: any) => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
-          </Field>
-          <Field label="Customer" required>
-            <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
-          </Field>
-          <Field label="Warehouse" required>
-            <Select value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
-              <option value="">Select...</option>
-              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="SAP Invoice No" required><Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" /></Field>
-          <Field label="Challan Date" required><Input type="date" value={h.challan_date ?? ''} onChange={e => set({ challan_date: e.target.value })} /></Field>
-          <Field label="Vehicle">
-            <CreatableCombobox items={vehItems} value={h.vehicle_id ?? ''} onChange={(id: string) => set({ vehicle_id: id })} onCreate={createVehicle} noun="vehicle" placeholder="DM TA 00-0000" format={formatVehicleNo} />
-          </Field>
-          <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_name: e.target.value })} /></Field>
-          <Field label="PO No"><Input value={h.po_no ?? ''} onChange={e => set({ po_no: e.target.value })} /></Field>
-          <Field label="Dispatch Time"><Input value={h.dispatch_time ?? ''} onChange={e => set({ dispatch_time: e.target.value })} placeholder="e.g. 30/04/26 12:00 AM" /></Field>
-          <Field label="Driver Phone"><Input value={h.driver_phone ?? ''} onChange={e => set({ driver_phone: e.target.value })} /></Field>
-          <Field label="Lock No"><Input value={h.lock_no ?? ''} onChange={e => set({ lock_no: e.target.value })} /></Field>
-          <Field label="Transport Vendor"><Input value={h.transport_vendor ?? ''} onChange={e => set({ transport_vendor: e.target.value })} /></Field>
-          <Field label="Prepared By"><Input value={h.prepared_by ?? ''} onChange={e => set({ prepared_by: e.target.value })} /></Field>
-          <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
-          <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>
-          <Field label="Unloading Point"><Input value={h.unloading_point ?? ''} onChange={e => set({ unloading_point: e.target.value })} /></Field>
-          <Field label="Bill-To Address" className="sm:col-span-2"><Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} /></Field>
-          <Field label="Remarks" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
+
+        {locked ? (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-surface-line bg-surface-sunken/40 p-3 text-sm sm:grid-cols-4">
+            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Customer</p><p className="font-medium text-ink">{customers.find((c: any) => c.id === h.customer_id)?.name ?? '—'}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Order Ref</p><p className="font-medium text-ink">{h.po_no || '—'}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">SAP Invoice</p><p className="font-medium text-ink">{h.invoice_no || '—'}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Warehouse</p><p className="font-medium text-ink">{warehouses.find((w: any) => w.id === h.warehouse_id)?.code ?? '—'}</p></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Sales Order (auto-fills customer, items, PO & invoice)" className="sm:col-span-2">
+              <Combobox items={sos.map((o: any) => ({ id: o.id, label: o.so_no, sublabel: customers.find((c: any) => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
+            </Field>
+            <Field label="Customer" required>
+              <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
+            </Field>
+            <Field label="Warehouse" required>
+              <Select value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
+                <option value="">Select...</option>
+                {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="SAP Invoice No" required><Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" /></Field>
+          </div>
+        )}
+
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-ink-soft">Delivery by</p>
+          <div className="flex gap-2">
+            <ModeButton m="transport" icon="local_shipping" label="Transport" />
+            <ModeButton m="courier" icon="local_post_office" label="Courier" />
+          </div>
         </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Challan Date" required><Input type="date" value={h.challan_date ?? ''} onChange={e => set({ challan_date: e.target.value })} /></Field>
+          {mode === 'transport' ? (
+            <>
+              <Field label="Vehicle">
+                <CreatableCombobox items={vehItems} value={h.vehicle_id ?? ''} onChange={(id: string) => set({ vehicle_id: id })} onCreate={createVehicle} noun="vehicle" placeholder="DM TA 00-0000" format={formatVehicleNo} />
+              </Field>
+              <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_name: e.target.value })} /></Field>
+              <Field label="Driver Phone"><Input value={h.driver_phone ?? ''} onChange={e => set({ driver_phone: e.target.value })} /></Field>
+              <Field label="Transport Vendor"><Input value={h.transport_vendor ?? ''} onChange={e => set({ transport_vendor: e.target.value })} /></Field>
+              <Field label="Lock No"><Input value={h.lock_no ?? ''} onChange={e => set({ lock_no: e.target.value })} /></Field>
+            </>
+          ) : (
+            <>
+              <Field label="Courier Name"><Input value={h.courier_name ?? ''} onChange={e => set({ courier_name: e.target.value })} placeholder="e.g. Sundarban / SA Paribahan" /></Field>
+              <Field label="Tracking No"><Input value={h.courier_tracking_no ?? ''} onChange={e => set({ courier_tracking_no: e.target.value })} placeholder="AWB / tracking" /></Field>
+            </>
+          )}
+        </div>
+
+        <button type="button" onClick={() => setMore(m => !m)} className="text-xs font-medium text-brand-600 hover:underline">
+          {more ? '− Hide' : '+ More'} details (receiver, dispatch time, addresses)
+        </button>
+        {more && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {!locked && <Field label="Order Ref"><Input value={h.po_no ?? ''} onChange={e => set({ po_no: e.target.value })} /></Field>}
+            <Field label="Dispatch Time"><Input value={h.dispatch_time ?? ''} onChange={e => set({ dispatch_time: e.target.value })} placeholder="e.g. 30/04/26 12:00 AM" /></Field>
+            <Field label="Prepared By"><Input value={h.prepared_by ?? ''} onChange={e => set({ prepared_by: e.target.value })} /></Field>
+            <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
+            <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>
+            <Field label="Unloading Point"><Input value={h.unloading_point ?? ''} onChange={e => set({ unloading_point: e.target.value })} /></Field>
+            <Field label="Bill-To Address" className="sm:col-span-2"><Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} /></Field>
+          </div>
+        )}
+
+        <Field label="Remarks"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
 
         <LineItems rows={lines} onChange={setLines} products={products} locations={locations} variant="out" />
 

@@ -125,6 +125,10 @@ export type Database = {
           id: string; client_id: string; so_no: string; customer_id: string | null; warehouse_id: string | null
           reference_no: string | null; order_date: string; required_date: string | null; total_qty: number; total_amount: number
           invoice_no: string | null
+          ship_to_id: string | null; ship_to_address: string | null
+          sap_so_no: string | null; outbound_delivery_no: string | null; transfer_order_no: string | null; billing_doc_no: string | null
+          deposited_amount: number; deposited_date: string | null; payment_status: string; mail_ref: string | null
+          assigned_to: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['sales_orders']['Row']> & { client_id: string; so_no: string }
@@ -134,7 +138,9 @@ export type Database = {
       sales_order_items: {
         Row: {
           id: string; client_id: string; so_id: string; product_id: string | null; qty: number
-          unit_price: number; line_total: number; delivered_qty: number; created_at: string; updated_at: string
+          unit_price: number; line_total: number; delivered_qty: number
+          basic_price: number; vat_rate: number; remarks: string | null
+          created_at: string; updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['sales_order_items']['Row']> & { client_id: string; so_id: string }
         Update: Partial<Database['public']['Tables']['sales_order_items']['Row']>
@@ -155,6 +161,7 @@ export type Database = {
           id: string; client_id: string; challan_no: string; customer_id: string | null; dispatch_id: string | null
           vehicle_id: string | null; warehouse_id: string | null; driver_name: string | null; invoice_no: string | null
           sales_order_id: string | null; po_no: string | null; dispatch_time: string | null; lock_no: string | null; driver_phone: string | null; transport_vendor: string | null; prepared_by: string | null; receiver_name: string | null; receiver_phone: string | null; unloading_point: string | null; bill_to_address: string | null
+          delivery_method: string | null; transporter_id: string | null; driver_id: string | null; courier_name: string | null; courier_tracking_no: string | null
           challan_date: string; total_qty: number; posted_at: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
@@ -174,7 +181,7 @@ export type Database = {
       gate_passes: {
         Row: {
           id: string; client_id: string; gate_pass_no: string; dispatch_id: string | null; vehicle_id: string | null
-          driver_name: string | null; gate_out_date: string; purpose: string | null
+          driver_name: string | null; gate_out_date: string; gate_out_time: string | null; transporter_id: string | null; purpose: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['gate_passes']['Row']> & { client_id: string; gate_pass_no: string }
@@ -254,6 +261,7 @@ export type Database = {
           billing_address: string | null; client_id: string; contact_person: string | null; created_at: string
           created_by: string | null; customer_code: string; email: string | null; id: string; logo_url: string | null
           name: string; phone: string | null; shipping_address: string | null; status: string; updated_at: string
+          sap_customer_code: string | null; credit_limit: number | null; payment_terms: string | null
         }
         Insert: Partial<Database['public']['Tables']['customers']['Row']> & { client_id: string; customer_code: string; name: string }
         Update: Partial<Database['public']['Tables']['customers']['Row']>
@@ -369,6 +377,7 @@ export type Database = {
           client_id: string; created_at: string; id: string; location_id: string | null; product_id: string
           reference_no: string | null; serial_no: string; status: string; updated_at: string
           warehouse_id: string | null; warranty_end: string | null; warranty_start: string | null
+          so_item_id: string | null
         }
         Insert: Partial<Database['public']['Tables']['serial_numbers']['Row']> & { client_id: string; product_id: string; serial_no: string }
         Update: Partial<Database['public']['Tables']['serial_numbers']['Row']>

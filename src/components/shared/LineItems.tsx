@@ -16,6 +16,8 @@ export interface LineRow {
   qty: number | string
   expected_qty?: number | string
   unit_price: number | string
+  basic_price?: number | string
+  vat_rate?: number | string
   stock_status?: string
   location_id?: string
   so_item_id?: string
@@ -24,10 +26,14 @@ export interface LineRow {
 
 const num = (v: number | string | undefined): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
+// All-in unit price = basic + VAT; line total = qty × all-in unit price.
+export const lineUnitPrice = (r: LineRow): number => num(r.basic_price) * (1 + num(r.vat_rate) / 100)
+export const lineTotal = (r: LineRow): number => num(r.qty) * lineUnitPrice(r)
+
 // Fast document-style entry: type/scan a material code + qty, or paste a
 // Material+Qty block straight from Excel (one row per line). UoM / Category /
 // Plant are pulled from the product master and shown on each line (SAP-style).
-export function LineItems({ rows, onChange, products, locations, variant, stock }:
+export function LineItems({ rows, onChange, products, locations, variant, stock, priced }:
   {
     rows: LineRow[]
     onChange: (rows: LineRow[]) => void
@@ -35,6 +41,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock 
     locations?: { id: string; location_code: string }[]
     variant: 'po' | 'grn' | 'out'
     stock?: Record<string, number>
+    priced?: boolean
   }) {
   const avail = (pid?: string) => (pid && stock) ? (stock[pid] ?? 0) : undefined
   const isGrn = variant === 'grn'
@@ -63,7 +70,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock 
   const addRow = (p: PickProduct, q: number) => {
     const idx = rows.findIndex(r => r.product_id === p.id)
     if (idx >= 0) onChange(rows.map((r, i) => i === idx ? { ...r, qty: num(r.qty) + q } : r))
-    else onChange([...rows, { product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', stock_status: 'good', location_id: '', remarks: '' }])
+    else onChange([...rows, { product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', basic_price: '', vat_rate: 15, stock_status: 'good', location_id: '', remarks: '' }])
     setCode(''); setQty(''); setOpen(false); setAcIdx(0); setPasteNote('')
     requestAnimationFrame(() => codeRef.current?.focus())
   }
@@ -87,7 +94,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock 
       const q = num(cells[1]) || 1
       const idx = next.findIndex(r => r.product_id === p.id)
       if (idx >= 0) next[idx] = { ...next[idx], qty: num(next[idx].qty) + q }
-      else next.push({ product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', stock_status: 'good', location_id: '' })
+      else next.push({ product_id: p.id, code: p.material_code, qty: q, expected_qty: '', unit_price: '', basic_price: '', vat_rate: 15, stock_status: 'good', location_id: '' })
       added++
     }
     if (added) { onChange(next); setCode(''); setQty('') }
@@ -166,6 +173,31 @@ export function LineItems({ rows, onChange, products, locations, variant, stock 
             </tbody>
           </table>
           <div className="flex justify-between border-t border-surface-line bg-surface-sunken px-3 py-2 text-xs text-ink-soft"><span>{rows.length} line(s)</span><span>Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span></div>
+        </div>
+      ) : priced ? (
+        <div className="overflow-x-auto rounded-lg border border-surface-line">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-surface-line bg-surface-sunken text-left text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+                <th className="w-8 px-3 py-2 text-center">#</th><th className="px-3 py-2">Item</th>
+                <th className="w-16 px-2 py-2 text-right">Qty</th><th className="w-28 px-2 py-2 text-right">Basic / unit</th>
+                <th className="w-20 px-2 py-2 text-right">VAT %</th><th className="w-32 px-2 py-2 text-right">Line total</th><th className="w-10 px-2 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => { const p = byId[r.product_id]; return (
+                <tr key={i} className="border-b border-surface-line/70 last:border-0">
+                  <td className="px-3 py-2 text-center text-xs text-ink-faint">{i + 1}</td>
+                  <td className="px-3 py-2"><div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div><div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div></td>
+                  <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-16 text-right" /></td>
+                  <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.basic_price ?? ''} onChange={e => setRow(i, { basic_price: e.target.value })} className="fiori-input h-8 w-24 text-right" placeholder="0.00" /></td>
+                  <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.vat_rate ?? ''} onChange={e => setRow(i, { vat_rate: e.target.value })} className="fiori-input h-8 w-16 text-right" placeholder="15" /></td>
+                  <td className="px-2 py-2 text-right font-medium text-ink">{formatNumber(lineTotal(r))}</td>
+                  <td className="px-2 py-2 text-center"><button type="button" onClick={() => removeRow(i)} className="rounded-md p-1.5 text-ink-faint hover:bg-bad/10 hover:text-bad" title="Remove"><Icon name="close" className="text-[16px]" /></button></td>
+                </tr> )})}
+            </tbody>
+          </table>
+          <div className="flex justify-between border-t border-surface-line bg-surface-sunken px-3 py-2 text-xs text-ink-soft"><span>{rows.length} line(s) · Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span><span>Total amount <span className="font-medium text-ink">{formatNumber(rows.reduce((s, r) => s + lineTotal(r), 0))}</span></span></div>
         </div>
       ) : (
         <div className="divide-y divide-surface-line overflow-hidden rounded-lg border border-surface-line">

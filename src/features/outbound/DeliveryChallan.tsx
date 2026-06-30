@@ -92,10 +92,10 @@ export function DeliveryChallan() {
       const gp_no = await nextDocNumber(currentClientId!, 'GP')
       if (gp_no) {
         await supabase.from('gate_passes').insert({
-          client_id: currentClientId!, gate_pass_no: gp_no, vehicle_id: c.vehicle_id || null,
+          client_id: currentClientId!, gate_pass_no: gp_no, challan_id: c.id, vehicle_id: c.vehicle_id || null,
           driver_name: c.driver_name || null, gate_out_date: today(), status: 'issued',
           purpose: `Delivery - Challan ${c.challan_no}${c.invoice_no ? ', Invoice ' + c.invoice_no : ''}`
-        })
+        } as any)
       }
       // Partial fulfilment: bump delivered_qty on the linked sales-order lines,
       // then advance the order status (delivered when every line is complete).

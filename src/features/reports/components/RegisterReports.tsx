@@ -186,3 +186,99 @@ export function HrReport() {
     </div>
   )
 }
+
+// ---- Delivery register: every challan line — which transport/courier carried which product --
+export function DeliveryRegisterReport() {
+  const { currentClientId } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [rows, setRows] = useState<any[]>([])
+  const [mode, setMode] = useState<'all' | 'transport' | 'courier'>('all')
+
+  useEffect(() => {
+    if (!currentClientId) return
+    setLoading(true)
+    ;(async () => {
+      const { data: chs } = await supabase.from('delivery_challans')
+        .select('id,challan_no,challan_date,status,posted_at,delivery_method,driver_name,transport_vendor,courier_name,courier_tracking_no,po_no,customer_id,sales_order_id')
+        .eq('client_id', currentClientId).order('challan_date', { ascending: false })
+      const ids = (chs ?? []).map((c: any) => c.id)
+      const [{ data: items }, { data: customers }, { data: sos }, { data: products }] = await Promise.all([
+        ids.length ? supabase.from('delivery_challan_items').select('challan_id,product_id,qty').in('challan_id', ids) : Promise.resolve({ data: [] as any[] }),
+        supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId),
+        supabase.from('sales_orders').select('id,so_no').eq('client_id', currentClientId),
+        supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId)
+      ])
+      const custMap: Record<string, string> = {}; (customers ?? []).forEach((c: any) => { custMap[c.id] = `${c.customer_code} — ${c.name}` })
+      const soMap: Record<string, string> = {}; (sos ?? []).forEach((s: any) => { soMap[s.id] = s.so_no })
+      const prodMap: Record<string, string> = {}; (products ?? []).forEach((p: any) => { prodMap[p.id] = `${p.material_code} — ${p.name}` })
+      const byCh: Record<string, any[]> = {}; (items ?? []).forEach((it: any) => { (byCh[it.challan_id] ??= []).push(it) })
+
+      const out: any[] = []
+      ;(chs ?? []).forEach((c: any) => {
+        const courier = c.delivery_method === 'courier'
+        const carrier = courier
+          ? `${c.courier_name || '—'}${c.courier_tracking_no ? ` (${c.courier_tracking_no})` : ''}`
+          : (c.transport_vendor || c.driver_name || '—')
+        const status = c.posted_at ? 'issued' : (c.status ?? 'draft')
+        const lines = byCh[c.id] ?? []
+        const common = {
+          challan_no: c.challan_no, date: formatDate(c.challan_date), so_no: soMap[c.sales_order_id] ?? (c.po_no ?? '—'),
+          customer: custMap[c.customer_id] ?? '—', mode: courier ? 'Courier' : 'Transport', carrier, status
+        }
+        if (lines.length === 0) out.push({ ...common, product: '—', qty: 0, key: `${c.id}-0` })
+        else lines.forEach((it: any, i: number) => out.push({ ...common, product: prodMap[it.product_id] ?? '—', qty: n(it.qty), key: `${c.id}-${i}` }))
+      })
+      setRows(out)
+      setLoading(false)
+    })()
+  }, [currentClientId])
+
+  const filtered = useMemo(() => mode === 'all' ? rows : rows.filter(r => r.mode.toLowerCase() === mode), [rows, mode])
+
+  const cols: RepCol[] = [
+    { key: 'challan_no', header: 'Challan No', width: '11%' }, { key: 'date', header: 'Date', width: '9%' },
+    { key: 'so_no', header: 'SO / Ref', width: '10%' }, { key: 'customer', header: 'Customer', width: '20%' },
+    { key: 'mode', header: 'Mode', width: '8%' }, { key: 'carrier', header: 'Carrier', width: '15%' },
+    { key: 'product', header: 'Product', width: '17%' }, { key: 'qty', header: 'Qty', align: 'right', width: '6%' },
+    { key: 'status', header: 'Status', width: '8%' }
+  ]
+  const tableCols = [
+    { key: 'challan_no', header: 'Challan No', accessor: (r: any) => r.challan_no, className: 'font-medium' },
+    { key: 'date', header: 'Date', accessor: (r: any) => r.date },
+    { key: 'so_no', header: 'SO / Ref', accessor: (r: any) => r.so_no },
+    { key: 'customer', header: 'Customer', accessor: (r: any) => r.customer },
+    { key: 'mode', header: 'Mode', render: (r: any) => <Badge tone={r.mode === 'Courier' ? 'info' : 'neutral'}>{r.mode}</Badge> },
+    { key: 'carrier', header: 'Carrier', accessor: (r: any) => r.carrier },
+    { key: 'product', header: 'Product', accessor: (r: any) => r.product },
+    { key: 'qty', header: 'Qty', className: 'text-right', accessor: (r: any) => formatNumber(r.qty) },
+    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={r.status === 'issued' ? 'positive' : r.status === 'cancelled' ? 'negative' : 'neutral'}>{r.status}</Badge> }
+  ]
+  if (loading) return <Spinner label="Loading…" />
+  const challanCount = new Set(filtered.map(r => r.challan_no)).size
+  const totalQty = filtered.reduce((s, r) => s + r.qty, 0)
+  const courierCount = new Set(rows.filter(r => r.mode === 'Courier').map(r => r.challan_no)).size
+  const transportCount = new Set(rows.filter(r => r.mode === 'Transport').map(r => r.challan_no)).size
+
+  return (
+    <div className="space-y-4">
+      <ReportToolbar count={filtered.length} onCSV={() => downloadCSV('Delivery Register', cols, filtered)} onPDF={() => downloadReportPDF('Delivery Register', `Which transport/courier carried what · ${challanCount} deliveries`, cols, filtered)}>
+        <div className="flex rounded-lg border border-surface-line p-0.5 text-sm">
+          <button onClick={() => setMode('all')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'all' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>All</button>
+          <button onClick={() => setMode('transport')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'transport' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Transport</button>
+          <button onClick={() => setMode('courier')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'courier' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Courier</button>
+        </div>
+      </ReportToolbar>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Deliveries" value={formatNumber(challanCount)} />
+        <StatCard label="Units Shipped" value={formatNumber(totalQty)} />
+        <StatCard label="By Transport" value={formatNumber(transportCount)} />
+        <StatCard label="By Courier" value={formatNumber(courierCount)} />
+      </div>
+
+      <Card className="overflow-hidden">
+        <DataTable columns={tableCols} rows={filtered} rowKey={(r: any) => r.key} emptyTitle="No deliveries yet" />
+      </Card>
+    </div>
+  )
+}

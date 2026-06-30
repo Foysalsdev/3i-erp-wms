@@ -24,6 +24,7 @@ export const OP_RELATIONS: Record<string, OpRelation> = {
   goods_receipts:    { table: 'goods_receipts', code: 'grn_no' },
   pick_lists:        { table: 'pick_lists', code: 'pick_no' },
   dispatches:        { table: 'dispatches', code: 'dispatch_no' },
+  delivery_challans: { table: 'delivery_challans', code: 'challan_no' },
   sales_orders:      { table: 'sales_orders', code: 'so_no' },
   drivers:           { table: 'drivers', code: 'driver_code', name: 'name' },
   couriers:          { table: 'couriers', code: 'courier_code', name: 'name' },
@@ -234,7 +235,7 @@ export const OPERATIONS: Record<string, OpDef> = {
     statuses: [S.pending, S.issued, S.exited, S.cancelled], openStatuses: ['pending', 'issued'],
     searchFields: ['gate_pass_no', 'driver_name'],
     fields: [
-      { name: 'dispatch_id', label: 'Dispatch', type: 'relation', relation: 'dispatches' },
+      { name: 'challan_id', label: 'Delivery Challan', type: 'relation', relation: 'delivery_challans' },
       { name: 'vehicle_id', label: 'Vehicle', type: 'relation', relation: 'vehicles' },
       { name: 'driver_name', label: 'Driver Name', type: 'text' },
       { name: 'gate_out_date', label: 'Gate Out Date', type: 'date', required: true },
@@ -250,7 +251,7 @@ export const OPERATIONS: Record<string, OpDef> = {
     statuses: [S.pending, S.received, S.disputed], openStatuses: ['pending'],
     searchFields: ['pod_no', 'received_by'],
     fields: [
-      { name: 'dispatch_id', label: 'Dispatch', type: 'relation', relation: 'dispatches' },
+      { name: 'challan_id', label: 'Delivery Challan', type: 'relation', relation: 'delivery_challans' },
       { name: 'customer_id', label: 'Customer', type: 'relation', relation: 'customers' },
       { name: 'delivery_date', label: 'Delivery Date', type: 'date', required: true },
       { name: 'received_by', label: 'Received By', type: 'text' },

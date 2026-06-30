@@ -10,10 +10,11 @@ import { StockMovementReport } from '../components/StockMovementReport'
 import { TransportReport } from '../components/TransportReport'
 import { StockAgingReport } from '../components/StockAgingReport'
 import { InventoryValuationReport } from '../components/InventoryValuationReport'
-import { InboundReport, AssetReport, FinanceReport, HrReport } from '../components/RegisterReports'
+import { InboundReport, AssetReport, FinanceReport, HrReport, DeliveryRegisterReport } from '../components/RegisterReports'
 
 const REPORTS: Record<string, () => JSX.Element> = {
   outbound: SalesReport,
+  'outbound-deliveries': DeliveryRegisterReport,
   inventory: InventoryReport,
   'stock-movement': StockMovementReport,
   transport: TransportReport,

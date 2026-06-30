@@ -180,7 +180,7 @@ export type Database = {
       }
       gate_passes: {
         Row: {
-          id: string; client_id: string; gate_pass_no: string; dispatch_id: string | null; vehicle_id: string | null
+          id: string; client_id: string; gate_pass_no: string; dispatch_id: string | null; challan_id: string | null; vehicle_id: string | null
           driver_name: string | null; gate_out_date: string; gate_out_time: string | null; transporter_id: string | null; purpose: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
@@ -190,7 +190,7 @@ export type Database = {
       }
       proof_of_delivery: {
         Row: {
-          id: string; client_id: string; pod_no: string; dispatch_id: string | null; customer_id: string | null
+          id: string; client_id: string; pod_no: string; dispatch_id: string | null; challan_id: string | null; customer_id: string | null
           delivery_date: string; received_by: string | null; pod_url: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }

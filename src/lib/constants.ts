@@ -66,6 +66,7 @@ export const MODULES: NavModule[] = [
     { key: 'inventory', label: 'Inventory Reports' }, { key: 'stock-aging', label: 'Stock Aging' },
     { key: 'stock-movement', label: 'Stock Movement' }, { key: 'inventory-valuation', label: 'Inventory Valuation' },
     { key: 'inbound', label: 'Inbound Reports' }, { key: 'outbound', label: 'Outbound Reports' },
+    { key: 'outbound-deliveries', label: 'Delivery Register' },
     { key: 'transport', label: 'Transport Reports' }, { key: 'asset', label: 'Asset Reports' },
     { key: 'finance', label: 'Finance Reports' }, { key: 'hr', label: 'HR Reports' },
     { key: 'builder', label: 'Custom Report Builder' }

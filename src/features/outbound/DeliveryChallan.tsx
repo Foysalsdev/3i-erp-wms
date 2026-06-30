@@ -45,7 +45,7 @@ export function DeliveryChallan() {
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
+    supabase.from('customers').select('id,customer_code,name,billing_address').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
     supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
@@ -230,8 +230,10 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   // (so nothing is typed twice). Each line keeps its so_item_id for tracking.
   const loadFromSO = async (so: any) => {
     const { data: items } = await supabase.from('sales_order_items').select('id,product_id,qty,delivered_qty,unit_price').eq('so_id', so.id)
+    const cust = customers.find((c: any) => c.id === so.customer_id)
     setH((x: any) => ({ ...x, sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
-      po_no: so.reference_no || x.po_no, invoice_no: so.billing_doc_no || so.invoice_no || x.invoice_no }))
+      po_no: so.reference_no || x.po_no, invoice_no: so.billing_doc_no || so.invoice_no || x.invoice_no,
+      bill_to_address: x.bill_to_address || cust?.billing_address || '' }))
     setLines((items ?? []).map((it: any) => ({
       product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
       unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id
@@ -343,7 +345,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
               <Combobox items={sos.map((o: any) => ({ id: o.id, label: o.so_no, sublabel: customers.find((c: any) => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
             </Field>
             <Field label="Customer" required>
-              <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
+              <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''}
+                onChange={(id: string) => set({ customer_id: id, bill_to_address: customers.find((c: any) => c.id === id)?.billing_address || '' })}
+                placeholder="Search customer by code or name" />
             </Field>
             <Field label="Warehouse" required>
               <Select value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
@@ -394,7 +398,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
             <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>
             <Field label="Unloading Point"><Input value={h.unloading_point ?? ''} onChange={e => set({ unloading_point: e.target.value })} /></Field>
-            <Field label="Bill-To Address" className="sm:col-span-2"><Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} /></Field>
+            <Field label="Bill-To Address" className="sm:col-span-2">
+              <Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} placeholder="Auto-filled from customer master — edit if this delivery differs" />
+            </Field>
           </div>
         )}
 

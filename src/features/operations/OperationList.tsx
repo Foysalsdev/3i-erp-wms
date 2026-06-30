@@ -10,13 +10,14 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { OperationForm } from './OperationForm'
 
 export function OperationList({ def }: { def: OpDef }) {
   const { data, loading, refresh } = useCollection(def.table, { order: 'created_at' })
   const { can, isPlatformAdmin, currentClientId } = useAuth()
   const canEdit = can(`${def.permission}.create`) || can(`${def.permission}.edit`)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useUrlSearch()
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)

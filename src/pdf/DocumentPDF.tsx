@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
+import { getCompanyInfo } from '@/lib/settings'
 
 const s = StyleSheet.create({
   page: { padding: 30, fontSize: 9, fontFamily: 'Helvetica', color: '#212326' },
@@ -26,12 +27,13 @@ export interface DocMeta { label: string; value: string }
 
 function DocPDF({ client, title, docNo, meta, lines, showPrice }:
   { client: string; title: string; docNo: string; meta: DocMeta[]; lines: DocLine[]; showPrice?: boolean }) {
+  const company = getCompanyInfo()
   const total = lines.reduce((a, l) => a + l.qty * (l.price ?? 0), 0)
   return (
     <Document>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
-          <View><Image src="/whirlpool-logo.png" style={{ width: 118, height: 39, marginBottom: 3 }} /><Text style={s.sub}>ERP + WMS · {client}</Text></View>
+          <View><Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 118, height: 39, marginBottom: 3 }} /><Text style={s.sub}>{company.name} · {client}</Text></View>
           <View><Text style={s.docTitle}>{title}</Text><Text style={s.docNo}>{docNo}</Text></View>
         </View>
         <View style={s.metaBox}>
@@ -53,7 +55,7 @@ function DocPDF({ client, title, docNo, meta, lines, showPrice }:
           </View>
         ))}
         {showPrice && <View style={s.total}><View style={s.totalBox}><Text>Total</Text><Text>{total.toLocaleString()}</Text></View></View>}
-        <Text style={s.footer} render={({ pageNumber, totalPages }) => `Whirlpool WH  ·  ${docNo}  ·  Page ${pageNumber}/${totalPages}`} fixed />
+        <Text style={s.footer} render={({ pageNumber, totalPages }) => `${company.name}  ·  ${docNo}  ·  Page ${pageNumber}/${totalPages}`} fixed />
       </Page>
     </Document>
   )

@@ -11,8 +11,11 @@ import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
+import { DocTimeline } from '@/components/shared/DocTimeline'
+import { DocVersions } from '@/components/shared/DocVersions'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { Field, Select, Input, Textarea } from '@/components/ui/Field'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
@@ -29,9 +32,10 @@ export function DeliveryChallan() {
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
   const canPost = can('outbound.approve') || can('outbound.post') || isPlatformAdmin
-  const [q, setQ] = useState('')
+  const [q, setQ] = useUrlSearch()
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  const [overview, setOverview] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [customers, setCustomers] = useState<any[]>([])
@@ -54,7 +58,8 @@ export function DeliveryChallan() {
     const t = q.toLowerCase()
     return (data as any[]).filter(r =>
       String(r.challan_no ?? '').toLowerCase().includes(t) ||
-      String(r.invoice_no ?? '').toLowerCase().includes(t))
+      String(r.invoice_no ?? '').toLowerCase().includes(t) ||
+      String(r.po_no ?? '').toLowerCase().includes(t))
   }, [data, q])
 
   // Issue the challan: deduct stock for every line, then auto-create a linked gate pass.
@@ -65,6 +70,7 @@ export function DeliveryChallan() {
     try {
       const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', c.id)
       if (!items || items.length === 0) { notify('error', 'Add line items before issuing'); return }
+      const issuedSerials: string[] = []
       for (const it of items as any[]) {
         if (!it.product_id || !(Number(it.qty) > 0)) continue
         const { error } = await (supabase as any).rpc('post_stock_movement', {
@@ -72,9 +78,15 @@ export function DeliveryChallan() {
           p_location: it.location_id || null, p_stock_status: it.stock_status || 'good',
           p_qty_in: 0, p_qty_out: Number(it.qty), p_movement_type: 'DELIVERY',
           p_reference_type: 'delivery_challan', p_reference_id: c.id, p_reference_no: c.challan_no,
-          p_serial_no: null, p_remarks: `Challan ${c.challan_no}${c.invoice_no ? ' - Invoice ' + c.invoice_no : ''}`
+          p_serial_no: it.serial_no || null, p_remarks: `Challan ${c.challan_no}${c.invoice_no ? ' - Invoice ' + c.invoice_no : ''}`
         })
         if (error) throw error
+        if (it.serial_no) issuedSerials.push(it.serial_no)
+      }
+      // Mark each shipped serial delivered, tagged to this challan (full traceability).
+      if (issuedSerials.length) {
+        await supabase.from('serial_numbers').update({ status: 'delivered', reference_no: c.challan_no })
+          .eq('client_id', currentClientId!).in('serial_no', issuedSerials)
       }
       // Auto gate pass for the same vehicle/driver.
       const gp_no = await nextDocNumber(currentClientId!, 'GP')
@@ -145,6 +157,7 @@ export function DeliveryChallan() {
       render: (r: any) => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
+            { icon: 'visibility', label: 'View', onClick: () => setOverview(r) },
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             { icon: 'print', label: 'Print challan', onClick: () => printChallan(r) },
             ...(canPost && !r.posted_at ? [{ icon: 'check_circle', label: busy === r.id ? 'Issuing...' : 'Issue & Deduct Stock + Gate Pass', onClick: () => issue(r) }] : []),
@@ -172,6 +185,13 @@ export function DeliveryChallan() {
         <ChallanForm record={editing} customers={customers} warehouses={warehouses} vehicles={vehicles} products={products}
           clientId={currentClientId!} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
+      )}
+
+      {overview && (
+        <ChallanOverview challan={overview} customerName={customerName(overview.customer_id)}
+          vehicles={vehicles} products={products}
+          canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
+          onClose={() => setOverview(null)} />
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
@@ -385,6 +405,85 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button icon="save" loading={saving} onClick={save}>{record ? 'Update' : 'Create'}</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// Read-only 360° view of a challan: header, linked SO & gate pass, line items
+// (with per-unit serials) and the full audit trail (WES: connected + audited).
+function ChallanOverview({ challan, customerName, vehicles, products, canEdit, onEdit, onClose }: any) {
+  const [items, setItems] = useState<any[]>([])
+  const [so, setSo] = useState<any>(null)
+  const [gatePasses, setGatePasses] = useState<any[]>([])
+
+  useEffect(() => {
+    if (!challan?.id) return
+    supabase.from('delivery_challan_items').select('*').eq('challan_id', challan.id).then(({ data }) => setItems(data ?? []))
+    if (challan.sales_order_id) supabase.from('sales_orders').select('so_no,status,reference_no').eq('id', challan.sales_order_id).single().then(({ data }) => setSo(data))
+    // Gate pass auto-created on issue references the challan number in its purpose.
+    ;(supabase as any).from('gate_passes').select('gate_pass_no,status,gate_out_date').ilike('purpose', `%${challan.challan_no}%`).then(({ data }: any) => setGatePasses(data ?? []))
+  }, [challan?.id])
+
+  const productName = (id: string) => products.find((p: any) => p.id === id)?.name ?? id
+  const vehicleNo = vehicles.find((v: any) => v.id === challan.vehicle_id)?.vehicle_number
+
+  const Stat = ({ label, value }: any) => (
+    <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
+  )
+  const Section = ({ title, children }: any) => (<div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">{title}</p>{children}</div>)
+
+  return (
+    <Modal open onClose={onClose} title={`Delivery Challan — ${challan.challan_no}`} size="lg">
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
+          <Stat label="Customer" value={customerName} />
+          <Stat label="Challan Date" value={formatDate(challan.challan_date)} />
+          <Stat label="SAP Invoice" value={challan.invoice_no || '—'} />
+          <Stat label="PO No" value={challan.po_no || '—'} />
+          <Stat label="Vehicle" value={vehicleNo || '—'} />
+          <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge>{challan.posted_at && <Badge tone="positive">Stock out</Badge>}</div>} />
+        </div>
+
+        <Section title="Linked documents">
+          <div className="overflow-hidden rounded-xl border border-surface-line">
+            {[
+              ...(so ? [{ key: 'so', icon: 'shopping_cart', label: `Sales Order · ${so.so_no}`, meta: `${so.status}${so.reference_no ? ' · PO ' + so.reference_no : ''}` }] : []),
+              ...gatePasses.map((g: any) => ({ key: g.gate_pass_no, icon: 'door_front', label: `Gate Pass · ${g.gate_pass_no}`, meta: `${g.status} · ${formatDate(g.gate_out_date)}` }))
+            ].map((row, i) => (
+              <div key={row.key} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                <span className="flex min-w-0 items-center gap-2 text-ink"><Icon name={row.icon} className="shrink-0 text-[18px] text-ink-faint" /> <span className="truncate">{row.label}</span></span>
+                <span className="shrink-0 text-ink-soft">{row.meta}</span>
+              </div>
+            ))}
+            {!so && gatePasses.length === 0 && <p className="p-3.5 text-sm text-ink-faint">No linked documents yet.</p>}
+          </div>
+        </Section>
+
+        <Section title="Items">
+          <div className="overflow-hidden rounded-xl border border-surface-line">
+            {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
+              items.map((it: any, i: number) => (
+                <div key={it.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                  <span className="min-w-0 truncate text-ink">{productName(it.product_id)}{it.serial_no ? <span className="ml-2 font-mono text-xs text-ink-faint">SN {it.serial_no}</span> : null}</span>
+                  <span className="shrink-0 text-ink-soft">{formatNumber(it.qty)}</span>
+                </div>
+              ))}
+          </div>
+        </Section>
+
+        <Section title="Activity — who, when & what changed">
+          <DocTimeline table="delivery_challans" recordId={challan.id} />
+        </Section>
+
+        <Section title="Document Versions">
+          <DocVersions table="delivery_challans" recordId={challan.id} />
+        </Section>
+
+        <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+          {canEdit && <Button icon="edit" onClick={onEdit}>Edit</Button>}
         </div>
       </div>
     </Modal>

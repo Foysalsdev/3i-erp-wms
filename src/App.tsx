@@ -18,11 +18,13 @@ const InboundPage = lazy(() => import('@/features/inbound/InboundPage'))
 const OutboundPage = lazy(() => import('@/features/outbound/OutboundPage'))
 const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'))
 const HrPage = lazy(() => import('@/features/hr/pages/HrPage'))
+const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'))
+const ReversePage = lazy(() => import('@/features/reverse/pages/ReversePage'))
 
 // Modules still served by the generic operational register page.
 const OPERATIONS_MODULES = ['transport', 'finance']
 // Modules still rendered as navigation scaffolds.
-const PLACEHOLDERS = ['reverse', 'asset', 'settings']
+const PLACEHOLDERS = ['asset']
 
 export default function App() {
   const { session, loading, init } = useAuth()
@@ -44,6 +46,8 @@ export default function App() {
             <Route path="/outbound/:tab?" element={<RequirePermission perm="outbound.view"><OutboundPage /></RequirePermission>} />
             <Route path="/reports/:tab?" element={<RequirePermission perm="reports.view"><ReportsPage /></RequirePermission>} />
             <Route path="/hr/:tab?" element={<RequirePermission perm="hr.view"><HrPage /></RequirePermission>} />
+            <Route path="/settings/:tab?" element={<RequirePermission perm="settings.view"><SettingsPage /></RequirePermission>} />
+            <Route path="/reverse/:tab?" element={<RequirePermission perm="reverse.view"><ReversePage /></RequirePermission>} />
             {OPERATIONS_MODULES.map(key => {
               const m = MODULES.find(x => x.key === key)!
               return <Route key={key} path={`/${key}/:tab?`} element={

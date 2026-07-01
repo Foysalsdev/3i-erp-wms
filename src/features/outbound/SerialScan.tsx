@@ -31,6 +31,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
   const [scan, setScan] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [modelId, setModelId] = useState('')
   const scanRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (currentClientId && lockSoId) load() /* eslint-disable-next-line */ }, [currentClientId, lockSoId])
@@ -77,13 +78,23 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
     const serial = raw.trim()
     if (!serial) return
     if (allSerials.has(serial.toLowerCase())) { notify('error', `Serial already scanned: ${serial}`); setScan(''); return }
-    const idx = detectLine(serial)
+    // A selected Model pins the line so there's no ambiguity about where a scan lands;
+    // otherwise fall back to detecting it from the serial's material-code prefix.
+    const idx = modelId ? lines.findIndex(l => l.item_id === modelId) : detectLine(serial)
     if (idx < 0) { notify('error', `No matching product for serial ${serial} — check the code`); return }
     const line = lines[idx]
     if (line.serials.length >= line.ordered) { notify('error', `${line.code}: already scanned ${line.ordered}/${line.ordered} (ordered qty reached)`); setScan(''); return }
     setLines(ls => ls.map((l, i) => i === idx ? { ...l, serials: [...l.serials, { serial_no: serial }] } : l))
     setScan('')
     requestAnimationFrame(() => scanRef.current?.focus())
+  }
+
+  // Tab-separated so a paste into Excel/Sheets lands as two clean columns.
+  const copyAll = async () => {
+    const tsv = ['Model\tSerial', ...lines.flatMap(l => l.serials.map(s => `${l.code}\t${s.serial_no}`))].join('\n')
+    if (totalScanned === 0) { notify('info', 'No serials scanned yet'); return }
+    await navigator.clipboard.writeText(tsv)
+    notify('success', `Copied ${totalScanned} serial(s) — paste directly into Excel`)
   }
 
   const removeSerial = (lineIdx: number, serialIdx: number) => {
@@ -139,14 +150,20 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
+        <select value={modelId} onChange={e => { setModelId(e.target.value); requestAnimationFrame(() => scanRef.current?.focus()) }} className="fiori-input w-auto min-w-[200px] py-2">
+          <option value="">Select Model to scan…</option>
+          {lines.map(l => <option key={l.item_id} value={l.item_id}>{l.code} — {l.name} ({l.serials.length}/{l.ordered})</option>)}
+        </select>
         <div className="relative min-w-[220px] flex-1">
           <Icon name="qr_code_scanner" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-brand-600" />
-          <input ref={scanRef} value={scan} autoFocus placeholder="Scan / type serial, then Enter"
+          <input ref={scanRef} value={scan} autoFocus disabled={!modelId}
+            placeholder={modelId ? 'Scan / type serial, then Enter' : 'Select a Model above first'}
             onChange={e => setScan(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSerial(scan) } }}
-            className="fiori-input w-full pl-10" />
+            className="fiori-input w-full pl-10 disabled:cursor-not-allowed" />
         </div>
         <span className="text-sm text-ink-soft">Scanned <span className="font-semibold text-ink">{formatNumber(totalScanned)}</span> / {formatNumber(totalOrdered)}</span>
+        <Button type="button" variant="secondary" size="sm" icon="content_copy" onClick={copyAll}>Copy (Excel)</Button>
       </div>
 
       <Card className="overflow-hidden">
@@ -192,7 +209,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
           {canEdit && <Button icon="save" loading={busy} onClick={save} disabled={totalScanned === 0 && removedIds.length === 0}>Save serials</Button>}
         </div>
       </Card>
-      <p className="text-xs text-ink-faint">The serial prefix matches the material code, so the line is detected automatically. These serials feed the SAP prework export and the delivery challan — no re-typing.</p>
+      <p className="text-xs text-ink-faint">Select a Model above, then scan — each serial is added to that line. Use "Copy (Excel)" to paste the full Model/Serial list elsewhere. These serials feed the SAP prework export and the delivery challan — no re-typing.</p>
     </div>
   )
 }

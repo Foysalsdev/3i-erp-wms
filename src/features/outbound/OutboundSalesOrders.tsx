@@ -12,6 +12,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
+import { Tabs } from '@/components/ui/Tabs'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { Field, Select, Input, Textarea } from '@/components/ui/Field'
@@ -201,7 +202,7 @@ export function OutboundSalesOrders() {
 
       <Card className="overflow-hidden">
         <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          emptyTitle="No sales orders yet" />
+          onRowClick={(r: any) => setOverview(r)} emptyTitle="No sales orders yet" />
       </Card>
 
       {modal && (
@@ -231,6 +232,7 @@ export function OutboundSalesOrders() {
         <SOOverview so={overview} customerName={customerName(overview.customer_id)} products={products}
           ownerName={userName(overview.assigned_to)}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
+          onScanned={refresh}
           onClose={() => setOverview(null)} />
       )}
 
@@ -429,7 +431,8 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
   )
 }
 
-function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, onClose }: any) {
+function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, onScanned, onClose }: any) {
+  const [tab, setTab] = useState<'details' | 'scan'>('details')
   const [items, setItems] = useState<any[]>([])
   const [deliveries, setDeliveries] = useState<any[]>([])
 
@@ -470,6 +473,9 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
   return (
     <Modal open onClose={onClose} title={`Sales Order — ${so.so_no}`} size="lg">
       <div className="space-y-5">
+        <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }]} active={tab} onChange={(k: any) => setTab(k)} />
+
+        {tab === 'details' && <>
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
           <Stat label="Customer" value={customerName} />
           <Stat label="Order Date" value={formatDate(so.order_date)} />
@@ -552,10 +558,13 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
         <Section title="Document Versions">
           <DocVersions table="sales_orders" recordId={so.id} />
         </Section>
+        </>}
+
+        {tab === 'scan' && <SerialScan lockSoId={so.id} onDone={onScanned} />}
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>
-          {canEdit && <Button icon="edit" onClick={onEdit}>Edit</Button>}
+          {canEdit && tab === 'details' && <Button icon="edit" onClick={onEdit}>Edit</Button>}
         </div>
       </div>
     </Modal>

@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Icon } from '@/components/ui/Icon'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { initials } from '@/lib/utils'
 import { GlobalSearch } from './GlobalSearch'
 import { NotificationBell } from './NotificationBell'
 
 export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const { profile, clients, currentClientId, setClient, signOut, isPlatformAdmin } = useAuth()
-  const { toggleSidebar, theme, toggleTheme } = useUI()
+  const { toggleSidebar } = useUI()
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
   const current = clients.find(c => c.id === currentClientId)
@@ -34,9 +35,6 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
           <Icon name="expand_more" className="pointer-events-none absolute right-2 text-[18px] text-ink-faint" />
         </div>
 
-        <button onClick={toggleTheme} title="Toggle theme" className="rounded-lg p-2 text-ink-soft hover:bg-surface-sunken">
-          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} />
-        </button>
         <NotificationBell />
 
         <div className="relative">
@@ -55,6 +53,10 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
                   </div>
                 </div>
                 {isPlatformAdmin && <p className="px-4 pt-2"><span className="inline-block rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold text-surface">PLATFORM ADMIN</span></p>}
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-[11px] font-semibold text-ink-soft">Appearance</span>
+                  <ThemeToggle />
+                </div>
                 {/* Client switcher inside the menu — the only way to switch clients on mobile (the bar selector is hidden below sm). */}
                 <div className="px-4 py-2 sm:hidden">
                   <label className="mb-1 block text-[11px] font-semibold text-ink-soft">Active client</label>

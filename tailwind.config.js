@@ -42,8 +42,14 @@ export default {
         'brand-grad': 'linear-gradient(135deg, #f4b72a 0%, #f2a900 55%, #d08f00 100%)',
         'accent-grad': 'linear-gradient(135deg, #f2a900 0%, #f6c654 100%)'
       },
-      keyframes: { 'fade-up': { '0%': { opacity: 0, transform: 'translateY(8px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } } },
-      animation: { 'fade-up': 'fade-up .35s cubic-bezier(.2,.7,.3,1) both' }
+      keyframes: {
+        'fade-up': { '0%': { opacity: 0, transform: 'translateY(8px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+        'pulse-ring': { '0%, 100%': { boxShadow: '0 0 0 0 rgba(242,169,0,0.45)' }, '50%': { boxShadow: '0 0 0 6px rgba(242,169,0,0)' } }
+      },
+      animation: {
+        'fade-up': 'fade-up .35s cubic-bezier(.2,.7,.3,1) both',
+        'pulse-ring': 'pulse-ring 1.4s ease-in-out infinite'
+      }
     }
   },
   plugins: []

@@ -14,7 +14,7 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const current = clients.find(c => c.id === currentClientId)
 
   return (
-    <header className="sticky top-0 z-30 flex h-[var(--header-h)] items-center gap-2 border-b border-surface-line bg-surface/85 px-3 backdrop-blur-xl sm:px-5">
+    <header className="sticky top-0 z-30 flex h-[var(--header-h)] items-center gap-2 border-b border-surface-line/60 bg-surface/70 px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] backdrop-blur-2xl backdrop-saturate-150 sm:px-5">
       <button onClick={onOpenMobileNav} className="rounded-lg p-2 text-ink-soft hover:bg-surface-sunken lg:hidden"><Icon name="menu" /></button>
       <button onClick={toggleSidebar} className="hidden rounded-lg p-2 text-ink-soft hover:bg-surface-sunken lg:block"><Icon name="menu_open" /></button>
 

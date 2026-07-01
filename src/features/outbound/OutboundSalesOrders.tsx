@@ -56,6 +56,7 @@ export function OutboundSalesOrders() {
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
   const [q, setQ] = useUrlSearch()
+  const [statusFilter, setStatusFilter] = useState('all')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [scanning, setScanning] = useState<any>(null)
@@ -82,11 +83,12 @@ export function OutboundSalesOrders() {
   const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
 
   const rows = useMemo(() => {
-    if (!q.trim()) return data as any[]
+    const byStatus = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
+    if (!q.trim()) return byStatus
     const t = q.toLowerCase()
     const fields = ['so_no', 'reference_no', 'invoice_no', 'sap_so_no', 'outbound_delivery_no', 'transfer_order_no', 'billing_doc_no']
-    return (data as any[]).filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
-  }, [data, q])
+    return byStatus.filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+  }, [data, q, statusFilter])
 
   const closeRemaining = async (r: any) => {
     if (!window.confirm(`Close remaining (undelivered) qty for ${r.so_no}? The order will be marked closed.`)) return
@@ -158,11 +160,11 @@ export function OutboundSalesOrders() {
 
   const columns = [
     { key: 'so_no', header: 'SO No', accessor: (r: any) => r.so_no, sortable: true, className: 'font-medium' },
-    { key: 'customer', header: 'Customer', render: (r: any) => customerName(r.customer_id) },
-    { key: 'order_date', header: 'Date', render: (r: any) => formatDate(r.order_date) },
-    { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
-    { key: 'total_amount', header: 'Amount', accessor: (r: any) => formatNumber(r.total_amount), className: 'text-right' },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+    { key: 'customer', header: 'Customer', accessor: (r: any) => customerName(r.customer_id), sortable: true },
+    { key: 'order_date', header: 'Date', accessor: (r: any) => r.order_date, render: (r: any) => formatDate(r.order_date), sortable: true },
+    { key: 'total_qty', header: 'Qty', accessor: (r: any) => r.total_qty, render: (r: any) => formatNumber(r.total_qty), className: 'text-right', sortable: true },
+    { key: 'total_amount', header: 'Amount', accessor: (r: any) => r.total_amount, render: (r: any) => formatNumber(r.total_amount), className: 'text-right', sortable: true },
+    { key: 'status', header: 'Status', accessor: (r: any) => r.status, render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
     { key: 'next_action', header: 'Next Action', render: (r: any) => <NextActionCell order={r} ownerName={userName(r.assigned_to)} /> },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
@@ -189,6 +191,10 @@ export function OutboundSalesOrders() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search SO…" /></div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="fiori-input w-auto py-2">
+          <option value="all">All statuses</option>
+          {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Sales Order</Button>}
       </div>

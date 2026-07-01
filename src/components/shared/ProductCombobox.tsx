@@ -36,7 +36,7 @@ export function ProductCombobox({ products, value, onChange, placeholder = 'Sear
     <div ref={ref} className="relative">
       {selected && !open ? (
         <button type="button" onClick={() => { setOpen(true); setQuery('') }}
-          className="flex w-full items-center justify-between gap-2 rounded-lg border border-surface-line bg-surface px-3 py-2 text-left text-sm">
+          className="flex w-full items-center justify-between gap-2 rounded-lg border border-brand-200/70 bg-surface px-3 py-2 text-left text-sm">
           <span className="truncate"><span className="font-medium text-ink">{selected.material_code}</span> <span className="text-ink-soft">— {selected.name}</span></span>
           <Icon name="expand_more" className="text-[18px] text-ink-faint" />
         </button>

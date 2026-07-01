@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/store/auth'
-import { Spinner } from '@/components/ui/States'
+import { WhirlpoolLoader } from '@/components/ui/WhirlpoolLoader'
 import { Toaster } from '@/components/ui/Toaster'
 import { AppShell } from '@/components/layout/AppShell'
 import { RequirePermission } from '@/components/layout/RequirePermission'
@@ -30,12 +30,12 @@ export default function App() {
   const { session, loading, init } = useAuth()
   useEffect(() => { init() }, [init])
 
-  if (loading) return <div className="flex h-full items-center justify-center"><Spinner label="Loading workspace…" /></div>
+  if (loading) return <WhirlpoolLoader fullScreen />
   if (!session) return <><LoginPage /><Toaster /></>
 
   return (
     <>
-      <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner label="Loading…" /></div>}>
+      <Suspense fallback={<WhirlpoolLoader fullScreen />}>
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/dashboard" replace />} />

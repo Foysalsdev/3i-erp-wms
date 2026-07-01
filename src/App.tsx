@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/store/auth'
 import { WhirlpoolLoader } from '@/components/ui/WhirlpoolLoader'
 import { Toaster } from '@/components/ui/Toaster'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { AppShell } from '@/components/layout/AppShell'
 import { RequirePermission } from '@/components/layout/RequirePermission'
 import LoginPage from '@/features/auth/LoginPage'
@@ -35,6 +36,7 @@ export default function App() {
 
   return (
     <>
+      <ErrorBoundary>
       <Suspense fallback={<WhirlpoolLoader fullScreen />}>
         <Routes>
           <Route element={<AppShell />}>
@@ -62,6 +64,7 @@ export default function App() {
           </Route>
         </Routes>
       </Suspense>
+      </ErrorBoundary>
       <Toaster />
     </>
   )

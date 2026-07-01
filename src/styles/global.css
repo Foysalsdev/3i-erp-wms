@@ -5,7 +5,7 @@
 :root {
   --header-h: 64px; --sidebar-w: 264px; --sidebar-w-collapsed: 76px;
   color-scheme: light;
-  --bg-sunken: 248 248 246; --surface: 255 255 255; --line: 233 233 230;
+  --bg-sunken: 247 247 247; --surface: 255 255 255; --line: 233 233 230;
   --ink: 33 35 38; --ink-soft: 99 102 108; --ink-faint: 150 153 159;
   --sidebar: 255 255 255; --sidebar-fg: 33 35 38; --sidebar-muted: 120 123 130;
   --sidebar-active: 253 246 230; --sidebar-active-fg: 124 83 0;

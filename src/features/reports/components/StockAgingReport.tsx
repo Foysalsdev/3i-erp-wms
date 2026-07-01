@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/States'
+import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
@@ -20,6 +21,8 @@ export function StockAgingReport() {
   const [loading, setLoading] = useState(true)
   const [stock, setStock] = useState<any[]>([])
   const [firstIn, setFirstIn] = useState<Record<string, string>>({})
+  const [q, setQ] = useState('')
+  const [bucketFilter, setBucketFilter] = useState('all')
 
   useEffect(() => {
     if (!currentClientId) return
@@ -51,6 +54,13 @@ export function StockAgingReport() {
     return BUCKETS.map(b => ({ bucket: b, qty: m[b] ?? 0 })).filter(x => x.qty > 0)
   }, [rows])
 
+  const filteredRows = useMemo(() => {
+    const byBucket = bucketFilter === 'all' ? rows : rows.filter(r => r.bucket === bucketFilter)
+    if (!q.trim()) return byBucket
+    const t = q.toLowerCase()
+    return byBucket.filter(r => r.code.toLowerCase().includes(t) || r.name.toLowerCase().includes(t) || r.warehouse.toLowerCase().includes(t))
+  }, [rows, q, bucketFilter])
+
   const cols: RepCol[] = [
     { key: 'code', header: 'Material Code', width: '15%' },
     { key: 'name', header: 'Product', width: '30%' },
@@ -62,22 +72,28 @@ export function StockAgingReport() {
     { key: 'bucket', header: 'Bucket', width: '6%' }
   ]
   const tableCols = [
-    { key: 'code', header: 'Material Code', accessor: (r: any) => r.code, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.name },
-    { key: 'warehouse', header: 'WH', accessor: (r: any) => r.warehouse },
-    { key: 'condition', header: 'Condition', accessor: (r: any) => r.condition },
-    { key: 'qty', header: 'Qty', className: 'text-right', accessor: (r: any) => formatNumber(r.qty) },
-    { key: 'received', header: 'In Since', accessor: (r: any) => r.received },
-    { key: 'age', header: 'Age (d)', className: 'text-right', accessor: (r: any) => r.age },
-    { key: 'bucket', header: 'Bucket', render: (r: any) => <Badge tone={bucketTone(r.bucket) as any}>{r.bucket}</Badge> }
+    { key: 'code', header: 'Material Code', accessor: (r: any) => r.code, className: 'font-medium', sortable: true },
+    { key: 'name', header: 'Product', accessor: (r: any) => r.name, sortable: true },
+    { key: 'warehouse', header: 'WH', accessor: (r: any) => r.warehouse, sortable: true },
+    { key: 'condition', header: 'Condition', accessor: (r: any) => r.condition, sortable: true },
+    { key: 'qty', header: 'Qty', className: 'text-right', accessor: (r: any) => r.qty, render: (r: any) => formatNumber(r.qty), sortable: true },
+    { key: 'received', header: 'In Since', accessor: (r: any) => r.received, sortable: true },
+    { key: 'age', header: 'Age (d)', className: 'text-right', accessor: (r: any) => r.age, sortable: true },
+    { key: 'bucket', header: 'Bucket', accessor: (r: any) => r.bucket, render: (r: any) => <Badge tone={bucketTone(r.bucket) as any}>{r.bucket}</Badge>, sortable: true }
   ]
 
   if (loading) return <Spinner label="Computing aging…" />
   return (
     <div className="space-y-4">
-      <ReportToolbar count={rows.length}
+      <ReportToolbar count={filteredRows.length}
         onCSV={() => downloadCSV('Stock Aging', cols, rows)}
-        onPDF={() => downloadReportPDF('Stock Aging Report', 'On-hand stock by age bucket', cols, rows)} />
+        onPDF={() => downloadReportPDF('Stock Aging Report', 'On-hand stock by age bucket', cols, rows)}>
+        <div className="w-64"><SearchBar value={q} onChange={setQ} placeholder="Search code, product, warehouse…" /></div>
+        <select value={bucketFilter} onChange={e => setBucketFilter(e.target.value)} className="fiori-input w-auto py-2">
+          <option value="all">All age buckets</option>
+          {BUCKETS.map(b => <option key={b} value={b}>{b} days</option>)}
+        </select>
+      </ReportToolbar>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {summary.map(s => (
           <Card key={s.bucket} className="p-3">
@@ -87,7 +103,7 @@ export function StockAgingReport() {
         ))}
       </div>
       <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={rows} rowKey={(r: any) => `${r.code}|${r.warehouse}|${r.condition}|${r.age}`} emptyTitle="No stock to age" />
+        <DataTable columns={tableCols} rows={filteredRows} rowKey={(r: any) => `${r.code}|${r.warehouse}|${r.condition}|${r.age}`} emptyTitle="No stock to age" />
       </Card>
     </div>
   )

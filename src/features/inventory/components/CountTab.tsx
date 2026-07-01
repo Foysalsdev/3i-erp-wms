@@ -15,6 +15,7 @@ import { Field, Input, Textarea, Select } from '@/components/ui/Field'
 import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/States'
+import { SearchBar } from '@/components/shared/SearchBar'
 import { formatDate, formatNumber } from '@/lib/utils'
 
 const CONDITIONS = [{ id: 'good', label: 'Good' }, { id: 'damaged', label: 'Damaged' }, { id: 'quarantine', label: 'Quarantine' }]
@@ -39,8 +40,14 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
   const [editing, setEditing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [q, setQ] = useState('')
 
   const whMap = useMemo(() => Object.fromEntries(warehouses.map(w => [w.id, w.label])), [warehouses])
+  const filteredDocs = useMemo(() => {
+    if (!q.trim()) return docs
+    const t = q.toLowerCase()
+    return docs.filter(r => [r.doc_no, whMap[r.warehouse_id], r.status].some(v => String(v ?? '').toLowerCase().includes(t)))
+  }, [docs, whMap, q])
 
   const load = () => {
     if (!clientId) return
@@ -79,21 +86,22 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
 
   const columns = [
     { key: 'doc_no', header: 'Document No', accessor: (r: any) => r.doc_no, sortable: true, className: 'font-medium' },
-    { key: 'date', header: 'Date', render: (r: any) => formatDate(r.count_date) },
-    { key: 'wh', header: 'Warehouse', render: (r: any) => whMap[r.warehouse_id]?.split(' — ')[0] ?? '—' },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+    { key: 'date', header: 'Date', accessor: (r: any) => r.count_date, render: (r: any) => formatDate(r.count_date), sortable: true },
+    { key: 'wh', header: 'Warehouse', accessor: (r: any) => whMap[r.warehouse_id] ?? '', render: (r: any) => whMap[r.warehouse_id]?.split(' — ')[0] ?? '—', sortable: true },
+    { key: 'status', header: 'Status', accessor: (r: any) => r.status, render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
     { key: '__actions', header: '', className: 'w-px whitespace-nowrap text-right',
       render: (r: any) => <div className="flex justify-end" onClick={e => e.stopPropagation()}><ActionMenu items={rowActions(r)} /></div> }
   ]
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-ink-soft">{docs.length} {title.toLowerCase()}(s)</span>
-        {canEdit && <Button icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {singular}</Button>}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder={`Search ${title.toLowerCase()}…`} /></div>
+        <span className="text-sm text-ink-soft">{filteredDocs.length} {title.toLowerCase()}(s)</span>
+        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {singular}</Button>}
       </div>
       <Card className="overflow-hidden">
-        {loading ? <Spinner /> : <DataTable columns={columns} rows={docs} rowKey={(r: any) => r.id}
+        {loading ? <Spinner /> : <DataTable columns={columns} rows={filteredDocs} rowKey={(r: any) => r.id}
           onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${title.toLowerCase()} yet`} />}
       </Card>
 

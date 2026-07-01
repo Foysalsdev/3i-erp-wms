@@ -66,8 +66,9 @@ export function InventoryReport() {
     { key: 'available', header: 'Available', align: 'right', width: '9%' }
   ]
   const tableCols = cols.map(c => ({
-    key: c.key, header: c.header, className: c.align === 'right' ? 'text-right' : '',
-    accessor: (r: any) => ['category', 'model'].includes(c.key) ? r[c.key] : formatNumber(r[c.key])
+    key: c.key, header: c.header, className: c.align === 'right' ? 'text-right' : '', sortable: true,
+    accessor: (r: any) => r[c.key],
+    render: (r: any) => ['category', 'model'].includes(c.key) ? r[c.key] : formatNumber(r[c.key])
   }))
   const byCat = useMemo(() => {
     const m: Record<string, number> = {}

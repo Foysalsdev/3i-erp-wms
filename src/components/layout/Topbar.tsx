@@ -6,12 +6,20 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { initials } from '@/lib/utils'
 import { GlobalSearch } from './GlobalSearch'
 import { NotificationBell } from './NotificationBell'
+import { MyProfileModal } from '@/features/auth/MyProfileModal'
+
+function Avatar({ profile, className }: { profile: any; className?: string }) {
+  return profile?.avatar_url
+    ? <img src={profile.avatar_url} alt="" className={`rounded-full object-cover ${className}`} />
+    : <span className={`flex items-center justify-center rounded-full bg-surface-sunken text-xs font-bold text-ink-soft ${className}`}>{initials(profile?.full_name || profile?.email)}</span>
+}
 
 export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const { profile, clients, currentClientId, setClient, signOut, isPlatformAdmin } = useAuth()
   const { toggleSidebar } = useUI()
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   const current = clients.find(c => c.id === currentClientId)
 
   return (
@@ -39,20 +47,24 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
 
         <div className="relative">
           <button onClick={() => setMenu(m => !m)} className="flex items-center gap-2 rounded-full p-0.5 ring-1 ring-surface-line hover:ring-brand-300">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sunken text-xs font-bold text-ink-soft">{initials(profile?.full_name || profile?.email)}</span>
+            <Avatar profile={profile} className="h-9 w-9" />
           </button>
           {menu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
               <div className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-xl bg-surface shadow-pop ring-1 ring-surface-line">
                 <div className="flex items-center gap-3 border-b border-surface-line px-4 py-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sunken text-xs font-bold text-ink-soft">{initials(profile?.full_name || profile?.email)}</span>
+                  <Avatar profile={profile} className="h-9 w-9" />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-ink">{profile?.full_name || 'User'}</p>
                     <p className="truncate text-xs text-ink-soft">{profile?.email}</p>
                   </div>
                 </div>
                 {isPlatformAdmin && <p className="px-4 pt-2"><span className="inline-block rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold text-surface">PLATFORM ADMIN</span></p>}
+                <button onClick={() => { setMenu(false); setShowProfile(true) }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-sunken">
+                  <Icon name="account_circle" className="text-[18px]" /> My Profile
+                </button>
                 <div className="flex items-center justify-between px-4 py-2.5">
                   <span className="text-[11px] font-semibold text-ink-soft">Appearance</span>
                   <ThemeToggle />
@@ -79,6 +91,7 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
         </div>
       </div>
       <GlobalSearch open={search} onClose={() => setSearch(false)} />
+      {showProfile && <MyProfileModal onClose={() => setShowProfile(false)} />}
     </header>
   )
 }

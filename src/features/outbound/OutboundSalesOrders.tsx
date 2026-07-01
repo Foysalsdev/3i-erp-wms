@@ -23,10 +23,11 @@ import { ChallanForm } from './DeliveryChallan'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
-import { DocTimeline } from '@/components/shared/DocTimeline'
 import { DocVersions } from '@/components/shared/DocVersions'
 import { WorkflowPanel } from './WorkflowPanel'
 import { workflowState } from './workflow'
+import { OrderTimeline } from './OrderTimeline'
+import { downloadChallanPdfFor } from './challanPdf'
 
 const SO_STATUS = ['draft', 'pending', 'approved', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
@@ -230,9 +231,10 @@ export function OutboundSalesOrders() {
 
       {overview && (
         <SOOverview so={overview} customerName={customerName(overview.customer_id)} products={products}
+          customers={customers} vehicles={vehicles}
           ownerName={userName(overview.assigned_to)}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
-          onScanned={refresh}
+          onScanned={refresh} onDownloadSO={() => printSO(overview)}
           onClose={() => setOverview(null)} />
       )}
 
@@ -431,7 +433,7 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
   )
 }
 
-function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, onScanned, onClose }: any) {
+function SOOverview({ so, customerName, products, customers, vehicles, ownerName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
   const [tab, setTab] = useState<'details' | 'scan'>('details')
   const [items, setItems] = useState<any[]>([])
   const [deliveries, setDeliveries] = useState<any[]>([])
@@ -441,8 +443,10 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
     supabase.from('sales_order_items').select('*').eq('so_id', so.id).then(({ data }) => setItems(data ?? []))
     // Deliveries = the challans raised against this order, each with its mode and product lines.
     ;(async () => {
+      // Full row (not a narrow column list) so the same object can also be handed
+      // straight to downloadChallanPdfFor for the "Download" button below.
       const { data: chs } = await supabase.from('delivery_challans')
-        .select('id,challan_no,challan_date,status,posted_at,delivery_method,driver_name,transport_vendor,courier_name,courier_tracking_no')
+        .select('*')
         .eq('sales_order_id', so.id).order('challan_date', { ascending: true })
       const ids = (chs ?? []).map((c: any) => c.id)
       const byCh: Record<string, any[]> = {}
@@ -476,6 +480,9 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
         <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }]} active={tab} onChange={(k: any) => setTab(k)} />
 
         {tab === 'details' && <>
+        <div className="flex justify-end">
+          <Button variant="secondary" size="sm" icon="download" onClick={onDownloadSO}>Download Invoice (PDF)</Button>
+        </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
           <Stat label="Customer" value={customerName} />
           <Stat label="Order Date" value={formatDate(so.order_date)} />
@@ -540,6 +547,8 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-ink-soft">
                       {formatDate(d.challan_date)} {d.posted_at ? <Badge tone="positive">Stock out</Badge> : <Badge tone={tone(d.status)}>{d.status}</Badge>}
+                      <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products })}
+                        className="rounded-lg p-1 text-ink-faint hover:bg-surface-sunken hover:text-brand-600"><Icon name="download" className="text-[16px]" /></button>
                     </span>
                   </div>
                   {d.items.length > 0 && (
@@ -551,8 +560,8 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
           </div>
         </Section>
 
-        <Section title="Progress History — who, when & what changed">
-          <DocTimeline table="sales_orders" recordId={so.id} />
+        <Section title="Order Timeline">
+          <OrderTimeline so={so} />
         </Section>
 
         <Section title="Document Versions">

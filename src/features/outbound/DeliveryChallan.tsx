@@ -21,6 +21,7 @@ import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
+import { downloadChallanPdfFor } from './challanPdf'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
@@ -124,19 +125,7 @@ export function DeliveryChallan() {
     }
   }
 
-  const printChallan = async (c: any) => {
-    const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', c.id)
-    const pmap: Record<string, any> = {}; products.forEach((p: any) => { pmap[p.id] = p })
-    const cust = customers.find((x: any) => x.id === c.customer_id)
-    const veh = vehicles.find((x: any) => x.id === c.vehicle_id)
-    const { downloadChallanPDF } = await import('@/pdf/DeliveryChallanPDF')
-    await downloadChallanPDF({
-      challan: c,
-      customerName: cust ? `${cust.customer_code} - ${cust.name}` : '',
-      vehicleNo: veh?.vehicle_number || '',
-      items: (items ?? []).map((it: any, i: number) => { const p = pmap[it.product_id] || {}; return { sl: i + 1, description: p.name || '', material_code: p.material_code || '', category: p.category || '', qty: Number(it.qty) || 0, unit: p.uom || 'Pc', remarks: it.remarks || '' } })
-    })
-  }
+  const printChallan = async (c: any) => downloadChallanPdfFor(c, { customers, vehicles, products })
 
   const openEdit = async (r: any) => {
     const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', r.id)

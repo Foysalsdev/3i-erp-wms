@@ -161,7 +161,11 @@ export function OutboundSalesOrders() {
   }
 
   const columns = [
-    { key: 'so_no', header: 'SO No', accessor: (r: any) => r.so_no, sortable: true, className: 'font-medium' },
+    { key: 'so_no', header: 'SO No', accessor: (r: any) => r.so_no, sortable: true, className: 'font-medium',
+      render: (r: any) => (
+        <button type="button" onClick={e => { e.stopPropagation(); setOverview(r) }}
+          className="font-medium text-brand-700 underline-offset-2 hover:underline">{r.so_no}</button>
+      ) },
     { key: 'customer', header: 'Customer', accessor: (r: any) => customerName(r.customer_id), sortable: true },
     { key: 'order_date', header: 'Date', accessor: (r: any) => r.order_date, render: (r: any) => formatDate(r.order_date), sortable: true },
     { key: 'total_qty', header: 'Qty', accessor: (r: any) => r.total_qty, render: (r: any) => formatNumber(r.total_qty), className: 'text-right', sortable: true },
@@ -203,7 +207,7 @@ export function OutboundSalesOrders() {
 
       <Card className="overflow-hidden">
         <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={(r: any) => setOverview(r)} emptyTitle="No sales orders yet" />
+          emptyTitle="No sales orders yet" />
       </Card>
 
       {modal && (

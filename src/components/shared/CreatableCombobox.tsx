@@ -76,7 +76,7 @@ export function CreatableCombobox({ items, value, onChange, onCreate, placeholde
               <p className="px-3 py-3 text-sm text-ink-faint">No matches</p>
             ) : matches.map((p, i) => (
               <button key={p.id} type="button" onMouseEnter={() => setActive(i)} onMouseDown={e => { e.preventDefault(); pick(p) }}
-                className={cn('flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm', i === active ? 'bg-brand-50' : 'hover:bg-surface-sunken')}>
+                className={cn('flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm', i === active ? 'bg-surface-sunken' : 'hover:bg-surface-sunken')}>
                 <span className="truncate text-ink">{p.sublabel || p.label}</span>
                 <span className="shrink-0 truncate font-mono text-[12px] text-ink-faint">{p.label}</span>
               </button>

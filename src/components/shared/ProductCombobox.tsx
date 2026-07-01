@@ -63,7 +63,7 @@ export function ProductCombobox({ products, value, onChange, placeholder = 'Sear
           ) : matches.map((p, i) => (
             <button key={p.id} type="button" onMouseEnter={() => setActive(i)} onClick={() => pick(p)}
               className={cn('flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm',
-                i === active ? 'bg-brand-50' : 'hover:bg-surface-sunken', p.id === value && 'font-semibold')}>
+                i === active ? 'bg-surface-sunken' : 'hover:bg-surface-sunken', p.id === value && 'font-semibold')}>
               <span className="truncate"><span className="font-medium text-ink">{p.material_code}</span> <span className="text-ink-soft">— {p.name}</span></span>
               {p.id === value && <Icon name="check" className="text-[16px] text-brand-600" />}
             </button>

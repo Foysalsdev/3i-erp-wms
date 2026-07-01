@@ -30,7 +30,7 @@ export function Sidebar({ mobile, onNavigate }: { mobile?: boolean; onNavigate?:
             <NavLink key={m.key} to={m.path} onClick={onNavigate} title={m.label}
               className={cn('group relative flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] transition-colors',
                 active ? 'bg-sidebar-active font-semibold text-sidebar-activefg'
-                       : 'text-sidebar-fg/70 hover:bg-surface-sunken hover:text-sidebar-fg')}>
+                       : 'text-sidebar-fg hover:bg-surface-sunken')}>
               {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-brand-500" />}
               <Icon name={m.icon} className={cn('text-[20px]', active ? 'text-brand-600' : 'text-sidebar-muted')} filled={active} />
               {!collapsed && <span className="truncate">{m.label}</span>}

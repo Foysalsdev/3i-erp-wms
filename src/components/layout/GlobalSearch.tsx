@@ -132,7 +132,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           {hits.length === 0 && q && !loading && <p className="px-3 py-6 text-center text-sm text-horizon-muted">No matches</p>}
           {hits.map((h, i) => (
             <button key={i} onClick={() => { nav(h.path); onClose() }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-brand-50/60">
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-surface-sunken">
               <Icon name={h.icon} className="text-[20px] text-brand-500" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{h.label}</p>

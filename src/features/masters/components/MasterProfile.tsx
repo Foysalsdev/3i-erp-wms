@@ -22,7 +22,7 @@ export function MasterProfile({ def, record, onEdit, onBack, canEdit, initialTab
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-ink-soft hover:text-brand-700"><Icon name="arrow_back" className="text-[18px]" /> Back to list</button>
       <Card className="p-5">
         <div className="flex flex-wrap items-start gap-4">
-          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl bg-brand-50 text-2xl font-bold text-brand-700 ring-1 ring-brand-100">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl bg-surface-sunken text-2xl font-bold text-ink-soft ring-1 ring-surface-line">
             {img ? <img src={img} alt="" className="h-full w-full object-cover" /> : initials(record[def.nameField])}
           </div>
           <div className="flex-1">

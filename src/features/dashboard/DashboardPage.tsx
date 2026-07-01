@@ -38,7 +38,7 @@ function OpTile({ icon, label, value, to, alert }:
     <Link to={to}
       className="group flex items-center justify-between rounded-card border border-surface-line bg-surface p-4 transition hover:border-brand-200 hover:shadow-card">
       <div className="flex items-center gap-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${alert ? 'bg-amber-50 text-amber-600' : 'bg-brand-50 text-brand-600'}`}>
+        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${alert ? 'bg-amber-50 text-amber-600' : 'bg-surface-sunken text-ink-soft'}`}>
           <Icon name={icon} className="text-[18px]" />
         </span>
         <span className="text-sm font-medium text-ink-soft">{label}</span>

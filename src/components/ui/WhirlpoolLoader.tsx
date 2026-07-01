@@ -1,6 +1,6 @@
 export const WhirlpoolLoader = ({ fullScreen = false }: { fullScreen?: boolean }) => (
   <div className={fullScreen
-    ? 'fixed inset-0 z-50 flex items-center justify-center bg-white dark:bg-gray-900'
+    ? 'fixed inset-0 z-50 flex items-center justify-center bg-surface'
     : 'flex items-center justify-center py-16'}>
     <div style={{ position: 'relative', width: 300, height: 100 }}>
       {/* Yellow swirl — rotates around its visual centre */}
@@ -20,7 +20,7 @@ export const WhirlpoolLoader = ({ fullScreen = false }: { fullScreen?: boolean }
 
       {/* Black text — static, inherits dark-mode colour via currentColor */}
       <svg
-        className="absolute inset-0 text-gray-900 dark:text-white"
+        className="absolute inset-0 text-ink"
         xmlns="http://www.w3.org/2000/svg"
         width="300"
         height="100"

@@ -34,7 +34,7 @@ export function ImageUpload({ value, onChange, label }: { value?: string; onChan
           <input ref={ref} type="file" accept="image/*" className="hidden"
             onChange={e => e.target.files?.[0] && pick(e.target.files[0])} />
           <input value={value ?? ''} onChange={e => onChange(e.target.value)} placeholder="…or paste image URL"
-            className="fiori-input text-xs" />
+            className="fiori-input" />
           {err && <p className="text-[11px] text-horizon-critical">{err}</p>}
         </div>
       </div>

@@ -12,6 +12,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
+import { Tabs } from '@/components/ui/Tabs'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { Field, Select, Input, Textarea } from '@/components/ui/Field'
@@ -22,10 +23,11 @@ import { ChallanForm } from './DeliveryChallan'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
-import { DocTimeline } from '@/components/shared/DocTimeline'
 import { DocVersions } from '@/components/shared/DocVersions'
 import { WorkflowPanel } from './WorkflowPanel'
 import { workflowState } from './workflow'
+import { OrderTimeline } from './OrderTimeline'
+import { downloadChallanPdfFor } from './challanPdf'
 
 const SO_STATUS = ['draft', 'pending', 'approved', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
@@ -56,6 +58,7 @@ export function OutboundSalesOrders() {
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
   const [q, setQ] = useUrlSearch()
+  const [statusFilter, setStatusFilter] = useState('all')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [scanning, setScanning] = useState<any>(null)
@@ -82,11 +85,12 @@ export function OutboundSalesOrders() {
   const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
 
   const rows = useMemo(() => {
-    if (!q.trim()) return data as any[]
+    const byStatus = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
+    if (!q.trim()) return byStatus
     const t = q.toLowerCase()
     const fields = ['so_no', 'reference_no', 'invoice_no', 'sap_so_no', 'outbound_delivery_no', 'transfer_order_no', 'billing_doc_no']
-    return (data as any[]).filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
-  }, [data, q])
+    return byStatus.filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+  }, [data, q, statusFilter])
 
   const closeRemaining = async (r: any) => {
     if (!window.confirm(`Close remaining (undelivered) qty for ${r.so_no}? The order will be marked closed.`)) return
@@ -158,11 +162,11 @@ export function OutboundSalesOrders() {
 
   const columns = [
     { key: 'so_no', header: 'SO No', accessor: (r: any) => r.so_no, sortable: true, className: 'font-medium' },
-    { key: 'customer', header: 'Customer', render: (r: any) => customerName(r.customer_id) },
-    { key: 'order_date', header: 'Date', render: (r: any) => formatDate(r.order_date) },
-    { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
-    { key: 'total_amount', header: 'Amount', accessor: (r: any) => formatNumber(r.total_amount), className: 'text-right' },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+    { key: 'customer', header: 'Customer', accessor: (r: any) => customerName(r.customer_id), sortable: true },
+    { key: 'order_date', header: 'Date', accessor: (r: any) => r.order_date, render: (r: any) => formatDate(r.order_date), sortable: true },
+    { key: 'total_qty', header: 'Qty', accessor: (r: any) => r.total_qty, render: (r: any) => formatNumber(r.total_qty), className: 'text-right', sortable: true },
+    { key: 'total_amount', header: 'Amount', accessor: (r: any) => r.total_amount, render: (r: any) => formatNumber(r.total_amount), className: 'text-right', sortable: true },
+    { key: 'status', header: 'Status', accessor: (r: any) => r.status, render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
     { key: 'next_action', header: 'Next Action', render: (r: any) => <NextActionCell order={r} ownerName={userName(r.assigned_to)} /> },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
@@ -189,13 +193,17 @@ export function OutboundSalesOrders() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search SO…" /></div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="fiori-input w-auto py-2">
+          <option value="all">All statuses</option>
+          {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Sales Order</Button>}
       </div>
 
       <Card className="overflow-hidden">
         <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          emptyTitle="No sales orders yet" />
+          onRowClick={(r: any) => setOverview(r)} emptyTitle="No sales orders yet" />
       </Card>
 
       {modal && (
@@ -223,8 +231,10 @@ export function OutboundSalesOrders() {
 
       {overview && (
         <SOOverview so={overview} customerName={customerName(overview.customer_id)} products={products}
+          customers={customers} vehicles={vehicles}
           ownerName={userName(overview.assigned_to)}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
+          onScanned={refresh} onDownloadSO={() => printSO(overview)}
           onClose={() => setOverview(null)} />
       )}
 
@@ -384,17 +394,19 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
 // challan or reports. Marks the order 'invoiced'.
 function InvoiceModal({ order, notify, onClose, onDone }: any) {
   const [h, setH] = useState<any>({
-    invoice_no: order.invoice_no ?? '', sap_so_no: order.sap_so_no ?? '',
+    sap_so_no: order.sap_so_no ?? '',
     outbound_delivery_no: order.outbound_delivery_no ?? '', transfer_order_no: order.transfer_order_no ?? '',
-    billing_doc_no: order.billing_doc_no ?? ''
+    billing_doc_no: order.billing_doc_no ?? order.invoice_no ?? ''
   })
   const [saving, setSaving] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
   const save = async () => {
     setSaving(true)
     try {
+      // billing_doc_no is the one SAP number that means "invoiced" — invoice_no just
+      // mirrors it so older search/reports that key off invoice_no keep working.
       const { error } = await supabase.from('sales_orders').update({
-        invoice_no: h.invoice_no || null, sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
+        invoice_no: h.billing_doc_no || null, sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
         transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null, status: 'invoiced'
       } as any).eq('id', order.id)
       if (error) throw error
@@ -407,11 +419,10 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
       <div className="space-y-4">
         <p className="text-xs text-ink-soft">After invoicing in SAP, paste the numbers here once. They flow to the challan, gate pass and reports automatically.</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Invoice / Billing No" required><Input value={h.invoice_no} onChange={e => set({ invoice_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
+          <Field label="Billing Document No" required className="sm:col-span-2"><Input value={h.billing_doc_no} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
           <Field label="SAP Sales Order No"><Input value={h.sap_so_no} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006470" /></Field>
           <Field label="Outbound Delivery No"><Input value={h.outbound_delivery_no} onChange={e => set({ outbound_delivery_no: e.target.value })} placeholder="e.g. 1723056430" /></Field>
           <Field label="Transfer Order No"><Input value={h.transfer_order_no} onChange={e => set({ transfer_order_no: e.target.value })} placeholder="e.g. 8892" /></Field>
-          <Field label="Billing Document No" className="sm:col-span-2"><Input value={h.billing_doc_no} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
         </div>
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -422,7 +433,8 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
   )
 }
 
-function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, onClose }: any) {
+function SOOverview({ so, customerName, products, customers, vehicles, ownerName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
+  const [tab, setTab] = useState<'details' | 'scan'>('details')
   const [items, setItems] = useState<any[]>([])
   const [deliveries, setDeliveries] = useState<any[]>([])
 
@@ -431,8 +443,10 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
     supabase.from('sales_order_items').select('*').eq('so_id', so.id).then(({ data }) => setItems(data ?? []))
     // Deliveries = the challans raised against this order, each with its mode and product lines.
     ;(async () => {
+      // Full row (not a narrow column list) so the same object can also be handed
+      // straight to downloadChallanPdfFor for the "Download" button below.
       const { data: chs } = await supabase.from('delivery_challans')
-        .select('id,challan_no,challan_date,status,posted_at,delivery_method,driver_name,transport_vendor,courier_name,courier_tracking_no')
+        .select('*')
         .eq('sales_order_id', so.id).order('challan_date', { ascending: true })
       const ids = (chs ?? []).map((c: any) => c.id)
       const byCh: Record<string, any[]> = {}
@@ -463,6 +477,12 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
   return (
     <Modal open onClose={onClose} title={`Sales Order — ${so.so_no}`} size="lg">
       <div className="space-y-5">
+        <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }]} active={tab} onChange={(k: any) => setTab(k)} />
+
+        {tab === 'details' && <>
+        <div className="flex justify-end">
+          <Button variant="secondary" size="sm" icon="download" onClick={onDownloadSO}>Download Invoice (PDF)</Button>
+        </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
           <Stat label="Customer" value={customerName} />
           <Stat label="Order Date" value={formatDate(so.order_date)} />
@@ -527,6 +547,8 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-ink-soft">
                       {formatDate(d.challan_date)} {d.posted_at ? <Badge tone="positive">Stock out</Badge> : <Badge tone={tone(d.status)}>{d.status}</Badge>}
+                      <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products })}
+                        className="rounded-lg p-1 text-ink-faint hover:bg-surface-sunken hover:text-brand-600"><Icon name="download" className="text-[16px]" /></button>
                     </span>
                   </div>
                   {d.items.length > 0 && (
@@ -538,17 +560,20 @@ function SOOverview({ so, customerName, products, ownerName, canEdit, onEdit, on
           </div>
         </Section>
 
-        <Section title="Progress History — who, when & what changed">
-          <DocTimeline table="sales_orders" recordId={so.id} />
+        <Section title="Order Timeline">
+          <OrderTimeline so={so} />
         </Section>
 
         <Section title="Document Versions">
           <DocVersions table="sales_orders" recordId={so.id} />
         </Section>
+        </>}
+
+        {tab === 'scan' && <SerialScan lockSoId={so.id} onDone={onScanned} />}
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>
-          {canEdit && <Button icon="edit" onClick={onEdit}>Edit</Button>}
+          {canEdit && tab === 'details' && <Button icon="edit" onClick={onEdit}>Edit</Button>}
         </div>
       </div>
     </Modal>

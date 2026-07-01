@@ -21,10 +21,12 @@ import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
+import { downloadChallanPdfFor } from './challanPdf'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
 const statusLabel = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '-'
+const DC_STATUS = ['draft', 'issued', 'delivered', 'cancelled']
 
 export function DeliveryChallan() {
   const { data, loading, refresh } = useCollection('delivery_challans', { order: 'created_at' })
@@ -33,6 +35,7 @@ export function DeliveryChallan() {
   const canEdit = can('outbound.create') || can('outbound.edit')
   const canPost = can('outbound.approve') || can('outbound.post') || isPlatformAdmin
   const [q, setQ] = useUrlSearch()
+  const [statusFilter, setStatusFilter] = useState('all')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [overview, setOverview] = useState<any>(null)
@@ -54,13 +57,14 @@ export function DeliveryChallan() {
   const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} - ${c.name}` : '-' }
 
   const rows = useMemo(() => {
-    if (!q.trim()) return data as any[]
+    const byStatus = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
+    if (!q.trim()) return byStatus
     const t = q.toLowerCase()
-    return (data as any[]).filter(r =>
+    return byStatus.filter(r =>
       String(r.challan_no ?? '').toLowerCase().includes(t) ||
       String(r.invoice_no ?? '').toLowerCase().includes(t) ||
       String(r.po_no ?? '').toLowerCase().includes(t))
-  }, [data, q])
+  }, [data, q, statusFilter])
 
   // Issue the challan: deduct stock for every line, then auto-create a linked gate pass.
   const issue = async (c: any) => {
@@ -121,19 +125,7 @@ export function DeliveryChallan() {
     }
   }
 
-  const printChallan = async (c: any) => {
-    const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', c.id)
-    const pmap: Record<string, any> = {}; products.forEach((p: any) => { pmap[p.id] = p })
-    const cust = customers.find((x: any) => x.id === c.customer_id)
-    const veh = vehicles.find((x: any) => x.id === c.vehicle_id)
-    const { downloadChallanPDF } = await import('@/pdf/DeliveryChallanPDF')
-    await downloadChallanPDF({
-      challan: c,
-      customerName: cust ? `${cust.customer_code} - ${cust.name}` : '',
-      vehicleNo: veh?.vehicle_number || '',
-      items: (items ?? []).map((it: any, i: number) => { const p = pmap[it.product_id] || {}; return { sl: i + 1, description: p.name || '', material_code: p.material_code || '', category: p.category || '', qty: Number(it.qty) || 0, unit: p.uom || 'Pc', remarks: it.remarks || '' } })
-    })
-  }
+  const printChallan = async (c: any) => downloadChallanPdfFor(c, { customers, vehicles, products })
 
   const openEdit = async (r: any) => {
     const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', r.id)
@@ -142,11 +134,11 @@ export function DeliveryChallan() {
 
   const columns = [
     { key: 'challan_no', header: 'Challan No', accessor: (r: any) => r.challan_no, sortable: true, className: 'font-medium' },
-    { key: 'invoice_no', header: 'SAP Invoice', accessor: (r: any) => r.invoice_no ?? '-' },
-    { key: 'customer', header: 'Customer', render: (r: any) => customerName(r.customer_id) },
-    { key: 'challan_date', header: 'Date', render: (r: any) => formatDate(r.challan_date) },
-    { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
-    { key: 'status', header: 'Status', render: (r: any) => (
+    { key: 'invoice_no', header: 'SAP Invoice', accessor: (r: any) => r.invoice_no ?? '-', sortable: true },
+    { key: 'customer', header: 'Customer', accessor: (r: any) => customerName(r.customer_id), sortable: true },
+    { key: 'challan_date', header: 'Date', accessor: (r: any) => r.challan_date, render: (r: any) => formatDate(r.challan_date), sortable: true },
+    { key: 'total_qty', header: 'Qty', accessor: (r: any) => r.total_qty, render: (r: any) => formatNumber(r.total_qty), className: 'text-right', sortable: true },
+    { key: 'status', header: 'Status', accessor: (r: any) => r.status, sortable: true, render: (r: any) => (
       <div className="flex items-center gap-1">
         <Badge tone={tone(r.status)}>{statusLabel(r.status)}</Badge>
         {r.posted_at && <Badge tone="positive">Stock out</Badge>}
@@ -172,6 +164,10 @@ export function DeliveryChallan() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search challan / invoice..." /></div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="fiori-input w-auto py-2">
+          <option value="all">All statuses</option>
+          {DC_STATUS.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+        </select>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Challan</Button>}
       </div>
@@ -355,7 +351,15 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                 {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
               </Select>
             </Field>
-            <Field label="SAP Invoice No" required><Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" /></Field>
+            <Field label="SAP Invoice No" required>
+              {h.sales_order_id && h.invoice_no ? (
+                // Pulled from the order's own invoice — shown read-only so it isn't retyped;
+                // correct it on the Sales Order (Enter Invoice) if it's wrong.
+                <p className="fiori-input flex items-center bg-surface-sunken text-ink-soft">{h.invoice_no}</p>
+              ) : (
+                <Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" />
+              )}
+            </Field>
           </div>
         )}
 

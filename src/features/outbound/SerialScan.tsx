@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
@@ -17,21 +17,18 @@ interface SLine {
 }
 
 // Serial scan stage for a single order (opened from the order, not a tab).
-// Scan units with a Zebra (keyboard-wedge: serial + Enter). The serial prefix
-// matches the product material code, so the line is detected automatically.
-// Scanned count is validated against the ordered qty; the captured serials are
-// the single source for both the SAP prework export and the delivery challan.
+// Mirrors the SAP delivery flow: pick a line from the item overview, open its
+// serial grid (one row per ordered unit, Excel-sheet style), fill every row,
+// confirm — that line is then complete. These serials are the single source
+// for both the SAP prework export and the delivery challan — no re-typing.
 export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: () => void }) {
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
   const [soRow, setSoRow] = useState<any>(null)
   const [lines, setLines] = useState<SLine[]>([])
-  const [removedIds, setRemovedIds] = useState<string[]>([])
-  const [scan, setScan] = useState('')
-  const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
-  const scanRef = useRef<HTMLInputElement>(null)
+  const [activeIdx, setActiveIdx] = useState<number | null>(null)
 
   useEffect(() => { if (currentClientId && lockSoId) load() /* eslint-disable-next-line */ }, [currentClientId, lockSoId])
 
@@ -48,7 +45,6 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
         supabase.from('serial_numbers').select('id,serial_no,product_id,so_item_id').eq('client_id', currentClientId!).eq('reference_no', order?.so_no ?? '__none__')
       ])
       const pmap: Record<string, any> = {}; (prods ?? []).forEach((p: any) => { pmap[p.id] = p })
-      setRemovedIds([])
       setLines((items ?? []).map((it: any) => {
         const p = pmap[it.product_id] ?? {}
         const serials = (existing ?? []).filter((s: any) => s.so_item_id === it.id || (!s.so_item_id && s.product_id === it.product_id))
@@ -60,93 +56,66 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
 
   const totalScanned = lines.reduce((s, l) => s + l.serials.length, 0)
   const totalOrdered = lines.reduce((s, l) => s + l.ordered, 0)
-  const allSerials = useMemo(() => new Set(lines.flatMap(l => l.serials.map(s => s.serial_no.toLowerCase()))), [lines])
 
-  // Find the order line whose material code is the longest matching prefix of the serial.
-  const detectLine = (serial: string): number => {
-    const s = serial.toLowerCase()
-    let best = -1, bestLen = -1
-    lines.forEach((l, i) => {
-      const code = l.code.toLowerCase()
-      if (code && code !== '?' && s.startsWith(code) && code.length > bestLen) { best = i; bestLen = code.length }
-    })
-    return best
+  // Tab-separated so a paste into Excel/Sheets lands as two clean columns.
+  const copyAll = async () => {
+    if (totalScanned === 0) { notify('info', 'No serials scanned yet'); return }
+    const tsv = ['Model\tSerial', ...lines.flatMap(l => l.serials.map(s => `${l.code}\t${s.serial_no}`))].join('\n')
+    await navigator.clipboard.writeText(tsv)
+    notify('success', `Copied ${totalScanned} serial(s) — paste directly into Excel`)
   }
 
-  const addSerial = (raw: string) => {
-    const serial = raw.trim()
-    if (!serial) return
-    if (allSerials.has(serial.toLowerCase())) { notify('error', `Serial already scanned: ${serial}`); setScan(''); return }
-    const idx = detectLine(serial)
-    if (idx < 0) { notify('error', `No matching product for serial ${serial} — check the code`); return }
+  // Persist one line's grid: insert new serials, delete cleared ones, and bump
+  // the order to "picking" the first time anything gets captured.
+  const saveLine = async (idx: number, entries: { id?: string; serial_no: string }[], removedIds: string[]) => {
     const line = lines[idx]
-    if (line.serials.length >= line.ordered) { notify('error', `${line.code}: already scanned ${line.ordered}/${line.ordered} (ordered qty reached)`); setScan(''); return }
-    setLines(ls => ls.map((l, i) => i === idx ? { ...l, serials: [...l.serials, { serial_no: serial }] } : l))
-    setScan('')
-    requestAnimationFrame(() => scanRef.current?.focus())
-  }
-
-  const removeSerial = (lineIdx: number, serialIdx: number) => {
-    setLines(ls => ls.map((l, i) => {
-      if (i !== lineIdx) return l
-      const s = l.serials[serialIdx]
-      if (s.id) setRemovedIds(r => [...r, s.id!])
-      return { ...l, serials: l.serials.filter((_, si) => si !== serialIdx) }
-    }))
-  }
-
-  const save = async () => {
-    if (!soRow) return
-    setBusy(true)
-    try {
-      // Guard: no serial may exceed the ordered qty.
-      const over = lines.find(l => l.serials.length > l.ordered)
-      if (over) throw new Error(`${over.code}: scanned ${over.serials.length} > ordered ${over.ordered}`)
-      // Block serials that already exist on another order for this client.
-      const fresh = lines.flatMap(l => l.serials.filter(s => !s.id).map(s => ({ serial_no: s.serial_no, product_id: l.product_id, so_item_id: l.item_id })))
-      if (fresh.length) {
-        const { data: clash } = await supabase.from('serial_numbers').select('serial_no,reference_no')
-          .eq('client_id', currentClientId!).in('serial_no', fresh.map(f => f.serial_no))
-        const other = (clash ?? []).filter((c: any) => c.reference_no !== soRow.so_no)
-        if (other.length) throw new Error(`Serial(s) already used elsewhere: ${other.map((c: any) => c.serial_no).slice(0, 3).join(', ')}`)
-      }
-      if (removedIds.length) {
-        const { error } = await supabase.from('serial_numbers').delete().in('id', removedIds)
-        if (error) throw error
-      }
-      if (fresh.length) {
-        const rows = fresh.map(f => ({
-          client_id: currentClientId!, product_id: f.product_id, serial_no: f.serial_no,
-          so_item_id: f.so_item_id, reference_no: soRow.so_no, warehouse_id: soRow.warehouse_id || null,
-          status: 'allocated'
-        }))
-        const { error } = await supabase.from('serial_numbers').insert(rows as any)
-        if (error) throw error
-      }
-      // Mark the order as scanned once any serials are captured (keeps the stepper at stage 1).
-      if (totalScanned > 0 && ['draft', 'pending', 'approved'].includes(soRow.status)) {
-        await supabase.from('sales_orders').update({ status: 'picking' }).eq('id', soRow.id)
-      }
-      notify('success', `${totalScanned} serial(s) saved for ${soRow.so_no}`)
-      onDone?.(); load()
-    } catch (e: any) {
-      notify('error', e?.message ?? 'Could not save serials')
-    } finally { setBusy(false) }
+    const fresh = entries.filter(e => !e.id).map(e => ({ serial_no: e.serial_no, product_id: line.product_id, so_item_id: line.item_id }))
+    if (fresh.length) {
+      const { data: clash } = await supabase.from('serial_numbers').select('serial_no,reference_no')
+        .eq('client_id', currentClientId!).in('serial_no', fresh.map(f => f.serial_no))
+      const other = (clash ?? []).filter((c: any) => c.reference_no !== soRow.so_no)
+      if (other.length) throw new Error(`Serial(s) already used elsewhere: ${other.map((c: any) => c.serial_no).slice(0, 3).join(', ')}`)
+    }
+    if (removedIds.length) {
+      const { error } = await supabase.from('serial_numbers').delete().in('id', removedIds)
+      if (error) throw error
+    }
+    if (fresh.length) {
+      const rows = fresh.map(f => ({
+        client_id: currentClientId!, product_id: f.product_id, serial_no: f.serial_no,
+        so_item_id: f.so_item_id, reference_no: soRow.so_no, warehouse_id: soRow.warehouse_id || null,
+        status: 'allocated'
+      }))
+      const { error } = await supabase.from('serial_numbers').insert(rows as any)
+      if (error) throw error
+    }
+    const newTotal = lines.reduce((s, l, i) => s + (i === idx ? entries.length : l.serials.length), 0)
+    if (newTotal > 0 && ['draft', 'pending', 'approved'].includes(soRow.status)) {
+      await supabase.from('sales_orders').update({ status: 'picking' }).eq('id', soRow.id)
+    }
+    notify('success', `${line.code}: ${entries.length}/${line.ordered} serial(s) saved`)
+    onDone?.()
+    await load()
+    setActiveIdx(null)
   }
 
   if (loading) return <p className="py-6 text-center text-sm text-ink-faint">Loading…</p>
 
+  if (activeIdx !== null) {
+    return (
+      <SerialGrid line={lines[activeIdx]}
+        otherSerials={new Set(lines.filter((_, i) => i !== activeIdx).flatMap(l => l.serials.map(s => s.serial_no.toLowerCase())))}
+        canEdit={canEdit}
+        onBack={() => setActiveIdx(null)}
+        onConfirm={(entries, removedIds) => saveLine(activeIdx, entries, removedIds)} />
+    )
+  }
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Icon name="qr_code_scanner" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-brand-600" />
-          <input ref={scanRef} value={scan} autoFocus placeholder="Scan / type serial, then Enter"
-            onChange={e => setScan(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSerial(scan) } }}
-            className="fiori-input w-full pl-10" />
-        </div>
+      <div className="flex items-center justify-between">
         <span className="text-sm text-ink-soft">Scanned <span className="font-semibold text-ink">{formatNumber(totalScanned)}</span> / {formatNumber(totalOrdered)}</span>
+        <Button type="button" variant="secondary" size="sm" icon="content_copy" onClick={copyAll}>Copy (Excel)</Button>
       </div>
 
       <Card className="overflow-hidden">
@@ -157,29 +126,19 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
                 <th className="px-3 py-2 text-left font-semibold">Material</th>
                 <th className="px-3 py-2 text-right font-semibold">Ordered</th>
                 <th className="px-3 py-2 text-right font-semibold">Scanned</th>
-                <th className="px-3 py-2 text-left font-semibold">Serials</th>
+                <th className="px-3 py-2 text-right font-semibold" />
               </tr>
             </thead>
             <tbody>
               {lines.map((l, i) => {
                 const done = l.serials.length === l.ordered
                 return (
-                  <tr key={l.item_id} className="border-t border-surface-line align-top">
-                    <td className="px-3 py-2"><div className="font-mono text-xs text-ink">{l.code}</div><div className="truncate text-xs text-ink-soft">{l.name}{l.uom ? ' · ' + l.uom : ''}</div></td>
-                    <td className="px-3 py-2 text-right">{formatNumber(l.ordered)}</td>
-                    <td className="px-3 py-2 text-right"><Badge tone={done ? 'positive' : l.serials.length > l.ordered ? 'critical' : 'neutral'}>{l.serials.length}/{l.ordered}</Badge></td>
-                    <td className="px-3 py-2">
-                      {l.serials.length === 0 ? <span className="text-xs text-ink-faint">—</span> : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {l.serials.map((s, si) => (
-                            <span key={si} className="inline-flex items-center gap-1 rounded-md border border-surface-line bg-surface px-2 py-0.5 font-mono text-[11px] text-ink">
-                              {s.serial_no}
-                              {canEdit && <button type="button" onClick={() => removeSerial(i, si)} className="text-ink-faint hover:text-bad"><Icon name="close" className="text-[13px]" /></button>}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
+                  <tr key={l.item_id} onClick={() => canEdit && setActiveIdx(i)}
+                    className={'border-t border-surface-line ' + (canEdit ? 'cursor-pointer hover:bg-surface-sunken' : '')}>
+                    <td className="px-3 py-2.5"><div className="font-mono text-xs text-ink">{l.code}</div><div className="truncate text-xs text-ink-soft">{l.name}{l.uom ? ' · ' + l.uom : ''}</div></td>
+                    <td className="px-3 py-2.5 text-right">{formatNumber(l.ordered)}</td>
+                    <td className="px-3 py-2.5 text-right"><Badge tone={done ? 'positive' : 'neutral'}>{l.serials.length}/{l.ordered}</Badge></td>
+                    <td className="px-3 py-2.5 text-right">{canEdit && <Icon name="chevron_right" className="text-[18px] text-ink-faint" />}</td>
                   </tr>
                 )
               })}
@@ -187,12 +146,118 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t border-surface-line bg-surface-sunken px-4 py-3">
-          <span className="text-sm text-ink-soft">{totalScanned === totalOrdered && totalOrdered > 0 ? 'All units scanned ✓' : `${totalOrdered - totalScanned} unit(s) left`}</span>
-          {canEdit && <Button icon="save" loading={busy} onClick={save} disabled={totalScanned === 0 && removedIds.length === 0}>Save serials</Button>}
-        </div>
       </Card>
-      <p className="text-xs text-ink-faint">The serial prefix matches the material code, so the line is detected automatically. These serials feed the SAP prework export and the delivery challan — no re-typing.</p>
+      <p className="text-xs text-ink-faint">Click a line to open its serial grid (one row per unit) — fill the rows and confirm to complete that line. Use "Copy (Excel)" to paste the full Model/Serial list elsewhere.</p>
+    </div>
+  )
+}
+
+// Excel-sheet-style grid: one input row per ordered unit. Enter validates the
+// row and jumps to the next empty one — built for keyboard-wedge scanners.
+function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
+  line: SLine; otherSerials: Set<string>; canEdit: boolean
+  onBack: () => void; onConfirm: (entries: { id?: string; serial_no: string }[], removedIds: string[]) => Promise<void>
+}) {
+  const notify = useUI(s => s.notify)
+  const [rows, setRows] = useState<{ id?: string; serial_no: string }[]>(() => {
+    const filled = line.serials.map(s => ({ id: s.id, serial_no: s.serial_no }))
+    const blanks = Array.from({ length: Math.max(0, line.ordered - filled.length) }, () => ({ serial_no: '' }))
+    return [...filled, ...blanks]
+  })
+  const [busy, setBusy] = useState(false)
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  useEffect(() => {
+    const firstBlank = rows.findIndex(r => !r.serial_no.trim())
+    if (firstBlank >= 0) inputRefs.current[firstBlank]?.focus()
+    // eslint-disable-next-line
+  }, [])
+
+  const setValue = (i: number, v: string) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, serial_no: v } : r))
+
+  // Returns false (and clears the field) when the value duplicates another
+  // row in this grid or a serial already scanned on a different line.
+  const commitRow = (i: number) => {
+    const v = rows[i].serial_no.trim()
+    if (!v) return true
+    const dupInGrid = rows.some((r, idx) => idx !== i && r.serial_no.trim().toLowerCase() === v.toLowerCase())
+    if (dupInGrid || otherSerials.has(v.toLowerCase())) {
+      notify('error', `Serial already scanned: ${v}`)
+      setValue(i, '')
+      return false
+    }
+    return true
+  }
+
+  const focusNextEmpty = (from: number) => {
+    const next = rows.findIndex((r, idx) => idx > from && !r.serial_no.trim())
+    const target = next >= 0 ? next : (from + 1 < rows.length ? from + 1 : -1)
+    if (target >= 0) inputRefs.current[target]?.focus()
+  }
+
+  const filledCount = rows.filter(r => r.serial_no.trim()).length
+
+  const confirm = async () => {
+    for (let i = 0; i < rows.length; i++) { if (!commitRow(i)) return }
+    const original = new Set(line.serials.map(s => s.id).filter(Boolean) as string[])
+    // A previously-saved row only stays "kept" if it still has a value —
+    // clearing a filled row marks its id for deletion.
+    const kept = new Set(rows.filter(r => r.serial_no.trim()).map(r => r.id).filter(Boolean) as string[])
+    const removedIds = [...original].filter(id => !kept.has(id))
+    setBusy(true)
+    try { await onConfirm(rows.filter(r => r.serial_no.trim()), removedIds) }
+    catch (e: any) { notify('error', e?.message ?? 'Could not save serials') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="space-y-3">
+      <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm text-ink-soft hover:text-brand-700">
+        <Icon name="arrow_back" className="text-[18px]" /> Back to items
+      </button>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-surface-line bg-surface-sunken px-4 py-3">
+          <p className="font-mono text-sm font-semibold text-ink">{line.code}</p>
+          <p className="text-xs text-ink-soft">{line.name}{line.uom ? ' · ' + line.uom : ''} — {filledCount}/{line.ordered} filled</p>
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-surface-sunken text-[11px] uppercase tracking-wide text-ink-faint">
+                <th className="w-12 px-3 py-2 text-left font-semibold">#</th>
+                <th className="px-3 py-2 text-left font-semibold">Serial No</th>
+                {canEdit && <th className="w-10 px-3 py-2" />}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="border-t border-surface-line">
+                  <td className="px-3 py-1.5 text-ink-faint">{i + 1}</td>
+                  <td className="px-3 py-1.5">
+                    <input ref={el => { inputRefs.current[i] = el }} value={r.serial_no} disabled={!canEdit}
+                      onChange={e => setValue(i, e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (commitRow(i)) focusNextEmpty(i) } }}
+                      placeholder="Scan or type serial…"
+                      className="w-full rounded-md border border-brand-200/70 bg-surface px-2.5 py-1.5 font-mono text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken" />
+                  </td>
+                  {canEdit && (
+                    <td className="px-3 py-1.5 text-center">
+                      {r.serial_no && <button type="button" onClick={() => setValue(i, '')} className="text-ink-faint hover:text-bad"><Icon name="close" className="text-[15px]" /></button>}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {canEdit && (
+          <div className="flex items-center justify-between border-t border-surface-line bg-surface-sunken px-4 py-3">
+            <span className="text-xs text-ink-faint">Press Enter after each scan to jump to the next row.</span>
+            <Button icon="check" loading={busy} onClick={confirm}>OK — Confirm line</Button>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Spinner } from '@/components/ui/States'
+import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
@@ -17,6 +18,7 @@ export function InventoryValuationReport() {
   const [stock, setStock] = useState<any[]>([])
   const [products, setProducts] = useState<Record<string, any>>({})
   const [avgCost, setAvgCost] = useState<Record<string, number>>({})
+  const [q, setQ] = useState('')
 
   useEffect(() => {
     if (!currentClientId) return
@@ -53,6 +55,12 @@ export function InventoryValuationReport() {
     }).filter((r: any) => r.qty !== 0).sort((a: any, b: any) => b.value - a.value)
   }, [stock, products, avgCost])
 
+  const filteredRows = useMemo(() => {
+    if (!q.trim()) return rows
+    const t = q.toLowerCase()
+    return rows.filter((r: any) => r.code.toLowerCase().includes(t) || r.name.toLowerCase().includes(t) || r.category.toLowerCase().includes(t))
+  }, [rows, q])
+
   const totalValue = useMemo(() => rows.reduce((s: number, r: any) => s + r.value, 0), [rows])
 
   const cols: RepCol[] = [
@@ -65,27 +73,29 @@ export function InventoryValuationReport() {
   ]
   const csvRows = useMemo(() => rows.map((r: any) => ({ ...r, cost: r.cost.toFixed(2), value: r.value.toFixed(2) })), [rows])
   const tableCols = [
-    { key: 'code', header: 'Material Code', accessor: (r: any) => r.code, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.name },
-    { key: 'category', header: 'Category', accessor: (r: any) => r.category },
-    { key: 'qty', header: 'On Hand', className: 'text-right', accessor: (r: any) => formatNumber(r.qty) },
-    { key: 'cost', header: 'Avg Cost', className: 'text-right', accessor: (r: any) => formatNumber(r.cost, 2) },
-    { key: 'value', header: 'Value', className: 'text-right font-medium', accessor: (r: any) => formatNumber(r.value, 2) }
+    { key: 'code', header: 'Material Code', accessor: (r: any) => r.code, className: 'font-medium', sortable: true },
+    { key: 'name', header: 'Product', accessor: (r: any) => r.name, sortable: true },
+    { key: 'category', header: 'Category', accessor: (r: any) => r.category, sortable: true },
+    { key: 'qty', header: 'On Hand', className: 'text-right', accessor: (r: any) => r.qty, render: (r: any) => formatNumber(r.qty), sortable: true },
+    { key: 'cost', header: 'Avg Cost', className: 'text-right', accessor: (r: any) => r.cost, render: (r: any) => formatNumber(r.cost, 2), sortable: true },
+    { key: 'value', header: 'Value', className: 'text-right font-medium', accessor: (r: any) => r.value, render: (r: any) => formatNumber(r.value, 2), sortable: true }
   ]
 
   if (loading) return <Spinner label="Valuing inventory…" />
   return (
     <div className="space-y-4">
-      <ReportToolbar count={rows.length}
+      <ReportToolbar count={filteredRows.length}
         onCSV={() => downloadCSV('Inventory Valuation', cols, csvRows)}
-        onPDF={() => downloadReportPDF('Inventory Valuation Report', `Total value: ${formatNumber(totalValue, 2)}`, cols, csvRows)} />
+        onPDF={() => downloadReportPDF('Inventory Valuation Report', `Total value: ${formatNumber(totalValue, 2)}`, cols, csvRows)}>
+        <div className="w-64"><SearchBar value={q} onChange={setQ} placeholder="Search code, product, category…" /></div>
+      </ReportToolbar>
       <Card className="p-4">
         <p className="text-xs text-ink-faint">Total Inventory Value (avg purchase price)</p>
         <p className="mt-1 text-2xl font-bold text-ink">{formatNumber(totalValue, 2)}</p>
         <p className="mt-1 text-xs text-ink-faint">Products without any recorded purchase price are valued at 0.</p>
       </Card>
       <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={rows} rowKey={(r: any) => r.code} emptyTitle="No stock to value" />
+        <DataTable columns={tableCols} rows={filteredRows} rowKey={(r: any) => r.code} emptyTitle="No stock to value" />
       </Card>
     </div>
   )

@@ -18,6 +18,7 @@ export function OperationList({ def }: { def: OpDef }) {
   const { can, isPlatformAdmin, currentClientId } = useAuth()
   const canEdit = can(`${def.permission}.create`) || can(`${def.permission}.edit`)
   const [q, setQ] = useUrlSearch()
+  const [statusFilter, setStatusFilter] = useState('all')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
@@ -41,10 +42,11 @@ export function OperationList({ def }: { def: OpDef }) {
       ...row,
       __rel: Object.fromEntries(def.fields.filter(f => f.relation).map(f => [f.name, rel[f.name]?.[row[f.name]] ?? '—']))
     }))
-    if (!q.trim()) return withRel
+    const byStatus = statusFilter === 'all' ? withRel : withRel.filter(r => r.status === statusFilter)
+    if (!q.trim()) return byStatus
     const t = q.toLowerCase()
-    return withRel.filter(r => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
-  }, [data, rel, q, def])
+    return byStatus.filter(r => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+  }, [data, rel, q, statusFilter, def])
 
   const rowActions = (row: any): MenuItem[] => [
     ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(row); setModal(true) } }] : []),
@@ -65,6 +67,10 @@ export function OperationList({ def }: { def: OpDef }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder={`Search ${def.singular.toLowerCase()}…`} /></div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="fiori-input w-auto py-2">
+          <option value="all">All statuses</option>
+          {def.statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {def.singular}</Button>}
       </div>

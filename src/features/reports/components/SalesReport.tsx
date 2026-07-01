@@ -72,8 +72,9 @@ export function SalesReport() {
     { key: 'pending_qty', header: 'Pending Qty', align: 'right', width: '12%' }
   ]
   const tableCols = cols.map(c => ({
-    key: c.key, header: c.header, className: c.align === 'right' ? 'text-right' : '',
-    accessor: (r: any) => c.key === 'group' ? r.group : formatNumber(r[c.key], c.key === 'order_value' ? 2 : 0)
+    key: c.key, header: c.header, className: c.align === 'right' ? 'text-right' : '', sortable: true,
+    accessor: (r: any) => r[c.key],
+    render: (r: any) => c.key === 'group' ? r.group : formatNumber(r[c.key], c.key === 'order_value' ? 2 : 0)
   }))
   const exportRows = rows.map(r => ({ ...r, order_value: r.order_value.toFixed(2) }))
   const title = by === 'customer' ? 'Sales by Customer' : 'Sales by Salesman'

@@ -425,12 +425,12 @@ export function opColumns(def: OpDef): Column<any>[] {
   // Show up to three meaningful non-status fields as plain columns.
   def.fields.filter(f => !['textarea', 'image'].includes(f.type) && f.name !== 'status').slice(0, 3).forEach(f => {
     if (f.type === 'relation') {
-      cols.push({ key: f.name, header: f.label, render: (r: any) => r.__rel?.[f.name] ?? '—' })
+      cols.push({ key: f.name, header: f.label, accessor: (r: any) => r.__rel?.[f.name] ?? '—', render: (r: any) => r.__rel?.[f.name] ?? '—', sortable: true })
     } else {
-      cols.push({ key: f.name, header: f.label, accessor: (r: any) => r[f.name] ?? '—' })
+      cols.push({ key: f.name, header: f.label, accessor: (r: any) => r[f.name] ?? '—', sortable: true })
     }
   })
-  cols.push({ key: 'status', header: 'Status', render: statusTone(def.statuses) })
+  cols.push({ key: 'status', header: 'Status', accessor: (r: any) => r.status ?? '—', render: statusTone(def.statuses), sortable: true })
   return cols
 }
 

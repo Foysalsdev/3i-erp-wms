@@ -362,7 +362,15 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                 {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
               </Select>
             </Field>
-            <Field label="SAP Invoice No" required><Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" /></Field>
+            <Field label="SAP Invoice No" required>
+              {h.sales_order_id && h.invoice_no ? (
+                // Pulled from the order's own invoice — shown read-only so it isn't retyped;
+                // correct it on the Sales Order (Enter Invoice) if it's wrong.
+                <p className="fiori-input flex items-center bg-surface-sunken text-ink-soft">{h.invoice_no}</p>
+              ) : (
+                <Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" />
+              )}
+            </Field>
           </div>
         )}
 

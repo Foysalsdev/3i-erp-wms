@@ -390,17 +390,19 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
 // challan or reports. Marks the order 'invoiced'.
 function InvoiceModal({ order, notify, onClose, onDone }: any) {
   const [h, setH] = useState<any>({
-    invoice_no: order.invoice_no ?? '', sap_so_no: order.sap_so_no ?? '',
+    sap_so_no: order.sap_so_no ?? '',
     outbound_delivery_no: order.outbound_delivery_no ?? '', transfer_order_no: order.transfer_order_no ?? '',
-    billing_doc_no: order.billing_doc_no ?? ''
+    billing_doc_no: order.billing_doc_no ?? order.invoice_no ?? ''
   })
   const [saving, setSaving] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
   const save = async () => {
     setSaving(true)
     try {
+      // billing_doc_no is the one SAP number that means "invoiced" — invoice_no just
+      // mirrors it so older search/reports that key off invoice_no keep working.
       const { error } = await supabase.from('sales_orders').update({
-        invoice_no: h.invoice_no || null, sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
+        invoice_no: h.billing_doc_no || null, sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
         transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null, status: 'invoiced'
       } as any).eq('id', order.id)
       if (error) throw error
@@ -413,11 +415,10 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
       <div className="space-y-4">
         <p className="text-xs text-ink-soft">After invoicing in SAP, paste the numbers here once. They flow to the challan, gate pass and reports automatically.</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Invoice / Billing No" required><Input value={h.invoice_no} onChange={e => set({ invoice_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
+          <Field label="Billing Document No" required className="sm:col-span-2"><Input value={h.billing_doc_no} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
           <Field label="SAP Sales Order No"><Input value={h.sap_so_no} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006470" /></Field>
           <Field label="Outbound Delivery No"><Input value={h.outbound_delivery_no} onChange={e => set({ outbound_delivery_no: e.target.value })} placeholder="e.g. 1723056430" /></Field>
           <Field label="Transfer Order No"><Input value={h.transfer_order_no} onChange={e => set({ transfer_order_no: e.target.value })} placeholder="e.g. 8892" /></Field>
-          <Field label="Billing Document No" className="sm:col-span-2"><Input value={h.billing_doc_no} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
         </div>
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

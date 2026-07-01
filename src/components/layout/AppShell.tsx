@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { primeCompanyInfo, loadSettings, type WorkflowSettings } from '@/lib/settings'
 import { setWorkflowSla } from '@/features/outbound/workflow'
 
 export function AppShell() {
   const [mobileNav, setMobileNav] = useState(false)
   const currentClientId = useAuth(s => s.currentClientId)
+  const { pathname } = useLocation()
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault() } }
     window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
@@ -39,7 +41,9 @@ export function AppShell() {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onOpenMobileNav={() => setMobileNav(true)} />
-        <main className="flex-1 overflow-y-auto p-5 sm:p-7"><Outlet /></main>
+        <main className="flex-1 overflow-y-auto p-5 sm:p-7">
+          <ErrorBoundary key={pathname}><Outlet /></ErrorBoundary>
+        </main>
       </div>
     </div>
   )

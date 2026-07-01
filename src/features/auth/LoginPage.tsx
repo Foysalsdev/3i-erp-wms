@@ -3,6 +3,7 @@ import { useAuth } from '@/store/auth'
 import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const FEATURES = [
   { icon: 'inventory_2', text: 'SAP-compatible inventory & SKU tracking' },
@@ -25,7 +26,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-full bg-surface-sunken lg:grid-cols-[1.05fr_1fr]">
+    <div className="relative grid min-h-full bg-surface-sunken lg:grid-cols-[1.05fr_1fr]">
+      <ThemeToggle className="absolute right-4 top-4 z-10" />
       {/* Brand panel — soft, neutral, airy */}
       <div className="relative hidden flex-col justify-between border-r border-surface-line bg-surface p-14 lg:flex">
         <span className="absolute inset-x-0 top-0 h-1 bg-brand-500" />

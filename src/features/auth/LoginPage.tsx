@@ -39,7 +39,7 @@ export default function LoginPage() {
           <div className="mt-10 space-y-4">
             {FEATURES.map(f => (
               <div key={f.text} className="flex items-center gap-3 text-sm text-ink">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100"><Icon name={f.icon} className="text-[19px]" /></span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-sunken text-ink-soft ring-1 ring-surface-line"><Icon name={f.icon} className="text-[19px]" /></span>
                 {f.text}
               </div>
             ))}

@@ -73,7 +73,7 @@ export function Combobox({ items, value, onChange, placeholder = 'Search...' }:
             ) : matches.map((p, i) => (
               <button key={p.id} type="button" onMouseEnter={() => setActive(i)} onMouseDown={e => { e.preventDefault(); pick(p) }}
                 className={cn('grid w-full grid-cols-[130px_1fr] items-center gap-2 px-3 py-1.5 text-left text-sm',
-                  i === active ? 'bg-brand-50' : 'hover:bg-surface-sunken')}>
+                  i === active ? 'bg-surface-sunken' : 'hover:bg-surface-sunken')}>
                 <span className={cn('truncate font-mono text-[13px]', p.id === value ? 'font-bold text-brand-700' : 'font-medium text-ink')}>{p.label}</span>
                 <span className="truncate text-ink-soft">{p.sublabel ?? ''}</span>
               </button>

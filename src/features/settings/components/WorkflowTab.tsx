@@ -56,7 +56,7 @@ export function WorkflowTab({ canEdit }: { canEdit: boolean }) {
       <ul className="space-y-2">
         {OUTBOUND_STAGES.map((st, i) => (
           <li key={st.key} className="flex items-center gap-3 rounded-lg border border-surface-line px-3 py-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600"><Icon name={st.icon} className="text-[20px]" /></span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-ink-soft"><Icon name={st.icon} className="text-[20px]" /></span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-ink">{i + 1}. {st.label}</p>
               <p className="truncate text-xs text-ink-soft">{st.action} · {st.role}</p>

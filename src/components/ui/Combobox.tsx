@@ -77,7 +77,7 @@ export function Combobox({ value, onChange, options, placeholder = 'Search…', 
             ) : filtered.map((o, i) => (
               <button key={o.id} type="button" onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); pick(o.id) }}
                 className={cn('grid w-full grid-cols-[120px_1fr] items-center gap-2 px-3 py-1.5 text-left text-sm',
-                  i === hi ? 'bg-brand-50' : 'hover:bg-surface-sunken')}>
+                  i === hi ? 'bg-surface-sunken' : 'hover:bg-surface-sunken')}>
                 <span className={cn('truncate font-mono text-[13px]', o.id === value ? 'font-bold text-brand-700' : 'font-medium text-ink')}>{o.label}</span>
                 <span className="truncate text-ink-soft">{o.sub ?? ''}</span>
               </button>

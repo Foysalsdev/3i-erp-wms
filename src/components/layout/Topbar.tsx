@@ -41,20 +41,20 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
 
         <div className="relative">
           <button onClick={() => setMenu(m => !m)} className="flex items-center gap-2 rounded-full p-0.5 ring-1 ring-surface-line hover:ring-brand-300">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">{initials(profile?.full_name || profile?.email)}</span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sunken text-xs font-bold text-ink-soft">{initials(profile?.full_name || profile?.email)}</span>
           </button>
           {menu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
               <div className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-xl bg-surface shadow-pop ring-1 ring-surface-line">
                 <div className="flex items-center gap-3 border-b border-surface-line px-4 py-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">{initials(profile?.full_name || profile?.email)}</span>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sunken text-xs font-bold text-ink-soft">{initials(profile?.full_name || profile?.email)}</span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-ink">{profile?.full_name || 'User'}</p>
                     <p className="truncate text-xs text-ink-soft">{profile?.email}</p>
                   </div>
                 </div>
-                {isPlatformAdmin && <p className="px-4 pt-2"><span className="inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 ring-1 ring-brand-100">PLATFORM ADMIN</span></p>}
+                {isPlatformAdmin && <p className="px-4 pt-2"><span className="inline-block rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold text-surface">PLATFORM ADMIN</span></p>}
                 {/* Client switcher inside the menu — the only way to switch clients on mobile (the bar selector is hidden below sm). */}
                 <div className="px-4 py-2 sm:hidden">
                   <label className="mb-1 block text-[11px] font-semibold text-ink-soft">Active client</label>

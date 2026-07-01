@@ -54,7 +54,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
           <tbody>
             {sorted.map(row => (
               <tr key={rowKey(row)} onClick={() => onRowClick?.(row)}
-                className={cn('border-b border-horizon-line/70 transition', onRowClick && 'cursor-pointer hover:bg-brand-50/40')}>
+                className={cn('border-b border-horizon-line/70 transition', onRowClick && 'cursor-pointer hover:bg-surface-sunken')}>
                 {columns.map(c => (
                   <td key={c.key} className={cn('px-4 py-3 text-horizon-text', c.className)}>
                     {cellValue(c, row)}
@@ -70,7 +70,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
       <div className="divide-y divide-horizon-line md:hidden">
         {sorted.map(row => (
           <div key={rowKey(row)} onClick={() => onRowClick?.(row)}
-            className={cn('flex items-start justify-between gap-3 px-4 py-3', onRowClick && 'cursor-pointer active:bg-brand-50/40')}>
+            className={cn('flex items-start justify-between gap-3 px-4 py-3', onRowClick && 'cursor-pointer active:bg-surface-sunken')}>
             <div className="min-w-0 flex-1 space-y-1.5">
               {columns.filter(c => c.key !== '__actions' && c.key !== '__thumb').map(c => (
                 <div key={c.key} className="flex items-baseline gap-2 text-sm">

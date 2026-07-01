@@ -127,7 +127,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
             <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-surface-line bg-surface shadow-fiori-lg">
               {matches.map((p, si) => (
                 <button key={p.id} type="button" onMouseDown={e => { e.preventDefault(); setCode(p.material_code); setOpen(false); requestAnimationFrame(() => qtyRef.current?.focus()) }}
-                  className={'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ' + (si === acIdx ? 'bg-brand-50' : 'hover:bg-surface-sunken')}>
+                  className={'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ' + (si === acIdx ? 'bg-surface-sunken' : 'hover:bg-surface-sunken')}>
                   <span className="font-mono font-medium text-ink">{p.material_code}</span><span className="truncate text-ink-soft">{p.name}{meta(p) ? ' · ' + meta(p) : ''}</span>
                 </button>
               ))}

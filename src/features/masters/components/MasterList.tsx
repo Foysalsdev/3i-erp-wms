@@ -129,7 +129,7 @@ export function MasterList({ def }: { def: MasterDef }) {
               <Card key={r.id} className="p-4 transition hover:shadow-card">
                 <div className="flex items-start gap-3">
                   <button className="flex flex-1 items-start gap-3 text-left" onClick={() => setSelected({ row: r, tab: 'details' })}>
-                    <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-brand-50 font-bold text-brand-700 ring-1 ring-brand-100">
+                    <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-surface-sunken font-bold text-ink-soft ring-1 ring-surface-line">
                       {img ? <img src={img} className="h-full w-full object-cover" /> : initials(r[def.nameField])}
                     </div>
                     <div className="min-w-0 flex-1">

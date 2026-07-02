@@ -22,6 +22,11 @@ export interface LineRow {
   location_id?: string
   so_item_id?: string
   remarks?: string
+  // Set when a line is loaded from a Sales Order (variant 'out'): the original
+  // ordered qty and what earlier challans already confirmed, so this line's
+  // `qty` can be shown as "Confirm Qty" against a live "Pending" remainder.
+  ordered_qty?: number
+  already_delivered?: number
 }
 
 const num = (v: number | string | undefined): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
@@ -207,6 +212,8 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
           {rows.map((r, i) => {
             const p = byId[r.product_id]
             const a = avail(r.product_id)
+            const fromSO = r.ordered_qty !== undefined
+            const pending = fromSO ? Math.max(0, num(r.ordered_qty) - num(r.already_delivered) - num(r.qty)) : 0
             return (
               <div key={i} className="px-3 py-2.5">
                 <div className="flex items-center gap-3">
@@ -216,7 +223,22 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
                     <div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div>
                   </div>
                   {stock && a !== undefined && <span className={'shrink-0 text-xs ' + (a < num(r.qty) ? 'text-bad' : 'text-ink-faint')}>Avail {formatNumber(a)}</span>}
-                  <input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-16 shrink-0 text-right" placeholder="Qty" />
+                  {fromSO && (
+                    <div className="shrink-0 text-right">
+                      <p className="text-[10px] uppercase tracking-wide text-ink-faint">Order Qty</p>
+                      <p className="text-xs font-medium text-ink">{formatNumber(r.ordered_qty)}</p>
+                    </div>
+                  )}
+                  <div className="shrink-0">
+                    {fromSO && <p className="mb-0.5 text-[10px] uppercase tracking-wide text-ink-faint">Confirm Qty</p>}
+                    <input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-16 text-right" placeholder={fromSO ? '' : 'Qty'} />
+                  </div>
+                  {fromSO && (
+                    <div className="shrink-0 text-right">
+                      <p className="text-[10px] uppercase tracking-wide text-ink-faint">Pending</p>
+                      <p className={'text-xs font-medium ' + (pending > 0 ? 'text-bad' : 'text-ok')}>{formatNumber(pending)}</p>
+                    </div>
+                  )}
                   <button type="button" onClick={() => removeRow(i)} className="shrink-0 rounded-md p-1.5 text-ink-faint hover:bg-bad/10 hover:text-bad" title="Remove"><Icon name="close" className="text-[16px]" /></button>
                 </div>
                 <input value={r.remarks ?? ''} onChange={e => setRow(i, { remarks: e.target.value })} placeholder="Remarks (optional)" className="fiori-input mt-2 h-8 w-full text-xs" />

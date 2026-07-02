@@ -110,11 +110,11 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
     <div className="space-y-3">
       <h4 className="text-sm font-medium text-ink-soft">Line items</h4>
 
-      <div className="flex flex-wrap items-start gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
-          <Icon name="qr_code_scanner" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-brand-600" />
+          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-ink-faint" />
           {valid && <Icon name="check_circle" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-ok" />}
-          <input ref={codeRef} value={code} placeholder="Material code or scan barcode"
+          <input ref={codeRef} value={code} placeholder="Search Model / material code…"
             onChange={e => { setCode(e.target.value); setOpen(true); setAcIdx(0) }}
             onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} onPaste={onPaste}
             onKeyDown={e => {
@@ -134,13 +134,16 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
             </div>
           )}
         </div>
-        <div className="flex flex-col items-end">
-          <input ref={qtyRef} type="number" step="any" value={qty} placeholder="Qty"
-            onChange={e => setQty(e.target.value)} onPaste={onPaste}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitAdd() } }}
-            className="fiori-input w-24 text-right" />
-          {valid && stock && <span className={'mt-1 text-[11px] font-medium ' + ((avail(valid.id) ?? 0) > 0 ? 'text-ok' : 'text-bad')}>Saleable: {formatNumber(avail(valid.id) ?? 0)}</span>}
-        </div>
+        {valid && stock && (
+          <div className="flex h-[42px] shrink-0 items-center gap-2 rounded-lg border border-surface-line bg-surface-sunken px-3">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Saleable Stock</span>
+            <span className={'text-sm font-bold ' + ((avail(valid.id) ?? 0) > 0 ? 'text-ok' : 'text-bad')}>{formatNumber(avail(valid.id) ?? 0)}</span>
+          </div>
+        )}
+        <input ref={qtyRef} type="number" step="any" value={qty} placeholder="Order Qty"
+          onChange={e => setQty(e.target.value)} onPaste={onPaste}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitAdd() } }}
+          className="fiori-input w-28 text-right" />
         <button type="button" onClick={commitAdd} disabled={!valid}
           className="inline-flex h-[42px] items-center gap-1 rounded-lg bg-brand-500 px-4 text-sm font-medium text-coal-900 disabled:opacity-40">
           <Icon name="add" className="text-[18px]" /> Add
@@ -149,7 +152,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
       {pasteNote && <p className="text-xs font-medium text-brand-700">{pasteNote}</p>}
 
       {rows.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-surface-line py-6 text-center text-sm text-ink-faint">No items yet — add a material code above</p>
+        <p className="rounded-lg border border-dashed border-surface-line py-6 text-center text-sm text-ink-faint">No items yet — search a Model above and add it</p>
       ) : isGrn ? (
         <div className="overflow-x-auto rounded-lg border border-surface-line">
           <table className="w-full border-collapse text-sm">
@@ -180,7 +183,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
             <thead>
               <tr className="border-b border-surface-line bg-surface-sunken text-left text-[11px] font-medium uppercase tracking-wide text-ink-faint">
                 <th className="w-8 px-3 py-2 text-center">#</th><th className="px-3 py-2">Item</th>
-                <th className="w-16 px-2 py-2 text-right">Qty</th><th className="w-28 px-2 py-2 text-right">Basic / unit</th>
+                <th className="w-20 px-2 py-2 text-right">Order Qty</th><th className="w-28 px-2 py-2 text-right">Basic / unit</th>
                 <th className="w-20 px-2 py-2 text-right">VAT %</th><th className="w-32 px-2 py-2 text-right">Line total</th><th className="w-10 px-2 py-2"></th>
               </tr>
             </thead>

@@ -232,7 +232,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       bill_to_address: x.bill_to_address || cust?.billing_address || '' }))
     setLines((items ?? []).map((it: any) => ({
       product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
-      unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id
+      unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id,
+      ordered_qty: n(it.qty), already_delivered: n(it.delivered_qty)
     })).filter((l: any) => l.qty > 0))
   }
 

@@ -479,7 +479,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
   )
 
   return (
-    <Modal open onClose={onClose} title={`Sales Order — ${so.so_no}`} size="lg">
+    <Modal open onClose={onClose} title={`Sales Order — ${so.so_no}`} size="xl">
       <div className="space-y-5">
         <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }]} active={tab} onChange={(k: any) => setTab(k)} />
 
@@ -501,6 +501,9 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
           <WorkflowPanel order={so} responsibleName={ownerName} />
         </Section>
 
+        {/* Wide screens: operational sections left, history right — less scrolling */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="space-y-5">
         {(so.sap_so_no || so.outbound_delivery_no || so.transfer_order_no || so.billing_doc_no) && (
           <Section title="SAP References">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-4">
@@ -563,7 +566,9 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
             })}
           </div>
         </Section>
+        </div>
 
+        <div className="space-y-5">
         <Section title="Order Timeline">
           <OrderTimeline so={so} />
         </Section>
@@ -571,6 +576,8 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
         <Section title="Document Versions">
           <DocVersions table="sales_orders" recordId={so.id} />
         </Section>
+        </div>
+        </div>
         </>}
 
         {tab === 'scan' && <SerialScan lockSoId={so.id} onDone={onScanned} />}

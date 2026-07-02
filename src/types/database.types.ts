@@ -270,7 +270,7 @@ export type Database = {
       document_sequences: {
         Row: {
           client_id: string; doc_type: string; id: string; next_number: number; padding: number
-          prefix: string; reset_yearly: boolean; year: number
+          prefix: string; last_date: string
         }
         Insert: Partial<Database['public']['Tables']['document_sequences']['Row']> & { client_id: string; doc_type: string; prefix: string }
         Update: Partial<Database['public']['Tables']['document_sequences']['Row']>

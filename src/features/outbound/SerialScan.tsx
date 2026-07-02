@@ -84,7 +84,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
       const rows = fresh.map(f => ({
         client_id: currentClientId!, product_id: f.product_id, serial_no: f.serial_no,
         so_item_id: f.so_item_id, reference_no: soRow.so_no, warehouse_id: soRow.warehouse_id || null,
-        status: 'allocated'
+        status: 'reserved' // serial_numbers_status_check only allows in_stock/reserved/delivered/returned/damaged/quarantine/scrapped
       }))
       const { error } = await supabase.from('serial_numbers').insert(rows as any)
       if (error) throw error

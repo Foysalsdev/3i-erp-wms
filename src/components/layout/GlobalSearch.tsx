@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
@@ -118,7 +119,9 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
   }, [q, clientId])
 
   if (!open) return null
-  return (
+  // Portal to <body>: the Topbar's backdrop-blur becomes the containing block
+  // for fixed children, which would otherwise trap this overlay inside the header.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]" onClick={onClose}>
       <div className="w-full max-w-xl overflow-hidden rounded-card bg-surface shadow-fiori-lg" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-horizon-line px-4">
@@ -142,6 +145,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

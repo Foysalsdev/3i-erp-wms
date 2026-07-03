@@ -8,10 +8,14 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { initials } from '@/lib/utils'
 import { NotesPanel, AttachmentsPanel, TimelinePanel } from './Panels'
+import { CourierRatesPanel } from './CourierRatesPanel'
 
 export function MasterProfile({ def, record, onEdit, onBack, canEdit, initialTab = 'details' }:
   { def: MasterDef; record: any; onEdit: () => void; onBack: () => void; canEdit: boolean; initialTab?: string }) {
-  const tabs = [{ key: 'details', label: 'Details' }, { key: 'attachments', label: 'Attachments' },
+  const tabs = [{ key: 'details', label: 'Details' },
+    // Couriers carry a per-category price list (they bill per piece by size class).
+    ...(def.key === 'couriers' ? [{ key: 'rates', label: 'Rate Card' }] : []),
+    { key: 'attachments', label: 'Attachments' },
     { key: 'notes', label: 'Notes' }, { key: 'activity', label: 'Activity' }]
   const [tab, setTab] = useState(initialTab)
   const rel = useRelationLabels(def)
@@ -48,6 +52,7 @@ export function MasterProfile({ def, record, onEdit, onBack, canEdit, initialTab
             ))}
           </dl>
         )}
+        {tab === 'rates' && def.key === 'couriers' && <CourierRatesPanel courierId={record.id} />}
         {tab === 'attachments' && <AttachmentsPanel entityType={def.table} entityId={record.id} />}
         {tab === 'notes' && <NotesPanel entityType={def.table} entityId={record.id} />}
         {tab === 'activity' && <TimelinePanel table={def.table} recordId={record.id} />}

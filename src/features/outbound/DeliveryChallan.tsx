@@ -261,6 +261,35 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
   const tVendorItems = transportVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
   const courierItems = couriers.map((v: any) => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
+
+  // Courier rate card: per-piece rate by product category, falling back to the
+  // courier's flat rate_per_unit for categories without one.
+  const [courierRates, setCourierRates] = useState<any[]>([])
+  useEffect(() => {
+    if (!clientId) return
+    ;(supabase as any).from('courier_rates').select('courier_id,category,rate').eq('client_id', clientId)
+      .then(({ data }: any) => setCourierRates(data ?? []))
+  }, [clientId])
+  const courierBill = (courierId: string) => {
+    const c = couriers.find((x: any) => x.id === courierId)
+    if (!c) return null
+    const rateMap = Object.fromEntries(courierRates.filter((r: any) => r.courier_id === courierId).map((r: any) => [r.category, Number(r.rate) || 0]))
+    const fallback = Number(c.rate_per_unit) || 0
+    const byCat: Record<string, number> = {}
+    for (const l of lines) {
+      if (!l.product_id || !(Number(l.qty) > 0)) continue
+      const cat = products.find((p: any) => p.id === l.product_id)?.category || 'Other'
+      byCat[cat] = (byCat[cat] || 0) + Number(l.qty)
+    }
+    let total = 0
+    const parts: string[] = []
+    for (const [cat, qty] of Object.entries(byCat)) {
+      const rate = rateMap[cat] ?? fallback
+      total += qty * rate
+      parts.push(`${cat} ${qty}×${rate}`)
+    }
+    return { total, formula: parts.join(' + ') }
+  }
   const createVehicle = async (name: string) => {
     const { data, error } = await (supabase as any).from('vehicles').insert({ client_id: clientId, vehicle_number: name }).select('*').single()
     if (error) { notify('error', error.message); return null }
@@ -445,17 +474,30 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                 <Combobox items={courierItems} value={h.courier_id ?? ''}
                   onChange={(id: string) => {
                     const v = couriers.find((x: any) => x.id === id)
-                    // Couriers bill per piece — prime the bill from the master's
-                    // rate x current qty; it stays editable for negotiated cases.
-                    const qty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
-                    const rate = Number(v?.rate_per_unit) || 0
-                    set({ courier_id: id, courier_name: v?.name || '', ...(rate && qty ? { delivery_cost: rate * qty } : {}) })
+                    // Couriers bill per piece with category-wise rates — prime the
+                    // bill from the rate card; stays editable for negotiated cases.
+                    const bill = courierBill(id)
+                    set({ courier_id: id, courier_name: v?.name || '', ...(bill && bill.total > 0 ? { delivery_cost: bill.total } : {}) })
                   }}
                   placeholder="Search courier by code or name" />
               </Field>
               <Field label="CN / Tracking No"><Input value={h.courier_tracking_no ?? ''} onChange={e => set({ courier_tracking_no: e.target.value })} placeholder="Consignment / AWB number" /></Field>
-              <Field label={`Courier Bill (BDT)${(() => { const q = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0); const rt = Number(couriers.find((x: any) => x.id === h.courier_id)?.rate_per_unit) || 0; return rt && q ? ` — ${q} pcs × ${rt}` : '' })()}`}>
-                <Input type="number" value={h.delivery_cost ?? ''} onChange={e => set({ delivery_cost: e.target.value })} placeholder="Billed per unit" />
+              <Field label="Courier Bill (BDT)">
+                <Input type="number" value={h.delivery_cost ?? ''} onChange={e => set({ delivery_cost: e.target.value })} placeholder="Per-piece billed" />
+                {(() => {
+                  const bill = h.courier_id ? courierBill(h.courier_id) : null
+                  if (!bill || !bill.formula) return null
+                  const stale = Number(h.delivery_cost) !== bill.total
+                  return (
+                    <p className="mt-1 flex items-center gap-2 text-xs text-ink-faint">
+                      <span>{bill.formula} = <b className="text-ink-soft">{bill.total}</b></span>
+                      {stale && bill.total > 0 && (
+                        <button type="button" onClick={() => set({ delivery_cost: bill.total })}
+                          className="font-medium text-brand-600 hover:underline">Apply</button>
+                      )}
+                    </p>
+                  )
+                })()}
               </Field>
             </>
           )}

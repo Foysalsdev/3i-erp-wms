@@ -59,6 +59,9 @@ export interface OpDef {
   fields: OpFieldDef[]
   listColumns: Column<any>[]
   searchFields: string[]
+  // When set, the list shows a Print action that renders the header via the
+  // matching PDF layout. 'gatepass' uses the security gate-pass template.
+  pdf?: 'gatepass' | 'document'
 }
 
 const statusTone = (statuses: StatusDef[]) => (row: any) => {
@@ -231,7 +234,7 @@ export const OPERATIONS: Record<string, OpDef> = {
   },
   'gate-pass': {
     key: 'gate-pass', module: 'outbound', table: 'gate_passes', docType: 'GP', numberField: 'gate_pass_no',
-    title: 'Gate Pass', singular: 'Gate Pass', icon: 'door_front', permission: 'outbound',
+    title: 'Gate Pass', singular: 'Gate Pass', icon: 'door_front', permission: 'outbound', pdf: 'gatepass',
     statuses: [S.pending, S.issued, S.exited, S.cancelled], openStatuses: ['pending', 'issued'],
     searchFields: ['gate_pass_no', 'driver_name'],
     fields: [

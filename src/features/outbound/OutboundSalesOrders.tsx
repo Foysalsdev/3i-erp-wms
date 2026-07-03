@@ -250,6 +250,22 @@ export function OutboundSalesOrders() {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `SO · ${deleting.so_no}` : undefined}
         onConfirm={async () => {
+          // An order with delivery challans has real dispatch history — block it
+          // rather than tear down the downstream documents.
+          const { count } = await supabase.from('delivery_challans')
+            .select('id', { count: 'exact', head: true }).eq('sales_order_id', deleting.id)
+          if (count && count > 0) {
+            return { error: { message: `Cannot delete ${deleting.so_no} — it has delivery challans. Cancel/delete those first.` } }
+          }
+          // Release any serials reserved against this order back into stock and
+          // unlink them, so they survive and no longer block the line-item delete.
+          const { data: items } = await supabase.from('sales_order_items').select('id').eq('so_id', deleting.id)
+          const itemIds = (items ?? []).map((i: any) => i.id)
+          if (itemIds.length) {
+            await supabase.from('serial_numbers')
+              .update({ so_item_id: null, reference_no: null, status: 'in_stock' })
+              .eq('client_id', currentClientId!).in('so_item_id', itemIds)
+          }
           const res = await supabase.from('sales_orders').delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res

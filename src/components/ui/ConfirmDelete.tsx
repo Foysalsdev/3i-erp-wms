@@ -32,7 +32,16 @@ export function ConfirmDelete({ open, onClose, name, onConfirm }: {
       if (authErr) { notify('error', 'Incorrect password. Delete cancelled.'); return }
 
       const res = await onConfirm()
-      if (res && res.error) { notify('error', res.error.message ?? String(res.error)); return }
+      if (res && res.error) {
+        const err: any = res.error
+        // Postgres 23503 = foreign-key violation: the row is still referenced by
+        // linked documents (e.g. a challan's gate pass / POD, or an SO's challan).
+        // Show a plain-language reason instead of the raw constraint message.
+        const msg = err.code === '23503'
+          ? `Cannot delete ${name ?? 'this record'} — it still has linked documents that depend on it. Cancel or remove those first, then try again.`
+          : (err.message ?? String(err))
+        notify('error', msg); return
+      }
 
       notify('success', name ? `${name} deleted` : 'Deleted')
       close()

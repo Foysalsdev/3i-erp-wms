@@ -63,6 +63,7 @@ export const MODULES: NavModule[] = [
     { key: 'roles', label: 'Role Management' }
   ]},
   { key: 'reports', label: 'Reports & Analytics', icon: 'analytics', path: '/reports', permission: 'reports.view', tabs: [
+    { key: 'daily-inout', label: 'Daily Inbound & Outbound' },
     { key: 'inventory', label: 'Inventory Reports' }, { key: 'stock-aging', label: 'Stock Aging' },
     { key: 'stock-movement', label: 'Stock Movement' }, { key: 'inventory-valuation', label: 'Inventory Valuation' },
     { key: 'inbound', label: 'Inbound Reports' }, { key: 'outbound', label: 'Outbound Reports' },

@@ -39,6 +39,7 @@ export function DeliveryChallan() {
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [overview, setOverview] = useState<any>(null)
+  const [cnFor, setCnFor] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [customers, setCustomers] = useState<any[]>([])
@@ -55,7 +56,7 @@ export function DeliveryChallan() {
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
     supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
-    ;(supabase as any).from('couriers').select('id,courier_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }: any) => setCouriers(data ?? []))
+    ;(supabase as any).from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }: any) => setCouriers(data ?? []))
   }, [currentClientId])
 
   const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} - ${c.name}` : '-' }
@@ -156,6 +157,9 @@ export function DeliveryChallan() {
             { icon: 'visibility', label: 'View', onClick: () => setOverview(r) },
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             { icon: 'print', label: 'Print challan', onClick: () => printChallan(r) },
+            // CN arrives when the courier actually picks up — let it be added
+            // later without reopening the whole edit form.
+            ...(canEdit && r.delivery_method === 'courier' ? [{ icon: 'qr_code', label: r.courier_tracking_no ? 'Update CN / Tracking' : 'Add CN / Tracking', onClick: () => setCnFor(r) }] : []),
             ...(canPost && !r.posted_at ? [{ icon: 'check_circle', label: busy === r.id ? 'Issuing...' : 'Issue & Deduct Stock + Gate Pass', onClick: () => issue(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
@@ -195,6 +199,11 @@ export function DeliveryChallan() {
           onClose={() => setOverview(null)} />
       )}
 
+      {cnFor && (
+        <CnModal challan={cnFor} notify={notify}
+          onClose={() => setCnFor(null)} onDone={() => { setCnFor(null); refresh() }} />
+      )}
+
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `Challan - ${deleting.challan_no}` : undefined}
         onConfirm={async () => {
@@ -203,6 +212,36 @@ export function DeliveryChallan() {
           return res
         }} />
     </div>
+  )
+}
+
+// Quick CN entry: the consignment number only exists once the courier picks the
+// parcel up, so it's added to an already-created challan without a full edit.
+function CnModal({ challan, notify, onClose, onDone }: any) {
+  const [cn, setCn] = useState(challan.courier_tracking_no ?? '')
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
+    const { error } = await supabase.from('delivery_challans')
+      .update({ courier_tracking_no: cn.trim() || null } as any).eq('id', challan.id)
+    setSaving(false)
+    if (error) { notify('error', error.message); return }
+    notify('success', `CN saved for ${challan.challan_no}`)
+    onDone()
+  }
+  return (
+    <Modal open onClose={onClose} title={`CN / Tracking — ${challan.challan_no}`} size="md">
+      <div className="space-y-4">
+        <p className="text-sm text-ink-soft">Courier: <b className="text-ink">{challan.courier_name || '—'}</b></p>
+        <Field label="CN / Tracking No">
+          <Input autoFocus value={cn} onChange={e => setCn(e.target.value)} placeholder="Consignment / AWB number" />
+        </Field>
+        <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button icon="save" loading={saving} onClick={save}>Save CN</Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -278,7 +317,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       const header = {
         client_id: clientId, sales_order_id: h.sales_order_id || null, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
         invoice_no: invoice, challan_date: h.challan_date || today(), total_qty: totalQty, po_no: h.po_no || null,
-        delivery_method: mode,
+        delivery_method: mode, delivery_cost: h.delivery_cost === '' || h.delivery_cost == null ? null : Number(h.delivery_cost),
         // transport details
         vehicle_id: mode === 'transport' ? (h.vehicle_id || null) : null,
         driver_name: mode === 'transport' ? (h.driver_name || null) : null,
@@ -396,15 +435,28 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                   placeholder="Search transporter by code or name" />
               </Field>
               <Field label="Lock No"><Input value={h.lock_no ?? ''} onChange={e => set({ lock_no: e.target.value })} /></Field>
+              <Field label="Transport Cost / Trip (BDT)">
+                <Input type="number" value={h.delivery_cost ?? ''} onChange={e => set({ delivery_cost: e.target.value })} placeholder="Vehicle fare for this trip" />
+              </Field>
             </>
           ) : (
             <>
               <Field label="Courier">
                 <Combobox items={courierItems} value={h.courier_id ?? ''}
-                  onChange={(id: string) => { const v = couriers.find((x: any) => x.id === id); set({ courier_id: id, courier_name: v?.name || '' }) }}
+                  onChange={(id: string) => {
+                    const v = couriers.find((x: any) => x.id === id)
+                    // Couriers bill per piece — prime the bill from the master's
+                    // rate x current qty; it stays editable for negotiated cases.
+                    const qty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
+                    const rate = Number(v?.rate_per_unit) || 0
+                    set({ courier_id: id, courier_name: v?.name || '', ...(rate && qty ? { delivery_cost: rate * qty } : {}) })
+                  }}
                   placeholder="Search courier by code or name" />
               </Field>
-              <Field label="Tracking No"><Input value={h.courier_tracking_no ?? ''} onChange={e => set({ courier_tracking_no: e.target.value })} placeholder="AWB / tracking" /></Field>
+              <Field label="CN / Tracking No"><Input value={h.courier_tracking_no ?? ''} onChange={e => set({ courier_tracking_no: e.target.value })} placeholder="Consignment / AWB number" /></Field>
+              <Field label={`Courier Bill (BDT)${(() => { const q = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0); const rt = Number(couriers.find((x: any) => x.id === h.courier_id)?.rate_per_unit) || 0; return rt && q ? ` — ${q} pcs × ${rt}` : '' })()}`}>
+                <Input type="number" value={h.delivery_cost ?? ''} onChange={e => set({ delivery_cost: e.target.value })} placeholder="Billed per unit" />
+              </Field>
             </>
           )}
         </div>
@@ -475,6 +527,8 @@ function ChallanOverview({ challan, customerName, vehicles, products, transportV
           <Stat label="PO No" value={challan.po_no || '—'} />
           <Stat label="Vehicle" value={vehicleNo || '—'} />
           <Stat label={challan.delivery_method === 'courier' ? 'Courier' : 'Transport Vendor'} value={carrier} />
+          {challan.delivery_method === 'courier' && <Stat label="CN / Tracking" value={challan.courier_tracking_no || '—'} />}
+          <Stat label={challan.delivery_method === 'courier' ? 'Courier Bill' : 'Transport Cost'} value={challan.delivery_cost != null ? formatNumber(challan.delivery_cost) : '—'} />
           <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge>{challan.posted_at && <Badge tone="positive">Stock out</Badge>}</div>} />
         </div>
 

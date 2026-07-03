@@ -31,14 +31,12 @@ A Supabase project has already been provisioned and fully migrated:
 - **Region:** Singapore (ap-southeast-1) — lowest latency for Bangladesh
 - **API URL:** `https://kstwbkwbsozaboceksmy.supabase.co`
 
-### Demo login (platform admin — sees all clients)
+### Admin login
 
-```
-Email:    admin@3ilogistics.com
-Password: Admin@123
-```
-
-> Change this password before any real use, and create per-client users from **HR & Administration → User Management**.
+Credentials are **not** kept in this repository. Ask the platform admin for
+access, and create per-client users from **HR & Administration → User
+Management**. Rotate the admin password from the Supabase Auth dashboard if it
+may ever have been shared.
 
 ---
 

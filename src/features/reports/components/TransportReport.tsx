@@ -25,7 +25,7 @@ export function TransportReport() {
     setLoading(true)
     Promise.all([
       supabase.from('delivery_challans')
-        .select('id,challan_no,challan_date,invoice_no,customer_id,warehouse_id,unloading_point,delivery_method,vehicle_id,transporter_id,transport_vendor,courier_name,courier_tracking_no,total_qty,status,posted_at')
+        .select('id,challan_no,challan_date,invoice_no,customer_id,warehouse_id,unloading_point,delivery_method,vehicle_id,transporter_id,transport_vendor,courier_name,courier_tracking_no,total_qty,delivery_cost,status,posted_at')
         .eq('client_id', currentClientId).order('challan_date', { ascending: false }),
       supabase.from('delivery_challan_items').select('challan_id,product_id,qty').eq('client_id', currentClientId),
       supabase.from('customers').select('id,name').eq('client_id', currentClientId),
@@ -74,7 +74,8 @@ export function TransportReport() {
           ? [c.courier_name, c.courier_tracking_no].filter(Boolean).join(' / ') || '—'
           : [maps.tv[c.transporter_id] || c.transport_vendor, maps.veh[c.vehicle_id]].filter(Boolean).join(' / ') || '—',
         ...Object.fromEntries(categories.map(cat => [cat, byCat[cat] || 0])),
-        total: Number(c.total_qty) || 0, status: c.posted_at ? 'issued' : (c.status ?? 'draft')
+        total: Number(c.total_qty) || 0, cost: Number(c.delivery_cost) || 0,
+        status: c.posted_at ? 'issued' : (c.status ?? 'draft')
       }
     })
     const t = q.trim().toLowerCase()
@@ -91,6 +92,7 @@ export function TransportReport() {
     { key: 'carrier', header: 'Vehicle / Courier', width: '14%' },
     ...categories.map(c => ({ key: c, header: c, align: 'right' as const })),
     { key: 'total', header: 'Total', align: 'right', width: '5%' },
+    { key: 'cost', header: 'Cost', align: 'right', width: '6%' },
     { key: 'status', header: 'Status', width: '6%' }
   ]
   const tableCols = [
@@ -104,16 +106,18 @@ export function TransportReport() {
     { key: 'carrier', header: 'Vehicle / Courier', accessor: (r: any) => r.carrier },
     ...categories.map(c => ({ key: c, header: c, className: 'text-right', accessor: (r: any) => r[c] ? formatNumber(r[c]) : '' })),
     { key: 'total', header: 'Total', className: 'text-right font-semibold', accessor: (r: any) => formatNumber(r.total), sortable: true },
+    { key: 'cost', header: 'Cost', className: 'text-right', accessor: (r: any) => r.cost ? formatNumber(r.cost) : '', sortable: true },
     { key: 'status', header: 'Status', accessor: (r: any) => r.status }
   ]
 
   if (loading) return <Spinner label="Loading…" />
   const totalQty = rows.reduce((s: number, r: any) => s + r.total, 0)
+  const totalCost = rows.reduce((s: number, r: any) => s + r.cost, 0)
   return (
     <div className="space-y-4">
       <ReportToolbar count={rows.length}
         onCSV={() => downloadCSV('Outbound Transport Report', cols, rows)}
-        onPDF={() => downloadReportPDF('Outbound Transport Report', `${rows.length} despatches · ${formatNumber(totalQty)} units`, cols, rows)}>
+        onPDF={() => downloadReportPDF('Outbound Transport Report', `${rows.length} despatches · ${formatNumber(totalQty)} units · cost ${formatNumber(totalCost)}`, cols, rows)}>
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search challan / invoice / party…" /></div>
       </ReportToolbar>
       <Card className="overflow-hidden">

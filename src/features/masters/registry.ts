@@ -199,6 +199,8 @@ export const MASTERS: Record<string, MasterDef> = {
       { name: 'contact_person', label: 'Contact Person', type: 'text' },
       { name: 'phone', label: 'Phone', type: 'text' },
       { name: 'email', label: 'Email', type: 'text' },
+      // Couriers bill per piece — this rate drives the auto bill on challans.
+      { name: 'rate_per_unit', label: 'Rate / Unit (BDT)', type: 'number' },
       { name: 'tracking_url', label: 'Tracking URL', type: 'text', span2: true },
       { name: 'status', label: 'Status', type: 'select', options: STATUS, required: true }
     ],
@@ -206,6 +208,7 @@ export const MASTERS: Record<string, MasterDef> = {
       { key: 'courier_code', header: 'Code', accessor: r => r.courier_code, sortable: true, className: 'font-medium' },
       { key: 'name', header: 'Courier', accessor: r => r.name, sortable: true },
       { key: 'contact_person', header: 'Contact', accessor: r => r.contact_person },
+      { key: 'rate_per_unit', header: 'Rate/Unit', accessor: r => r.rate_per_unit, className: 'text-right' },
       { key: 'phone', header: 'Phone', accessor: r => r.phone },
       { key: 'status', header: 'Status', render: statusBadge }
     ]

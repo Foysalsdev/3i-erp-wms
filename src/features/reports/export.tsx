@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
+import { getCompanyInfo } from '@/lib/settings'
 
 export interface RepCol { key: string; header: string; align?: 'right' | 'left'; width?: string }
 
@@ -29,11 +30,15 @@ const s = StyleSheet.create({
 
 function ReportDoc({ title, subtitle, cols, rows }: { title: string; subtitle?: string; cols: RepCol[]; rows: any[] }) {
   const w = (c: RepCol) => c.width ?? `${(100 / cols.length).toFixed(2)}%`
+  const company = getCompanyInfo()
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={s.page}>
         <View style={s.top}>
-          <Image src="/whirlpool-logo.png" style={{ width: 110, height: 36 }} />
+          <View>
+            <Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 110, height: 36 }} />
+            <Text style={s.sub}>{company.name}</Text>
+          </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={s.title}>{title}</Text>
             {subtitle ? <Text style={s.sub}>{subtitle}</Text> : null}

@@ -26,6 +26,28 @@ Each backup contains three gzipped SQL files made with the Supabase CLI:
 4. Test it: **Actions → Daily DB Backup → Run workflow**. A successful run
    shows a `db-backup-run…` artifact at the bottom of the run page.
 
+## Optional: mirror backups to Google Drive
+
+With two extra secrets, every run also copies the dump into a Google Drive
+folder (one dated subfolder per day, pruned after 30 days). Setup:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com) → create (or
+   pick) a project → **APIs & Services → Library** → enable **Google Drive
+   API**.
+2. **IAM & Admin → Service Accounts → Create service account** (any name, no
+   roles needed) → open it → **Keys → Add key → JSON**. A `.json` key file
+   downloads.
+3. In Google Drive, create a folder (e.g. `3i-erp-wms-backups`) and **share it
+   with the service account's email** (the `…@….iam.gserviceaccount.com`
+   address from the key file) as **Editor**.
+4. Add two GitHub repo secrets (Settings → Secrets and variables → Actions):
+   - `GDRIVE_SERVICE_ACCOUNT_JSON` — the full contents of the key file
+   - `GDRIVE_FOLDER_ID` — the folder's ID (the part after `/folders/` in its
+     Drive URL)
+
+Note: files uploaded this way are owned by the service account, which has its
+own 15 GB quota — the 30-day auto-prune in the workflow keeps usage small.
+
 ## Downloading a backup
 
 GitHub → **Actions → Daily DB Backup** → pick a run → download the artifact

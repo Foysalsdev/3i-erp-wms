@@ -6,6 +6,10 @@
 #   SUPABASE_DB_URL — the *session pooler* connection string
 #   (Dashboard → Connect → Session pooler). The direct db host is IPv6-only,
 #   which GitHub runners can't reach.
+#
+# Optional Google Drive mirror (set both secrets to enable, see docs/BACKUP.md):
+#   GDRIVE_SERVICE_ACCOUNT_JSON — Google Cloud service-account key (JSON)
+#   GDRIVE_FOLDER_ID            — ID of the Drive folder shared with that account
 name: Daily DB Backup
 
 on:
@@ -44,3 +48,23 @@ jobs:
           path: backup/
           retention-days: 30
           if-no-files-found: error
+
+      # Mirrors the dump to Google Drive when the GDRIVE_* secrets are set;
+      # silently skipped otherwise. Keeps 30 days of daily folders.
+      - name: Upload to Google Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          if [ -z "$RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_CREDENTIALS" ] || [ -z "$RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID" ]; then
+            echo "GDRIVE_* secrets not set — skipping Google Drive upload"
+            exit 0
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+          rclone copy backup "gdrive:$(date -u +%Y-%m-%d)"
+          # Prune Drive copies older than 30 days so the folder doesn't grow forever.
+          rclone delete gdrive: --min-age 30d
+          rclone rmdirs gdrive: --leave-root || true
+          echo "Uploaded to Drive folder $(date -u +%Y-%m-%d)"

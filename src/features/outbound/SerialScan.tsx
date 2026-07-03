@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { formatNumber } from '@/lib/utils'
-import { normaliseSerial } from '@/lib/serials'
+import { normaliseSerial, describeSerialHistory, type SerialHistoryItem } from '@/lib/serials'
+import { SerialHistoryModal } from '@/components/shared/SerialHistoryModal'
 
 const num = (v: any): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
@@ -31,6 +32,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
   const [lines, setLines] = useState<SLine[]>([])
   const [loading, setLoading] = useState(true)
   const [activeIdx, setActiveIdx] = useState<number | null>(null)
+  const [history, setHistory] = useState<SerialHistoryItem[] | null>(null)
 
   useEffect(() => { if (currentClientId && lockSoId) load() /* eslint-disable-next-line */ }, [currentClientId, lockSoId])
 
@@ -72,18 +74,32 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
   const saveLine = async (idx: number, entries: { id?: string; serial_no: string }[], removedIds: string[]) => {
     const line = lines[idx]
     const fresh = entries.filter(e => !e.id).map(e => ({ serial_no: e.serial_no, product_id: line.product_id, so_item_id: line.item_id }))
+    // Serials that already exist on an EARLIER transaction (return/replacement
+    // coming back out) are allowed: they get re-assigned to this order and the
+    // user sees a small history popup. Duplicates within THIS order are still
+    // blocked by the grid before we ever get here.
+    let reused: any[] = []
     if (fresh.length) {
-      const { data: clash } = await supabase.from('serial_numbers').select('serial_no,reference_no')
+      const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
         .eq('client_id', currentClientId!).in('serial_no', fresh.map(f => f.serial_no))
-      const other = (clash ?? []).filter((c: any) => c.reference_no !== soRow.so_no)
-      if (other.length) throw new Error(`Serial(s) already used elsewhere: ${other.map((c: any) => c.serial_no).slice(0, 3).join(', ')}`)
+      reused = (clash ?? []).filter((c: any) => c.reference_no !== soRow.so_no)
     }
     if (removedIds.length) {
       const { error } = await supabase.from('serial_numbers').delete().in('id', removedIds)
       if (error) throw error
     }
-    if (fresh.length) {
-      const rows = fresh.map(f => ({
+    let hist: SerialHistoryItem[] = []
+    if (reused.length) {
+      hist = await describeSerialHistory(currentClientId!, reused)   // capture before overwriting
+      const { error } = await supabase.from('serial_numbers')
+        .update({ so_item_id: line.item_id, reference_no: soRow.so_no, warehouse_id: soRow.warehouse_id || null, status: 'reserved' } as any)
+        .in('id', reused.map((r: any) => r.id))
+      if (error) throw error
+    }
+    const reusedSet = new Set(reused.map((r: any) => r.serial_no))
+    const inserts = fresh.filter(f => !reusedSet.has(f.serial_no))
+    if (inserts.length) {
+      const rows = inserts.map(f => ({
         client_id: currentClientId!, product_id: f.product_id, serial_no: f.serial_no,
         so_item_id: f.so_item_id, reference_no: soRow.so_no, warehouse_id: soRow.warehouse_id || null,
         status: 'reserved' // serial_numbers_status_check only allows in_stock/reserved/delivered/returned/damaged/quarantine/scrapped
@@ -91,6 +107,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
       const { error } = await supabase.from('serial_numbers').insert(rows as any)
       if (error) throw error
     }
+    if (hist.length) setHistory(hist)
     const newTotal = lines.reduce((s, l, i) => s + (i === idx ? entries.length : l.serials.length), 0)
     if (newTotal > 0 && ['draft', 'pending', 'approved'].includes(soRow.status)) {
       await supabase.from('sales_orders').update({ status: 'picking' }).eq('id', soRow.id)
@@ -150,6 +167,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
         </div>
       </Card>
       <p className="text-xs text-ink-faint">Click a line to open its serial grid (one row per unit) — fill the rows and confirm to complete that line. Use "Copy (Excel)" to paste the full Model/Serial list elsewhere.</p>
+      {history && <SerialHistoryModal items={history} onClose={() => setHistory(null)} />}
     </div>
   )
 }

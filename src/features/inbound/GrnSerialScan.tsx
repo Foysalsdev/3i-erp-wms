@@ -4,7 +4,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/States'
-import { normaliseSerial } from '@/lib/serials'
+import { normaliseSerial, describeSerialHistory, type SerialHistoryItem } from '@/lib/serials'
+import { SerialHistoryModal } from '@/components/shared/SerialHistoryModal'
 
 // Inbound serial capture for a GRN (optional). Built for real receiving work:
 //  - a barcode gun types the serial and sends Enter — each scan lands as a row
@@ -26,6 +27,7 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
   const [input, setInput] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [history, setHistory] = useState<SerialHistoryItem[] | null>(null)
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   // DB-backed serial ids per product at load time — save() diffs against this
   // to know which previously saved serials the user removed.
@@ -112,22 +114,37 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
         const kept = new Set(list.filter(r => r.existingId).map(r => r.existingId))
         ;(seededIds.current[it.product_id] ?? []).forEach(id => { if (!kept.has(id)) toDelete.push(id) })
       }
+      // Serials with EARLIER transaction history (e.g. delivered before, now
+      // coming back) are allowed: re-registered to this GRN as in_stock, with
+      // a small popup showing where each was last. Same-form duplicates were
+      // already blocked at scan time.
+      let reused: any[] = []
       if (toInsert.length) {
-        const { data: clash } = await supabase.from('serial_numbers').select('serial_no,reference_no')
+        const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
           .eq('client_id', clientId).in('serial_no', toInsert.map(r => r.serial_no))
-        const other = (clash ?? []).filter((c: any) => c.reference_no !== grn.grn_no)
-        if (other.length) throw new Error(`Already registered elsewhere: ${other.map((c: any) => `${c.serial_no} (${c.reference_no ?? '—'})`).slice(0, 3).join(', ')}`)
+        reused = (clash ?? []).filter((c: any) => c.reference_no !== grn.grn_no)
       }
       if (toDelete.length) {
         const { error } = await supabase.from('serial_numbers').delete().in('id', toDelete)
         if (error) throw error
       }
-      if (toInsert.length) {
-        const { error } = await supabase.from('serial_numbers').insert(toInsert as any)
+      let hist: SerialHistoryItem[] = []
+      if (reused.length) {
+        hist = await describeSerialHistory(clientId, reused)   // capture before overwriting
+        const { error } = await supabase.from('serial_numbers')
+          .update({ reference_no: grn.grn_no, warehouse_id: grn.warehouse_id || null, status: 'in_stock', so_item_id: null } as any)
+          .in('id', reused.map((r: any) => r.id))
         if (error) throw error
       }
-      notify('success', `${grn.grn_no}: ${toInsert.length} serial(s) saved${toDelete.length ? `, ${toDelete.length} removed` : ''}`)
-      onClose()
+      const reusedSet = new Set(reused.map((r: any) => r.serial_no))
+      const inserts = toInsert.filter(r => !reusedSet.has(r.serial_no))
+      if (inserts.length) {
+        const { error } = await supabase.from('serial_numbers').insert(inserts as any)
+        if (error) throw error
+      }
+      notify('success', `${grn.grn_no}: ${inserts.length + reused.length} serial(s) saved${toDelete.length ? `, ${toDelete.length} removed` : ''}`)
+      if (hist.length) setHistory(hist)
+      else onClose()
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not save serials')
     } finally { setSaving(false) }
@@ -195,6 +212,7 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button icon="save" loading={saving} onClick={save}>Save Serials</Button>
           </div>
+          {history && <SerialHistoryModal items={history} onClose={onClose} />}
         </div>
       )}
     </Modal>

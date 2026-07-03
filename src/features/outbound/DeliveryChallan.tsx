@@ -119,7 +119,14 @@ export function DeliveryChallan() {
         const allDone = (soLines ?? []).length > 0 && (soLines ?? []).every((l: any) => Number(l.delivered_qty) >= Number(l.qty))
         await supabase.from('sales_orders').update({ status: allDone ? 'delivered' : 'dispatched' }).eq('id', c.sales_order_id)
       }
-      const { error } = await supabase.from('delivery_challans').update({ posted_at: new Date().toISOString(), status: 'issued' }).eq('id', c.id)
+      // Dispatch time = the moment the challan is issued, unless the user
+      // already typed one (e.g. a planned/backdated despatch).
+      const now = new Date()
+      const dispatchStamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+      const { error } = await supabase.from('delivery_challans').update({
+        posted_at: now.toISOString(), status: 'issued',
+        ...(c.dispatch_time ? {} : { dispatch_time: dispatchStamp })
+      } as any).eq('id', c.id)
       if (error) throw error
       notify('success', `${c.challan_no} issued - stock deducted${gp_no ? ' & gate pass ' + gp_no + ' created' : ''}`)
       refresh()
@@ -248,7 +255,9 @@ function CnModal({ challan, notify, onClose, onDone }: any) {
 // `lockSo` opens the form straight from an order: customer / warehouse / invoice /
 // PO are pulled in and locked, and the lines default to the still-pending qty.
 export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, transportVendors = [], couriers = [], clientId, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport' })
+  const profile = useAuth(s => s.profile)
+  // Prepared By defaults to whoever is logged in creating the challan.
+  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '' })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -509,7 +518,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         {more && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {!locked && <Field label="Order Ref"><Input value={h.po_no ?? ''} onChange={e => set({ po_no: e.target.value })} /></Field>}
-            <Field label="Dispatch Time"><Input value={h.dispatch_time ?? ''} onChange={e => set({ dispatch_time: e.target.value })} placeholder="e.g. 30/04/26 12:00 AM" /></Field>
+            <Field label="Dispatch Time"><Input value={h.dispatch_time ?? ''} onChange={e => set({ dispatch_time: e.target.value })} placeholder="Auto-set when challan is issued" /></Field>
             <Field label="Prepared By"><Input value={h.prepared_by ?? ''} onChange={e => set({ prepared_by: e.target.value })} /></Field>
             <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
             <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>

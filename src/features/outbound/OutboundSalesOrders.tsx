@@ -309,10 +309,16 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
     try {
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       const totalAmount = lines.reduce((s, r) => s + lineTotal(r), 0)
+      // billing_doc_no is the one SAP number that means "invoiced" — entering it
+      // here must advance the workflow exactly like the Enter Invoice modal does,
+      // otherwise the order sits at picking/packed forever.
+      const preInvoice = ['draft', 'pending', 'approved', 'picking', 'packed']
+      const status = String(h.billing_doc_no || '').trim() && preInvoice.includes(h.status || 'pending')
+        ? 'invoiced' : (h.status || 'pending')
       const header = {
         client_id: clientId, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
         reference_no: h.reference_no || null, order_date: h.order_date || today(), required_date: h.required_date || null,
-        total_qty: totalQty, total_amount: totalAmount, status: h.status || 'pending', remarks: h.remarks || null,
+        total_qty: totalQty, total_amount: totalAmount, status, remarks: h.remarks || null,
         mail_ref: h.mail_ref || null, assigned_to: h.assigned_to || null,
         sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
         transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null

@@ -119,7 +119,14 @@ export function DeliveryChallan() {
         const allDone = (soLines ?? []).length > 0 && (soLines ?? []).every((l: any) => Number(l.delivered_qty) >= Number(l.qty))
         await supabase.from('sales_orders').update({ status: allDone ? 'delivered' : 'dispatched' }).eq('id', c.sales_order_id)
       }
-      const { error } = await supabase.from('delivery_challans').update({ posted_at: new Date().toISOString(), status: 'issued' }).eq('id', c.id)
+      // Dispatch time = the moment the challan is issued, unless the user
+      // already typed one (e.g. a planned/backdated despatch).
+      const now = new Date()
+      const dispatchStamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+      const { error } = await supabase.from('delivery_challans').update({
+        posted_at: now.toISOString(), status: 'issued',
+        ...(c.dispatch_time ? {} : { dispatch_time: dispatchStamp })
+      } as any).eq('id', c.id)
       if (error) throw error
       notify('success', `${c.challan_no} issued - stock deducted${gp_no ? ' & gate pass ' + gp_no + ' created' : ''}`)
       refresh()
@@ -248,7 +255,9 @@ function CnModal({ challan, notify, onClose, onDone }: any) {
 // `lockSo` opens the form straight from an order: customer / warehouse / invoice /
 // PO are pulled in and locked, and the lines default to the still-pending qty.
 export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, transportVendors = [], couriers = [], clientId, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport' })
+  const profile = useAuth(s => s.profile)
+  // Prepared By defaults to whoever is logged in creating the challan.
+  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '' })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -261,6 +270,35 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
   const tVendorItems = transportVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
   const courierItems = couriers.map((v: any) => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
+
+  // Courier rate card: per-piece rate by product category, falling back to the
+  // courier's flat rate_per_unit for categories without one.
+  const [courierRates, setCourierRates] = useState<any[]>([])
+  useEffect(() => {
+    if (!clientId) return
+    ;(supabase as any).from('courier_rates').select('courier_id,category,rate').eq('client_id', clientId)
+      .then(({ data }: any) => setCourierRates(data ?? []))
+  }, [clientId])
+  const courierBill = (courierId: string) => {
+    const c = couriers.find((x: any) => x.id === courierId)
+    if (!c) return null
+    const rateMap = Object.fromEntries(courierRates.filter((r: any) => r.courier_id === courierId).map((r: any) => [r.category, Number(r.rate) || 0]))
+    const fallback = Number(c.rate_per_unit) || 0
+    const byCat: Record<string, number> = {}
+    for (const l of lines) {
+      if (!l.product_id || !(Number(l.qty) > 0)) continue
+      const cat = products.find((p: any) => p.id === l.product_id)?.category || 'Other'
+      byCat[cat] = (byCat[cat] || 0) + Number(l.qty)
+    }
+    let total = 0
+    const parts: string[] = []
+    for (const [cat, qty] of Object.entries(byCat)) {
+      const rate = rateMap[cat] ?? fallback
+      total += qty * rate
+      parts.push(`${cat} ${qty}×${rate}`)
+    }
+    return { total, formula: parts.join(' + ') }
+  }
   const createVehicle = async (name: string) => {
     const { data, error } = await (supabase as any).from('vehicles').insert({ client_id: clientId, vehicle_number: name }).select('*').single()
     if (error) { notify('error', error.message); return null }
@@ -445,17 +483,30 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                 <Combobox items={courierItems} value={h.courier_id ?? ''}
                   onChange={(id: string) => {
                     const v = couriers.find((x: any) => x.id === id)
-                    // Couriers bill per piece — prime the bill from the master's
-                    // rate x current qty; it stays editable for negotiated cases.
-                    const qty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
-                    const rate = Number(v?.rate_per_unit) || 0
-                    set({ courier_id: id, courier_name: v?.name || '', ...(rate && qty ? { delivery_cost: rate * qty } : {}) })
+                    // Couriers bill per piece with category-wise rates — prime the
+                    // bill from the rate card; stays editable for negotiated cases.
+                    const bill = courierBill(id)
+                    set({ courier_id: id, courier_name: v?.name || '', ...(bill && bill.total > 0 ? { delivery_cost: bill.total } : {}) })
                   }}
                   placeholder="Search courier by code or name" />
               </Field>
               <Field label="CN / Tracking No"><Input value={h.courier_tracking_no ?? ''} onChange={e => set({ courier_tracking_no: e.target.value })} placeholder="Consignment / AWB number" /></Field>
-              <Field label={`Courier Bill (BDT)${(() => { const q = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0); const rt = Number(couriers.find((x: any) => x.id === h.courier_id)?.rate_per_unit) || 0; return rt && q ? ` — ${q} pcs × ${rt}` : '' })()}`}>
-                <Input type="number" value={h.delivery_cost ?? ''} onChange={e => set({ delivery_cost: e.target.value })} placeholder="Billed per unit" />
+              <Field label="Courier Bill (BDT)">
+                <Input type="number" value={h.delivery_cost ?? ''} onChange={e => set({ delivery_cost: e.target.value })} placeholder="Per-piece billed" />
+                {(() => {
+                  const bill = h.courier_id ? courierBill(h.courier_id) : null
+                  if (!bill || !bill.formula) return null
+                  const stale = Number(h.delivery_cost) !== bill.total
+                  return (
+                    <p className="mt-1 flex items-center gap-2 text-xs text-ink-faint">
+                      <span>{bill.formula} = <b className="text-ink-soft">{bill.total}</b></span>
+                      {stale && bill.total > 0 && (
+                        <button type="button" onClick={() => set({ delivery_cost: bill.total })}
+                          className="font-medium text-brand-600 hover:underline">Apply</button>
+                      )}
+                    </p>
+                  )
+                })()}
               </Field>
             </>
           )}
@@ -467,7 +518,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         {more && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {!locked && <Field label="Order Ref"><Input value={h.po_no ?? ''} onChange={e => set({ po_no: e.target.value })} /></Field>}
-            <Field label="Dispatch Time"><Input value={h.dispatch_time ?? ''} onChange={e => set({ dispatch_time: e.target.value })} placeholder="e.g. 30/04/26 12:00 AM" /></Field>
+            <Field label="Dispatch Time"><Input value={h.dispatch_time ?? ''} onChange={e => set({ dispatch_time: e.target.value })} placeholder="Auto-set when challan is issued" /></Field>
             <Field label="Prepared By"><Input value={h.prepared_by ?? ''} onChange={e => set({ prepared_by: e.target.value })} /></Field>
             <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
             <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>

@@ -119,8 +119,8 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
   }, [q, clientId])
 
   if (!open) return null
-  // Portal to <body>: the Topbar's backdrop-blur becomes the containing block
-  // for fixed children, which would otherwise trap this overlay inside the header.
+  // Portal to <body> so this overlay escapes the Topbar's stacking context and
+  // always covers the full viewport.
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]" onClick={onClose}>
       <div className="w-full max-w-xl overflow-hidden rounded-card bg-surface shadow-fiori-lg" onClick={e => e.stopPropagation()}>

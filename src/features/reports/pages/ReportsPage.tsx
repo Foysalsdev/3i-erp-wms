@@ -11,8 +11,10 @@ import { TransportReport } from '../components/TransportReport'
 import { StockAgingReport } from '../components/StockAgingReport'
 import { InventoryValuationReport } from '../components/InventoryValuationReport'
 import { InboundReport, AssetReport, FinanceReport, HrReport, DeliveryRegisterReport } from '../components/RegisterReports'
+import { DailyInOutReport } from '../components/DailyInOutReport'
 
 const REPORTS: Record<string, () => JSX.Element> = {
+  'daily-inout': DailyInOutReport,
   outbound: SalesReport,
   'outbound-deliveries': DeliveryRegisterReport,
   inventory: InventoryReport,

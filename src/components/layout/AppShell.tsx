@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import { Spinner } from '@/components/ui/States'
 import { primeCompanyInfo, loadSettings, type WorkflowSettings } from '@/lib/settings'
 import { setWorkflowSla } from '@/features/outbound/workflow'
 
@@ -42,7 +43,12 @@ export function AppShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onOpenMobileNav={() => setMobileNav(true)} />
         <main className="flex-1 overflow-y-auto p-5 sm:p-7">
-          <ErrorBoundary key={pathname}><Outlet /></ErrorBoundary>
+          {/* Page chunk loads here (nav stays visible) with the same Spinner the
+              pages use for data loading, so route-load and data-load look like
+              one continuous loader instead of a whirlpool then a spinner. */}
+          <ErrorBoundary key={pathname}>
+            <Suspense fallback={<Spinner label="Loading…" />}><Outlet /></Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

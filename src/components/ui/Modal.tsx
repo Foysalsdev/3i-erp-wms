@@ -1,10 +1,14 @@
+import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 import { cn } from '@/lib/utils'
 export function Modal({ open, onClose, title, children, size = 'md' }:
   { open: boolean; onClose: () => void; title: string; children: React.ReactNode; size?: 'md' | 'lg' | 'xl' }) {
   if (!open) return null
   const w = { md: 'max-w-xl', lg: 'max-w-4xl', xl: 'max-w-6xl' }[size]
-  return (
+  // Portal to <body> so the modal escapes any ancestor stacking context — e.g.
+  // the Topbar's backdrop-blur makes it the containing block for fixed children,
+  // which otherwise traps a modal opened from it (My Profile) behind the page.
+  return createPortal(
     // Outer layer scrolls (not just the modal body) so a modal taller than the
     // viewport can never clip its own header/top off-screen with no way back to it.
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30 backdrop-blur-sm">
@@ -17,6 +21,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }:
           <div className="overflow-y-auto p-5">{children}</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

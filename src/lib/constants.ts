@@ -25,6 +25,7 @@ export const MODULES: NavModule[] = [
     { key: 'batch', label: 'Lot / Batch Tracking' }, { key: 'fifo', label: 'FIFO' }, { key: 'fefo', label: 'FEFO' }
   ]},
   { key: 'inbound', label: 'Inbound Operations', icon: 'login', path: '/inbound', permission: 'inbound.view', tabs: [
+    { key: 'receive', label: 'Receive' },
     { key: 'purchase-requisition', label: 'Purchase Requisition' }, { key: 'grn', label: 'Goods Receipt Note (GRN)' },
     { key: 'putaway', label: 'Putaway' }, { key: 'purchase-return', label: 'Purchase Return' },
     { key: 'supplier-invoice', label: 'Supplier Invoice' }

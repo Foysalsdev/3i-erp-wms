@@ -159,6 +159,11 @@ function CountForm({ countType, title, singular, record, clientId, products, war
     if (!h.warehouse_id) { notify('error', 'Warehouse is required'); return }
     const valid = lines.filter(l => l.product_id)
     if (!valid.length) { notify('error', 'Add at least one line (or load stock)'); return }
+    // A blank count is NOT zero: posting would write the whole system qty off
+    // as variance. Force an explicit counted figure on every line.
+    if (valid.some(l => String(l.counted_qty ?? '').trim() === '' || !Number.isFinite(Number(l.counted_qty)))) {
+      notify('error', 'Every line needs a Counted Qty — enter the actual count (0 only if truly none found)'); return
+    }
     setSaving(true)
     try {
       const hdr: any = {

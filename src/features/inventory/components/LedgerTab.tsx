@@ -5,20 +5,16 @@ import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
-import { ActionMenu } from '@/components/ui/ActionMenu'
-import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Spinner } from '@/components/ui/States'
 import { formatNumber, formatDateTime } from '@/lib/utils'
 
 export function LedgerTab() {
   const clientId = useAuth(s => s.currentClientId)
-  const isAdmin = useAuth(s => s.isPlatformAdmin)
   const notify = useUI(s => s.notify)
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
-  const [deleting, setDeleting] = useState<any>(null)
 
   const load = () => {
     if (!clientId) return
@@ -50,31 +46,16 @@ export function LedgerTab() {
     { key: 'ref', header: 'Reference', accessor: (r: any) => r.reference_no ?? '—' }
   ]
 
-  // Delete is restricted to platform admins and requires password confirmation.
-  const actionCol = {
-    key: '__actions', header: '', className: 'w-px whitespace-nowrap',
-    render: (r: any) => (
-      <div className="flex justify-end" onClick={e => e.stopPropagation()}>
-        <ActionMenu items={[{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }]} />
-      </div>
-    )
-  }
-  const allColumns = isAdmin ? [...columns, actionCol] : columns
-
+  // The ledger is the immutable audit trail: no deletes, even for admins.
+  // Wrong postings are corrected by a compensating ADJUST movement, keeping
+  // the running balances and the who-did-what history intact.
   if (loading) return <Spinner label="Loading ledger…" />
   return (
     <div className="space-y-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search movements…" /></div>
       <Card className="overflow-hidden">
-        <DataTable columns={allColumns} rows={filtered} rowKey={(r: any) => String(r.id)} emptyTitle="No movements recorded" />
+        <DataTable columns={columns} rows={filtered} rowKey={(r: any) => String(r.id)} emptyTitle="No movements recorded" />
       </Card>
-      <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
-        name={deleting ? `ledger entry · ${deleting.movement_type}` : undefined}
-        onConfirm={async () => {
-          const res = await supabase.from('inventory_ledger').delete().eq('id', deleting.id)
-          if (!res.error) { setDeleting(null); load() }
-          return res
-        }} />
     </div>
   )
 }

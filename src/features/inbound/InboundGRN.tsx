@@ -15,6 +15,7 @@ import { Field, Select, Input, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
+import { GrnSerialScan } from './GrnSerialScan'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'approved' ? 'positive' : s === 'completed' ? 'info' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : 'critical'
@@ -41,6 +42,7 @@ export function InboundGRN() {
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  const [scanning, setScanning] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [suppliers, setSuppliers] = useState<any[]>([])
@@ -120,6 +122,7 @@ export function InboundGRN() {
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
+            ...(canEdit ? [{ icon: 'qr_code_scanner', label: 'Scan Serials (optional)', onClick: () => setScanning(r) }] : []),
             ...(canApprove && !r.posted_at && r.status === 'completed' ? [{ icon: 'check_circle', label: busy === r.id ? 'Approving…' : 'Approve & Add to Stock', onClick: () => approve(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
@@ -145,6 +148,11 @@ export function InboundGRN() {
         <GRNForm record={editing} suppliers={suppliers} warehouses={warehouses} products={products}
           clientId={currentClientId!} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
+      )}
+
+      {scanning && (
+        <GrnSerialScan grn={scanning} products={products} clientId={currentClientId!} notify={notify}
+          onClose={() => setScanning(null)} />
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}

@@ -30,6 +30,10 @@ const PLACEHOLDERS = ['asset']
 export default function App() {
   const { session, loading, init } = useAuth()
   useEffect(() => { init() }, [init])
+  // Preload the landing-page chunk while auth is still initialising, so after
+  // the boot splash the dashboard renders straight into its own data loader
+  // instead of flashing the route Suspense fallback in between.
+  useEffect(() => { import('@/features/dashboard/DashboardPage') }, [])
 
   if (loading) return <WhirlpoolLoader fullScreen />
   if (!session) return <><LoginPage /><Toaster /></>

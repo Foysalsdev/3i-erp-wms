@@ -36,9 +36,10 @@ export function StockAdjustModal({ open, onClose, onDone }: { open: boolean; onC
   }, [f.warehouse_id])
 
   const save = async () => {
-    if (!f.product_id || !f.warehouse_id || !f.qty) { notify('error', 'Product, warehouse and quantity required'); return }
-    setSaving(true)
     const qty = Number(f.qty)
+    if (!f.product_id || !f.warehouse_id) { notify('error', 'Product, warehouse and quantity required'); return }
+    if (!Number.isFinite(qty) || qty <= 0) { notify('error', 'Quantity must be a positive number — pick In/Out for the direction'); return }
+    setSaving(true)
     const { error } = await (supabase as any).rpc('post_stock_movement', {
       p_client: clientId, p_product: f.product_id, p_warehouse: f.warehouse_id,
       p_location: f.location_id || null, p_stock_status: f.stock_status,

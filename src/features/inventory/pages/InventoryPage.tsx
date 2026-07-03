@@ -12,8 +12,9 @@ import { TransferTab } from '../components/TransferTab'
 import { HoldTab } from '../components/HoldTab'
 import { CountTab } from '../components/CountTab'
 import { FifoTab } from '../components/FifoTab'
+import { SnapshotTab } from '../components/SnapshotTab'
 
-const IMPLEMENTED = ['stock', 'ledger', 'serials', 'damaged', 'quarantine', 'transfer', 'adjustment', 'cycle-count', 'physical-verification', 'hold', 'fifo']
+const IMPLEMENTED = ['stock', 'ledger', 'serials', 'damaged', 'quarantine', 'transfer', 'adjustment', 'cycle-count', 'physical-verification', 'hold', 'fifo', 'snapshot']
 
 export default function InventoryPage() {
   const { tab } = useParams()
@@ -37,6 +38,7 @@ export default function InventoryPage() {
       {active === 'cycle-count' && <CountTab countType="cycle" title="Cycle Counts" singular="Cycle Count" />}
       {active === 'physical-verification' && <CountTab countType="physical" title="Physical Verifications" singular="Physical Verification" />}
       {active === 'fifo' && <FifoTab />}
+      {active === 'snapshot' && <SnapshotTab />}
       {!IMPLEMENTED.includes(active) && (
         <Card className="p-2">
           <EmptyState icon="info" title={label}

@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { formatNumber } from '@/lib/utils'
+import { normaliseSerial } from '@/lib/serials'
 
 const num = (v: any): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
 interface SLine {
   item_id: string; product_id: string; code: string; name: string; uom: string
+  china?: string | null; bar?: string | null   // alternate prefixes for serial normalisation
   ordered: number
   serials: { id?: string; serial_no: string }[]   // existing rows keep their id
 }
@@ -41,7 +43,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
       const pids = (items ?? []).map((i: any) => i.product_id).filter(Boolean)
       const guard = pids.length ? pids : ['00000000-0000-0000-0000-000000000000']
       const [{ data: prods }, { data: existing }] = await Promise.all([
-        supabase.from('products').select('id,material_code,name,uom').in('id', guard),
+        (supabase as any).from('products').select('id,material_code,name,uom,china_code,barcode').in('id', guard),
         supabase.from('serial_numbers').select('id,serial_no,product_id,so_item_id').eq('client_id', currentClientId!).eq('reference_no', order?.so_no ?? '__none__')
       ])
       const pmap: Record<string, any> = {}; (prods ?? []).forEach((p: any) => { pmap[p.id] = p })
@@ -49,7 +51,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
         const p = pmap[it.product_id] ?? {}
         const serials = (existing ?? []).filter((s: any) => s.so_item_id === it.id || (!s.so_item_id && s.product_id === it.product_id))
           .map((s: any) => ({ id: s.id, serial_no: s.serial_no }))
-        return { item_id: it.id, product_id: it.product_id, code: p.material_code ?? '?', name: p.name ?? 'Unknown', uom: p.uom ?? '', ordered: num(it.qty), serials }
+        return { item_id: it.id, product_id: it.product_id, code: p.material_code ?? '?', name: p.name ?? 'Unknown', uom: p.uom ?? '', china: p.china_code ?? null, bar: p.barcode ?? null, ordered: num(it.qty), serials }
       }))
     } finally { setLoading(false) }
   }
@@ -175,18 +177,41 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
 
   const setValue = (i: number, v: string) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, serial_no: v } : r))
 
+  // Factory prefix (china code / barcode) -> material code, per product master.
+  const normVal = (raw: string) => normaliseSerial(raw, { material_code: line.code, china_code: line.china, barcode: line.bar }).serial
+
   // Returns false (and clears the field) when the value duplicates another
   // row in this grid or a serial already scanned on a different line.
   const commitRow = (i: number) => {
-    const v = rows[i].serial_no.trim()
+    const v = normVal(rows[i].serial_no)
+    if (v !== rows[i].serial_no) setValue(i, v)
     if (!v) return true
-    const dupInGrid = rows.some((r, idx) => idx !== i && r.serial_no.trim().toLowerCase() === v.toLowerCase())
+    const dupInGrid = rows.some((r, idx) => idx !== i && normVal(r.serial_no).toLowerCase() === v.toLowerCase())
     if (dupInGrid || otherSerials.has(v.toLowerCase())) {
       notify('error', `Serial already scanned: ${v}`)
       setValue(i, '')
       return false
     }
     return true
+  }
+
+  // Excel column / multi-line paste: fill this row, then the next empty ones.
+  const pasteFill = (i: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text')
+    if (!/[\r\n\t]/.test(text)) return
+    e.preventDefault()
+    const vals = text.split(/[\r\n\t]+/).map(s => normVal(s)).filter(Boolean)
+    setRows(rs => {
+      const out = [...rs]
+      let idx = i
+      for (const v of vals) {
+        while (idx < out.length && out[idx].serial_no.trim()) idx++
+        if (idx >= out.length) break
+        out[idx] = { ...out[idx], serial_no: v }
+        idx++
+      }
+      return out
+    })
   }
 
   const focusNextEmpty = (from: number) => {
@@ -198,14 +223,23 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
   const filledCount = rows.filter(r => r.serial_no.trim()).length
 
   const confirm = async () => {
-    for (let i = 0; i < rows.length; i++) { if (!commitRow(i)) return }
+    // Normalise everything first, then validate on the normalised values (a
+    // mid-loop setState wouldn't be visible to later iterations).
+    const normRows = rows.map(r => ({ ...r, serial_no: normVal(r.serial_no) }))
+    for (let i = 0; i < normRows.length; i++) {
+      const v = normRows[i].serial_no
+      if (!v) continue
+      const dup = normRows.some((r, idx) => idx !== i && r.serial_no.toLowerCase() === v.toLowerCase())
+      if (dup || otherSerials.has(v.toLowerCase())) { notify('error', `Serial already scanned: ${v}`); return }
+    }
+    setRows(normRows)
     const original = new Set(line.serials.map(s => s.id).filter(Boolean) as string[])
     // A previously-saved row only stays "kept" if it still has a value —
     // clearing a filled row marks its id for deletion.
-    const kept = new Set(rows.filter(r => r.serial_no.trim()).map(r => r.id).filter(Boolean) as string[])
+    const kept = new Set(normRows.filter(r => r.serial_no).map(r => r.id).filter(Boolean) as string[])
     const removedIds = [...original].filter(id => !kept.has(id))
     setBusy(true)
-    try { await onConfirm(rows.filter(r => r.serial_no.trim()), removedIds) }
+    try { await onConfirm(normRows.filter(r => r.serial_no), removedIds) }
     catch (e: any) { notify('error', e?.message ?? 'Could not save serials') }
     finally { setBusy(false) }
   }
@@ -238,7 +272,8 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
                     <input ref={el => { inputRefs.current[i] = el }} value={r.serial_no} disabled={!canEdit}
                       onChange={e => setValue(i, e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (commitRow(i)) focusNextEmpty(i) } }}
-                      placeholder="Scan or type serial…"
+                      onPaste={e => pasteFill(i, e)}
+                      placeholder="Scan or paste serial(s)…"
                       className="w-full rounded-md border border-brand-200/70 bg-surface px-2.5 py-1.5 font-mono text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken" />
                   </td>
                   {canEdit && (

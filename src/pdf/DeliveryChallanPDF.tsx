@@ -73,11 +73,24 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
             <Text style={s.sub}>Unloading Point: {challan.unloading_point || ''}</Text>
           </View>
           <View style={{ width: '43%' }}>
-            <Row k="Lock No #" v={challan.lock_no} />
-            <Row k="Driver #" v={[challan.driver_name, challan.driver_phone].filter(Boolean).join(' | ')} />
-            <Row k="Vehicle No#" v={vehicleNo} />
-            <Row k="Transport Vendor:" v={challan.transport_vendor} />
-            <Row k="Prepared by:" v={challan.prepared_by} />
+            {challan.delivery_method === 'courier' ? (
+              // Courier despatch: the vehicle/driver block is meaningless — show
+              // the courier and consignment/tracking number instead.
+              <>
+                <Row k="Sent via:" v="Courier" />
+                <Row k="Courier:" v={challan.courier_name} />
+                <Row k="Tracking / CN #" v={challan.courier_tracking_no} />
+                <Row k="Prepared by:" v={challan.prepared_by} />
+              </>
+            ) : (
+              <>
+                <Row k="Lock No #" v={challan.lock_no} />
+                <Row k="Driver #" v={[challan.driver_name, challan.driver_phone].filter(Boolean).join(' | ')} />
+                <Row k="Vehicle No#" v={vehicleNo} />
+                <Row k="Transport Vendor:" v={challan.transport_vendor} />
+                <Row k="Prepared by:" v={challan.prepared_by} />
+              </>
+            )}
           </View>
         </View>
 

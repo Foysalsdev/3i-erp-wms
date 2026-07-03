@@ -45,6 +45,8 @@ export function DeliveryChallan() {
   const [warehouses, setWarehouses] = useState<any[]>([])
   const [vehicles, setVehicles] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
+  const [transportVendors, setTransportVendors] = useState<any[]>([])
+  const [couriers, setCouriers] = useState<any[]>([])
 
   useEffect(() => {
     if (!currentClientId) return
@@ -52,6 +54,8 @@ export function DeliveryChallan() {
     supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
+    supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
+    ;(supabase as any).from('couriers').select('id,courier_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }: any) => setCouriers(data ?? []))
   }, [currentClientId])
 
   const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} - ${c.name}` : '-' }
@@ -97,7 +101,7 @@ export function DeliveryChallan() {
       if (gp_no) {
         await supabase.from('gate_passes').insert({
           client_id: currentClientId!, gate_pass_no: gp_no, challan_id: c.id, vehicle_id: c.vehicle_id || null,
-          driver_name: c.driver_name || null, gate_out_date: today(), status: 'issued',
+          driver_name: c.driver_name || null, transporter_id: c.transporter_id || null, gate_out_date: today(), status: 'issued',
           purpose: `Delivery - Challan ${c.challan_no}${c.invoice_no ? ', Invoice ' + c.invoice_no : ''}`
         } as any)
       }
@@ -179,13 +183,14 @@ export function DeliveryChallan() {
 
       {modal && (
         <ChallanForm record={editing} customers={customers} warehouses={warehouses} vehicles={vehicles} products={products}
+          transportVendors={transportVendors} couriers={couriers}
           clientId={currentClientId!} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
 
       {overview && (
         <ChallanOverview challan={overview} customerName={customerName(overview.customer_id)}
-          vehicles={vehicles} products={products}
+          vehicles={vehicles} products={products} transportVendors={transportVendors} couriers={couriers}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
           onClose={() => setOverview(null)} />
       )}
@@ -203,7 +208,7 @@ export function DeliveryChallan() {
 
 // `lockSo` opens the form straight from an order: customer / warehouse / invoice /
 // PO are pulled in and locked, and the lines default to the still-pending qty.
-export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, clientId, notify, onClose, onDone }: any) {
+export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, transportVendors = [], couriers = [], clientId, notify, onClose, onDone }: any) {
   const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport' })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [locations, setLocations] = useState<any[]>([])
@@ -215,6 +220,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const locked = !!lockSo && !record   // creating a new challan from a specific order
   const [vehs, setVehs] = useState<any[]>(vehicles)
   const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
+  const tVendorItems = transportVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
+  const courierItems = couriers.map((v: any) => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
   const createVehicle = async (name: string) => {
     const { data, error } = await (supabase as any).from('vehicles').insert({ client_id: clientId, vehicle_number: name }).select('*').single()
     if (error) { notify('error', error.message); return null }
@@ -276,9 +283,11 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         vehicle_id: mode === 'transport' ? (h.vehicle_id || null) : null,
         driver_name: mode === 'transport' ? (h.driver_name || null) : null,
         driver_phone: mode === 'transport' ? (h.driver_phone || null) : null,
+        transporter_id: mode === 'transport' ? (h.transporter_id || null) : null,
         transport_vendor: mode === 'transport' ? (h.transport_vendor || null) : null,
         lock_no: mode === 'transport' ? (h.lock_no || null) : null,
         // courier details
+        courier_id: mode === 'courier' ? (h.courier_id || null) : null,
         courier_name: mode === 'courier' ? (h.courier_name || null) : null,
         courier_tracking_no: mode === 'courier' ? (h.courier_tracking_no || null) : null,
         // optional extras
@@ -381,12 +390,20 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
               </Field>
               <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_name: e.target.value })} /></Field>
               <Field label="Driver Phone"><Input value={h.driver_phone ?? ''} onChange={e => set({ driver_phone: e.target.value })} /></Field>
-              <Field label="Transport Vendor"><Input value={h.transport_vendor ?? ''} onChange={e => set({ transport_vendor: e.target.value })} /></Field>
+              <Field label="Transport Vendor">
+                <Combobox items={tVendorItems} value={h.transporter_id ?? ''}
+                  onChange={(id: string) => { const v = transportVendors.find((x: any) => x.id === id); set({ transporter_id: id, transport_vendor: v?.name || '' }) }}
+                  placeholder="Search transporter by code or name" />
+              </Field>
               <Field label="Lock No"><Input value={h.lock_no ?? ''} onChange={e => set({ lock_no: e.target.value })} /></Field>
             </>
           ) : (
             <>
-              <Field label="Courier Name"><Input value={h.courier_name ?? ''} onChange={e => set({ courier_name: e.target.value })} placeholder="e.g. Sundarban / SA Paribahan" /></Field>
+              <Field label="Courier">
+                <Combobox items={courierItems} value={h.courier_id ?? ''}
+                  onChange={(id: string) => { const v = couriers.find((x: any) => x.id === id); set({ courier_id: id, courier_name: v?.name || '' }) }}
+                  placeholder="Search courier by code or name" />
+              </Field>
               <Field label="Tracking No"><Input value={h.courier_tracking_no ?? ''} onChange={e => set({ courier_tracking_no: e.target.value })} placeholder="AWB / tracking" /></Field>
             </>
           )}
@@ -424,7 +441,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
 
 // Read-only 360° view of a challan: header, linked SO & gate pass, line items
 // (with per-unit serials) and the full audit trail (WES: connected + audited).
-function ChallanOverview({ challan, customerName, vehicles, products, canEdit, onEdit, onClose }: any) {
+function ChallanOverview({ challan, customerName, vehicles, products, transportVendors = [], couriers = [], canEdit, onEdit, onClose }: any) {
   const [items, setItems] = useState<any[]>([])
   const [so, setSo] = useState<any>(null)
   const [gatePasses, setGatePasses] = useState<any[]>([])
@@ -439,6 +456,9 @@ function ChallanOverview({ challan, customerName, vehicles, products, canEdit, o
 
   const productName = (id: string) => products.find((p: any) => p.id === id)?.name ?? id
   const vehicleNo = vehicles.find((v: any) => v.id === challan.vehicle_id)?.vehicle_number
+  const carrier = challan.delivery_method === 'courier'
+    ? (couriers.find((c: any) => c.id === challan.courier_id)?.name || challan.courier_name || '—')
+    : (transportVendors.find((v: any) => v.id === challan.transporter_id)?.name || challan.transport_vendor || '—')
 
   const Stat = ({ label, value }: any) => (
     <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
@@ -454,6 +474,7 @@ function ChallanOverview({ challan, customerName, vehicles, products, canEdit, o
           <Stat label="SAP Invoice" value={challan.invoice_no || '—'} />
           <Stat label="PO No" value={challan.po_no || '—'} />
           <Stat label="Vehicle" value={vehicleNo || '—'} />
+          <Stat label={challan.delivery_method === 'courier' ? 'Courier' : 'Transport Vendor'} value={carrier} />
           <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge>{challan.posted_at && <Badge tone="positive">Stock out</Badge>}</div>} />
         </div>
 

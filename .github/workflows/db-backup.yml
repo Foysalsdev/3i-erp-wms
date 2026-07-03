@@ -1,0 +1,70 @@
+# Daily database backup for the Supabase project (free plan has no automatic
+# backups). Dumps roles, schema and data with the Supabase CLI and stores them
+# as a workflow artifact for 30 days. Restore steps: docs/BACKUP.md.
+#
+# Requires one repository secret:
+#   SUPABASE_DB_URL — the *session pooler* connection string
+#   (Dashboard → Connect → Session pooler). The direct db host is IPv6-only,
+#   which GitHub runners can't reach.
+#
+# Optional Google Drive mirror (set both secrets to enable, see docs/BACKUP.md):
+#   GDRIVE_SERVICE_ACCOUNT_JSON — Google Cloud service-account key (JSON)
+#   GDRIVE_FOLDER_ID            — ID of the Drive folder shared with that account
+name: Daily DB Backup
+
+on:
+  schedule:
+    - cron: '0 20 * * *' # 20:00 UTC = 02:00 Dhaka (BST, UTC+6)
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set (repo Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+          mkdir -p backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" --role-only -f backup/roles.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" --data-only --use-copy -f backup/data.sql
+          gzip -9 backup/*.sql
+          ls -lh backup/
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-run${{ github.run_number }}
+          path: backup/
+          retention-days: 30
+          if-no-files-found: error
+
+      # Mirrors the dump to Google Drive when the GDRIVE_* secrets are set;
+      # silently skipped otherwise. Keeps 30 days of daily folders.
+      - name: Upload to Google Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          if [ -z "$RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_CREDENTIALS" ] || [ -z "$RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID" ]; then
+            echo "GDRIVE_* secrets not set — skipping Google Drive upload"
+            exit 0
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+          rclone copy backup "gdrive:$(date -u +%Y-%m-%d)"
+          # Prune Drive copies older than 30 days so the folder doesn't grow forever.
+          rclone delete gdrive: --min-age 30d
+          rclone rmdirs gdrive: --leave-root || true
+          echo "Uploaded to Drive folder $(date -u +%Y-%m-%d)"

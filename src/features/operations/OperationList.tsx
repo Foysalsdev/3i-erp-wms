@@ -1,28 +1,63 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
+import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
-import { OP_RELATIONS, opColumns, type OpDef } from './registry'
+import { OP_RELATIONS, opColumns, type OpDef, type OpFieldDef } from './registry'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
+import { formatDate } from '@/lib/utils'
 import { OperationForm } from './OperationForm'
+
+// Display a field's value for the read-only view / PDF: relations show their
+// resolved label, dates are formatted, everything else prints as-is.
+const displayValue = (f: OpFieldDef, row: any): string => {
+  if (f.type === 'relation') return row.__rel?.[f.name] ?? '—'
+  const v = row[f.name]
+  if (v == null || v === '') return '—'
+  if (f.type === 'date') return formatDate(v)
+  return String(v)
+}
 
 export function OperationList({ def }: { def: OpDef }) {
   const { data, loading, refresh } = useCollection(def.table, { order: 'created_at' })
-  const { can, isPlatformAdmin, currentClientId } = useAuth()
+  const { can, isPlatformAdmin, currentClientId, clients } = useAuth()
+  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const notify = useUI(s => s.notify)
   const canEdit = can(`${def.permission}.create`) || can(`${def.permission}.edit`)
   const [q, setQ] = useUrlSearch()
   const [statusFilter, setStatusFilter] = useState('all')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  const [viewing, setViewing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [rel, setRel] = useState<Record<string, Record<string, string>>>({})
+
+  // Print the document header via the matching PDF template (gate pass / generic).
+  const printRow = async (row: any) => {
+    const meta = [
+      { label: `${def.singular} No`, value: String(row[def.numberField] ?? '') },
+      ...def.fields.filter(f => f.type !== 'image' && f.type !== 'textarea' && f.name !== 'status')
+        .map(f => ({ label: f.label, value: displayValue(f, row) })),
+      { label: 'Status', value: String(row.status ?? '') }
+    ]
+    const docNo = String(row[def.numberField] ?? '')
+    notify('info', 'Generating PDF…')
+    if (def.pdf === 'gatepass') {
+      const { downloadGatePassPDF } = await import('@/pdf/GatePassPDF')
+      await downloadGatePassPDF({ client: clientName, docNo, meta, lines: [] })
+    } else {
+      const { downloadDocPDF } = await import('@/pdf/DocumentPDF')
+      await downloadDocPDF({ client: clientName, title: def.title, docNo, meta, lines: [] })
+    }
+  }
 
   // Resolve id -> label maps for relation columns.
   useEffect(() => {
@@ -49,6 +84,8 @@ export function OperationList({ def }: { def: OpDef }) {
   }, [data, rel, q, statusFilter, def])
 
   const rowActions = (row: any): MenuItem[] => [
+    { icon: 'visibility', label: 'View', onClick: () => setViewing(row) },
+    ...(def.pdf ? [{ icon: 'print', label: 'Print', onClick: () => printRow(row) }] : []),
     ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(row); setModal(true) } }] : []),
     ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(row) }] : [])
   ]
@@ -61,7 +98,7 @@ export function OperationList({ def }: { def: OpDef }) {
       </div>
     )
   }
-  const columns = [...opColumns(def), ...(canEdit || isPlatformAdmin ? [actionCol] : [])]
+  const columns = [...opColumns(def), actionCol]
 
   return (
     <div className="space-y-4">
@@ -77,7 +114,7 @@ export function OperationList({ def }: { def: OpDef }) {
 
       <Card className="overflow-hidden">
         <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={canEdit ? (r => { setEditing(r); setModal(true) }) : undefined}
+          onRowClick={canEdit ? (r => { setEditing(r); setModal(true) }) : (r => setViewing(r))}
           emptyTitle={`No ${def.singular.toLowerCase()} records yet`} />
       </Card>
 
@@ -85,6 +122,40 @@ export function OperationList({ def }: { def: OpDef }) {
         <OperationForm def={def} record={editing} onCancel={() => setModal(false)}
           onDone={() => { setModal(false); refresh() }} />
       </Modal>
+
+      {viewing && (
+        <Modal open onClose={() => setViewing(null)} title={`${def.singular} — ${viewing[def.numberField] ?? ''}`} size="md">
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{def.singular} No</p>
+                <p className="mt-0.5 text-sm font-medium text-ink break-words">{viewing[def.numberField] ?? '—'}</p>
+              </div>
+              {def.fields.filter(f => f.type !== 'image').map(f => (
+                <div key={f.name} className={'min-w-0' + (f.type === 'textarea' ? ' col-span-2 sm:col-span-3' : '')}>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{f.label}</p>
+                  {f.name === 'status'
+                    ? <div className="mt-0.5"><Badge tone={def.statuses.find(s => s.value === viewing.status)?.tone ?? 'neutral'}>{def.statuses.find(s => s.value === viewing.status)?.label ?? viewing.status}</Badge></div>
+                    : <p className="mt-0.5 text-sm font-medium text-ink break-words">{displayValue(f, viewing)}</p>}
+                </div>
+              ))}
+            </div>
+
+            {def.fields.filter(f => f.type === 'image' && viewing[f.name]).map(f => (
+              <div key={f.name}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">{f.label}</p>
+                <img src={viewing[f.name]} alt={f.label} className="max-h-72 rounded-lg border border-surface-line object-contain" />
+              </div>
+            ))}
+
+            <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
+              <Button variant="ghost" onClick={() => setViewing(null)}>Close</Button>
+              {def.pdf && <Button variant="secondary" icon="print" onClick={() => printRow(viewing)}>Print</Button>}
+              {canEdit && <Button icon="edit" onClick={() => { const r = viewing; setViewing(null); setEditing(r); setModal(true) }}>Edit</Button>}
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${def.singular} · ${deleting[def.numberField]}` : undefined}

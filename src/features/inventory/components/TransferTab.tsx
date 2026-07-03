@@ -62,22 +62,16 @@ function TransferModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
     try {
       const prod = products.find(p => p.id === f.product_id)
       const ref = `Transfer ${prod?.material_code ?? ''}`.trim()
-      // 1) remove from source
-      const out = await (supabase as any).rpc('post_stock_movement', {
-        p_client: clientId, p_product: f.product_id, p_warehouse: f.from_warehouse_id,
-        p_location: f.from_location_id || null, p_stock_status: f.stock_status,
-        p_qty_in: 0, p_qty_out: qty, p_movement_type: 'TRANSFER', p_reference_type: 'TRANSFER',
-        p_reference_no: ref, p_remarks: f.remarks || 'Stock transfer (out)'
+      // Both legs post in ONE database transaction — a half-done transfer
+      // (deducted from source, never added to destination) cannot happen.
+      const { error } = await (supabase as any).rpc('post_stock_transfer', {
+        p_client: clientId, p_product: f.product_id,
+        p_from_warehouse: f.from_warehouse_id, p_from_location: f.from_location_id || null,
+        p_to_warehouse: f.to_warehouse_id, p_to_location: f.to_location_id || null,
+        p_stock_status: f.stock_status, p_qty: qty,
+        p_reference_no: ref, p_remarks: f.remarks || null
       })
-      if (out.error) throw out.error
-      // 2) add to destination
-      const inn = await (supabase as any).rpc('post_stock_movement', {
-        p_client: clientId, p_product: f.product_id, p_warehouse: f.to_warehouse_id,
-        p_location: f.to_location_id || null, p_stock_status: f.stock_status,
-        p_qty_in: qty, p_qty_out: 0, p_movement_type: 'TRANSFER', p_reference_type: 'TRANSFER',
-        p_reference_no: ref, p_remarks: f.remarks || 'Stock transfer (in)'
-      })
-      if (inn.error) throw inn.error
+      if (error) throw error
       notify('success', 'Stock transfer posted')
       onDone()
     } catch (e: any) {

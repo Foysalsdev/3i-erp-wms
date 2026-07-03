@@ -21,6 +21,7 @@ export const MODULES: NavModule[] = [
     { key: 'cycle-count', label: 'Cycle Count' }, { key: 'physical-verification', label: 'Physical Verification' },
     { key: 'damaged', label: 'Damaged Stock' }, { key: 'quarantine', label: 'Quarantine Stock' },
     { key: 'hold', label: 'Hold Stock' }, { key: 'serials', label: 'Serial Tracking' },
+    { key: 'snapshot', label: 'Snapshots' },
     { key: 'batch', label: 'Lot / Batch Tracking' }, { key: 'fifo', label: 'FIFO' }, { key: 'fefo', label: 'FEFO' }
   ]},
   { key: 'inbound', label: 'Inbound Operations', icon: 'login', path: '/inbound', permission: 'inbound.view', tabs: [

@@ -5,9 +5,13 @@
 :root {
   --header-h: 64px; --sidebar-w: 264px; --sidebar-w-collapsed: 76px;
   color-scheme: light;
-  --bg-sunken: 247 247 247; --surface: 255 255 255; --line: 233 233 230;
-  --ink: 33 35 38; --ink-soft: 99 102 108; --ink-faint: 150 153 159;
-  --sidebar: 255 255 255; --sidebar-fg: 33 35 38; --sidebar-muted: 120 123 130;
+  /* Crisp light theme: pure-white canvas, pure-black primary text. The page
+     itself is pure white (body uses --surface); --bg-sunken stays a whisper of
+     gray ONLY for hover states, chips and table headers, which would vanish
+     on pure white. Separation otherwise comes from hairline borders. */
+  --bg-sunken: 246 246 245; --surface: 255 255 255; --line: 228 228 226;
+  --ink: 0 0 0; --ink-soft: 82 85 90; --ink-faint: 140 143 148;
+  --sidebar: 255 255 255; --sidebar-fg: 0 0 0; --sidebar-muted: 110 113 119;
   --sidebar-active: 253 246 230; --sidebar-active-fg: 124 83 0;
 }
 .dark {
@@ -20,7 +24,7 @@
 
 * { -webkit-tap-highlight-color: transparent; }
 html, body, #root { height: 100%; }
-body { @apply bg-surface-sunken text-ink font-sans antialiased; margin: 0; }
+body { @apply bg-surface text-ink font-sans antialiased; margin: 0; }
 /* One typeface everywhere (Notion/Linear style): headings differ by weight and
    tracking, not by family. */
 h1,h2,h3,h4 { @apply font-sans font-semibold tracking-tight; }

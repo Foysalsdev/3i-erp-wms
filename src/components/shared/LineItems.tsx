@@ -150,7 +150,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitAdd() } }}
           className="fiori-input w-28 text-right" />
         <button type="button" onClick={commitAdd} disabled={!valid}
-          className="inline-flex h-[42px] items-center gap-1 rounded-lg bg-brand-500 px-4 text-sm font-medium text-coal-900 disabled:opacity-40">
+          className="inline-flex h-[42px] items-center gap-1 rounded-lg bg-brand-400 px-4 text-sm font-medium text-coal-900 hover:bg-brand-300 disabled:opacity-40">
           <Icon name="add" className="text-[18px]" /> Add
         </button>
       </div>

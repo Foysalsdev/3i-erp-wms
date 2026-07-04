@@ -28,7 +28,7 @@ const OPERATIONS_MODULES = ['transport', 'finance']
 const PLACEHOLDERS = ['asset']
 
 export default function App() {
-  const { session, loading, init } = useAuth()
+  const { session, loading, contextReady, init } = useAuth()
   useEffect(() => { init() }, [init])
   // Preload the landing-page chunk while auth is still initialising, so after
   // the boot splash the dashboard renders straight into its own data loader
@@ -36,7 +36,10 @@ export default function App() {
   useEffect(() => { import('@/features/dashboard/DashboardPage') }, [])
 
   if (loading) return <WhirlpoolLoader fullScreen />
-  if (!session) return <><LoginPage /><Toaster /></>
+  // Stay on the login screen (its button spinner is the only loader) until the
+  // profile/permission context is fully loaded — entering the shell earlier
+  // flashes "Access restricted" and a cascade of skeletons.
+  if (!session || !contextReady) return <><LoginPage /><Toaster /></>
 
   return (
     <>

@@ -14,6 +14,10 @@ interface AuthState {
   permissions: Set<string>
   isPlatformAdmin: boolean
   loading: boolean
+  // True once profile/clients/permissions have loaded for the current session.
+  // The app must not enter the shell before this — otherwise the user sees a
+  // permission-less flash ("Access restricted") and a cascade of loaders.
+  contextReady: boolean
   init: () => Promise<void>
   loadContext: () => Promise<void>
   setClient: (id: string) => void
@@ -32,6 +36,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   permissions: new Set(),
   isPlatformAdmin: false,
   loading: true,
+  contextReady: false,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -40,8 +45,10 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({ loading: false })
     supabase.auth.onAuthStateChange(async (_e, session) => {
       set({ session })
-      if (session) await get().loadContext()
-      else set({ profile: null, clients: [], currentClientId: null, permissions: new Set() })
+      // signIn() already awaits loadContext, and token refreshes don't change
+      // the context — only load here when it hasn't been loaded yet.
+      if (session) { if (!get().contextReady) await get().loadContext() }
+      else set({ profile: null, clients: [], currentClientId: null, permissions: new Set(), contextReady: false })
     })
   },
 
@@ -79,7 +86,8 @@ export const useAuth = create<AuthState>((set, get) => ({
       clients: list,
       currentClientId: current,
       permissions: perms,
-      isPlatformAdmin: !!profile?.is_platform_admin
+      isPlatformAdmin: !!profile?.is_platform_admin,
+      contextReady: true
     })
   },
 

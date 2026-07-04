@@ -10,10 +10,11 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 // shifts on hover/press only — no blur, glow or scale, which also keeps
 // low-end mobile GPUs out of the hot path.
 const styles: Record<Variant, string> = {
-  primary: 'bg-brand-500 text-coal-900 shadow-soft hover:bg-brand-400 active:bg-brand-600',
+  // A lighter gold reads softer on the pure-white canvas; press deepens it.
+  primary: 'bg-brand-400 text-coal-900 shadow-soft hover:bg-brand-300 active:bg-brand-500',
   secondary: 'bg-surface text-ink ring-1 ring-inset ring-surface-line hover:bg-surface-sunken active:bg-surface-sunken',
   ghost: 'text-ink-soft hover:bg-surface-sunken hover:text-ink active:bg-surface-sunken',
-  danger: 'bg-bad text-white hover:brightness-110 active:brightness-90'
+  danger: 'bg-bad/90 text-white hover:bg-bad active:brightness-90'
 }
 export function Button({ variant = 'primary', icon, loading, size = 'md', className, children, disabled, ...rest }: Props) {
   return (

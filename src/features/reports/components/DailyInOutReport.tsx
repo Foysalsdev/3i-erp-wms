@@ -201,7 +201,7 @@ export function DailyInOutReport() {
           <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} className="rounded" /> All SKUs
         </label>
         <div className="ml-auto flex gap-2">
-          <button onClick={exportExcel} className="inline-flex items-center gap-1 rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-ink hover:bg-brand-600">Excel (full report)</button>
+          <button onClick={exportExcel} className="inline-flex items-center gap-1 rounded-lg bg-brand-400 px-3 py-1.5 text-sm font-semibold text-coal-900 hover:bg-brand-300">Excel (full report)</button>
           <button onClick={() => exportCsvPdf('csv')} className="rounded-lg border border-surface-line px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-sunken">CSV</button>
           <button onClick={() => exportCsvPdf('pdf')} className="rounded-lg border border-surface-line px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-sunken">PDF</button>
         </div>

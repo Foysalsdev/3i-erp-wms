@@ -132,10 +132,10 @@ export const OPERATIONS: Record<string, OpDef> = {
     listColumns: []
   },
   'purchase-return': {
-    key: 'purchase-return', module: 'inbound', table: 'purchase_returns', docType: 'PRET', numberField: 'return_no',
+    key: 'purchase-return', module: 'inbound', table: 'purchase_returns', docType: 'PRET', numberField: 'doc_no',
     title: 'Purchase Return', singular: 'Purchase Return', icon: 'assignment_return', permission: 'inbound',
     statuses: [S.draft, S.pending, S.approved, S.completed, S.cancelled], openStatuses: ['draft', 'pending', 'approved'],
-    searchFields: ['return_no', 'reason'],
+    searchFields: ['doc_no', 'reason'],
     fields: [
       { name: 'supplier_id', label: 'Supplier', type: 'relation', relation: 'suppliers' },
       { name: 'warehouse_id', label: 'Warehouse', type: 'relation', relation: 'warehouses' },

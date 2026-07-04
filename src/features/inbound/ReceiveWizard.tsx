@@ -131,7 +131,7 @@ export function ReceiveTab() {
 
       {expectedPrs.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Expected — from purchase requisitions</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Expected — from inward requisitions</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {expectedPrs.map((p: any) => (
               <button key={p.id} type="button" onClick={() => canEdit && setWizard({ pr: p })}
@@ -150,7 +150,7 @@ export function ReceiveTab() {
 
       {pendingGrns.length === 0 && expectedPrs.length === 0 && (
         <Card className="p-2"><EmptyState icon="move_to_inbox" title="Nothing waiting to be received"
-          hint="Pending purchase requisitions and unposted GRNs appear here. Use Receive Now for a direct receipt." /></Card>
+          hint="Pending inward requisitions and unposted GRNs appear here. Use Receive Now for a direct receipt." /></Card>
       )}
     </div>
   )
@@ -399,7 +399,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
                 <Combobox items={whItems} value={h.warehouse_id} onChange={(id: string) => set({ warehouse_id: id })} placeholder="Search warehouse" />
               </Field>
               <Field label="Receipt Date" required><Input type="date" value={h.receipt_date} onChange={e => set({ receipt_date: e.target.value })} /></Field>
-              <Field label="Reference (PR / other)"><Input value={h.reference_no} onChange={e => set({ reference_no: e.target.value })} placeholder="e.g. PR number" /></Field>
+              <Field label="Reference (requisition / other)"><Input value={h.reference_no} onChange={e => set({ reference_no: e.target.value })} placeholder="e.g. requisition number" /></Field>
             </div>
             <details className="rounded-lg border border-surface-line px-3 py-2" open={!!(h.gate_vehicle_no || h.gate_driver)}>
               <summary className="cursor-pointer select-none text-sm font-semibold text-ink">

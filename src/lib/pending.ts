@@ -101,10 +101,10 @@ export const PENDING_RULES: PendingRule[] = [
     route: () => '/outbound/pod-upload', ageFrom: r => r.challan_date
   },
   {
-    key: 'pr-open', icon: 'assignment', label: 'PR to receive', owner: 'Inbound', perms: ['inbound.create', 'inbound.edit'], slaDays: 7,
+    key: 'pr-open', icon: 'assignment', label: 'Requisition to receive', owner: 'Inbound', perms: ['inbound.create', 'inbound.edit'], slaDays: 7,
     fetch: c => supabase.from('purchase_requisitions').select('pr_no,order_date').eq('client_id', c)
       .in('status', ['pending', 'approved']).order('order_date').limit(50).then(({ data }) => data ?? []),
-    docNo: r => r.pr_no, matter: () => 'Goods expected — receive against this PR',
+    docNo: r => r.pr_no, matter: () => 'Goods expected — receive against this requisition',
     route: () => '/inbound/receive', ageFrom: r => r.order_date
   },
   {

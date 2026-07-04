@@ -48,11 +48,11 @@ export function InboundPurchaseRequisitions() {
   const productLabel = (id: string) => { const p = products.find(x => x.id === id); return p ? `${p.material_code} — ${p.name}` : '—' }
 
   const prMeta = (r: any) => [
-    { label: 'PR No', value: r.pr_no ?? '' },
+    { label: 'Requisition No', value: r.pr_no ?? '' },
     { label: 'Date', value: formatDate(r.order_date) },
-    { label: 'Supplier', value: supplierName(r.supplier_id) },
+    { label: 'Source', value: supplierName(r.supplier_id) },
     { label: 'Warehouse', value: warehouseName(r.warehouse_id) },
-    { label: 'Required By', value: r.expected_date ? formatDate(r.expected_date) : '—' },
+    { label: 'Expected By', value: r.expected_date ? formatDate(r.expected_date) : '—' },
     { label: 'Status', value: r.status ?? '' }
   ]
 
@@ -64,14 +64,13 @@ export function InboundPurchaseRequisitions() {
   // Read-only view: pull the lines, then open the overview modal.
   const openView = async (r: any) => setViewing({ ...r, __items: await fetchItems(r.id) })
 
-  // Print: same generic document PDF used by Sales Order & inbound docs.
+  // Print: an inward requisition is a "goods expected" note — no purchase
+  // pricing, so the PDF shows just the products and quantities (showPrice off).
   const printPR = async (r: any) => {
     try {
       const items = await fetchItems(r.id)
-      const lines = items.map((it: any) => ({
-        name: productLabel(it.product_id), qty: Number(it.qty) || 0, price: Number(it.unit_price) || 0
-      }))
-      await downloadDocPDF({ client: clientName, title: 'Purchase Requisition', docNo: r.pr_no ?? '', meta: prMeta(r), lines, showPrice: true })
+      const lines = items.map((it: any) => ({ name: productLabel(it.product_id), qty: Number(it.qty) || 0 }))
+      await downloadDocPDF({ client: clientName, title: 'Inward Requisition', docNo: r.pr_no ?? '', meta: prMeta(r), lines })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate PDF — check the company logo URL in Settings')
     }
@@ -89,11 +88,11 @@ export function InboundPurchaseRequisitions() {
   }
 
   const columns = [
-    { key: 'pr_no', header: 'PR No', accessor: (r: any) => r.pr_no, sortable: true, className: 'font-medium' },
-    { key: 'supplier', header: 'Supplier', render: (r: any) => supplierName(r.supplier_id) },
+    { key: 'pr_no', header: 'Requisition No', accessor: (r: any) => r.pr_no, sortable: true, className: 'font-medium' },
+    { key: 'supplier', header: 'Source', render: (r: any) => supplierName(r.supplier_id) },
     { key: 'order_date', header: 'Date', render: (r: any) => formatDate(r.order_date) },
+    { key: 'expected_date', header: 'Expected By', render: (r: any) => r.expected_date ? formatDate(r.expected_date) : '—' },
     { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
-    { key: 'total_amount', header: 'Amount', accessor: (r: any) => formatNumber(r.total_amount), className: 'text-right' },
     { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
@@ -113,14 +112,14 @@ export function InboundPurchaseRequisitions() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search PR…" /></div>
+        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search requisition…" /></div>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
-        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Purchase Requisition</Button>}
+        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Inward Requisition</Button>}
       </div>
 
       <Card className="overflow-hidden">
         <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={canEdit ? openEdit : openView} emptyTitle="No purchase requisitions yet" />
+          onRowClick={canEdit ? openEdit : openView} emptyTitle="No inward requisitions yet" />
       </Card>
 
       {modal && (
@@ -137,7 +136,7 @@ export function InboundPurchaseRequisitions() {
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
-        name={deleting ? `PR · ${deleting.pr_no}` : undefined}
+        name={deleting ? `Requisition · ${deleting.pr_no}` : undefined}
         onConfirm={async () => {
           const res = await supabase.from('purchase_requisitions').delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
@@ -157,11 +156,11 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
     setSaving(true)
     try {
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
-      const totalAmount = lines.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.unit_price) || 0), 0)
+      // Inward requisition = goods-expected note, no purchase pricing.
       const header = {
         client_id: clientId, supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
         order_date: h.order_date || today(), expected_date: h.expected_date || null,
-        total_qty: totalQty, total_amount: totalAmount, status: h.status || 'pending', remarks: h.remarks || null
+        total_qty: totalQty, total_amount: 0, status: h.status || 'pending', remarks: h.remarks || null
       }
       let prId = record?.id
       if (record) {
@@ -169,7 +168,7 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
         if (error) throw error
       } else {
         const pr_no = await nextDocNumber(clientId, 'PR')
-        if (!pr_no) throw new Error('Could not generate PR number')
+        if (!pr_no) throw new Error('Could not generate requisition number')
         const { data, error } = await supabase.from('purchase_requisitions').insert({ ...header, pr_no }).select('id').single()
         if (error) throw error
         prId = data.id
@@ -177,28 +176,27 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
       await supabase.from('purchase_requisition_items').delete().eq('pr_id', prId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
         client_id: clientId, pr_id: prId, product_id: r.product_id,
-        qty: Number(r.qty) || 0, unit_price: Number(r.unit_price) || 0,
-        line_total: (Number(r.qty) || 0) * (Number(r.unit_price) || 0)
+        qty: Number(r.qty) || 0, unit_price: 0, line_total: 0
       }))
       if (payloadLines.length) {
         const { error } = await supabase.from('purchase_requisition_items').insert(payloadLines)
         if (error) throw error
       }
-      notify('success', `Purchase Requisition ${record ? 'updated' : 'created'}`)
+      notify('success', `Inward requisition ${record ? 'updated' : 'created'}`)
       onDone()
     } catch (e: any) {
-      notify('error', e?.message ?? 'Could not save purchase requisition')
+      notify('error', e?.message ?? 'Could not save requisition')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <Modal open onClose={onClose} title={`${record ? 'Edit' : 'New'} Purchase Requisition`} size="lg">
+    <Modal open onClose={onClose} title={`${record ? 'Edit' : 'New'} Inward Requisition`} size="lg">
       <div className="space-y-4">
-        {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">PR No: </span><span className="font-semibold">{record.pr_no}</span></div>}
+        {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Requisition No: </span><span className="font-semibold">{record.pr_no}</span></div>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Supplier">
+          <Field label="Source">
             <Select value={h.supplier_id ?? ''} onChange={e => set({ supplier_id: e.target.value })}>
               <option value="">Select…</option>
               {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.supplier_code} — {s.name}</option>)}
@@ -211,7 +209,7 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
             </Select>
           </Field>
           <Field label="Date" required><Input type="date" value={h.order_date ?? ''} onChange={e => set({ order_date: e.target.value })} /></Field>
-          <Field label="Required By"><Input type="date" value={h.expected_date ?? ''} onChange={e => set({ expected_date: e.target.value })} /></Field>
+          <Field label="Expected By"><Input type="date" value={h.expected_date ?? ''} onChange={e => set({ expected_date: e.target.value })} /></Field>
           <Field label="Status" required>
             <Select value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
               {PR_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -239,25 +237,25 @@ function PROverview({ pr, supplierName, warehouseName, productLabel, canEdit, on
     <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
   )
   return (
-    <Modal open onClose={onClose} title={`Purchase Requisition — ${pr.pr_no}`} size="lg">
+    <Modal open onClose={onClose} title={`Inward Requisition — ${pr.pr_no}`} size="lg">
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
-          <Stat label="Supplier" value={supplierName} />
+          <Stat label="Source" value={supplierName} />
           <Stat label="Warehouse" value={warehouseName} />
           <Stat label="Date" value={formatDate(pr.order_date)} />
-          <Stat label="Required By" value={pr.expected_date ? formatDate(pr.expected_date) : '—'} />
+          <Stat label="Expected By" value={pr.expected_date ? formatDate(pr.expected_date) : '—'} />
           <Stat label="Status" value={<Badge tone={tone(pr.status)}>{pr.status}</Badge>} />
-          <Stat label="Total Amount" value={formatNumber(pr.total_amount)} />
+          <Stat label="Total Qty" value={formatNumber(pr.total_qty)} />
         </div>
 
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Items</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Items expected</p>
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
               items.map((it: any, i: number) => (
                 <div key={it.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{productLabel(it.product_id)}</span>
-                  <span className="shrink-0 text-ink-soft">{formatNumber(it.qty)} × {formatNumber(it.unit_price)} = <b className="text-ink">{formatNumber(Number(it.qty) * Number(it.unit_price))}</b></span>
+                  <span className="shrink-0 font-semibold text-ink">{formatNumber(it.qty)} pcs</span>
                 </div>
               ))}
           </div>

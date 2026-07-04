@@ -26,7 +26,7 @@ export const MODULES: NavModule[] = [
   ]},
   { key: 'inbound', label: 'Inbound Operations', icon: 'login', path: '/inbound', permission: 'inbound.view', tabs: [
     { key: 'receive', label: 'Receive' },
-    { key: 'purchase-requisition', label: 'Purchase Requisition' }, { key: 'grn', label: 'Goods Receipt Note (GRN)' },
+    { key: 'purchase-requisition', label: 'Inward Requisition' }, { key: 'grn', label: 'Goods Receipt Note (GRN)' },
     { key: 'putaway', label: 'Putaway' }, { key: 'purchase-return', label: 'Purchase Return' },
     { key: 'supplier-invoice', label: 'Supplier Invoice' }
   ]},

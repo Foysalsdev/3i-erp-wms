@@ -148,24 +148,27 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   }
 
   const printDoc = async (doc: any) => {
-    const { data } = await supabase.from(config.itemTable as any).select('*').eq(config.itemFK, doc.id)
-    const lines = (data ?? []).map((r: any) => ({ name: prodMap[r.product_id] ?? r.product_id, qty: Number(r[config.qtyField]), price: Number(r.unit_price ?? 0) }))
-    const extraMeta = (config.extraFields ?? []).filter(f => doc[f.name] && showExtra(f, doc))
-      .map(f => ({ label: f.label, value: f.kind === 'relation' ? (relMap(f.relation)[doc[f.name]] ?? doc[f.name]) : String(doc[f.name]) }))
-    const baseMeta = [
-      { label: 'Date', value: formatDate(doc[config.dateField]) },
-      { label: 'Status', value: doc.status },
-      ...(party ? [{ label: partyLabel, value: partyMap[doc[partyField]] ?? '—' }] : []),
-      { label: 'Warehouse', value: warehouses.find(w => w.id === doc.warehouse_id)?.label ?? '—' }
-    ]
-    if (config.pdfKind === 'gatepass') {
-      const ref = config.source ? sources.find(s => s.id === doc[config.source!.fk])?.doc_no : undefined
-      const meta = [...baseMeta.filter(m => m.label !== 'Status'), ...extraMeta, ...(ref ? [{ label: 'Delivery Challan', value: ref }] : [])]
-      downloadGatePassPDF({ client: clientName, docNo: doc.doc_no ?? '', meta, lines })
-    } else {
-      downloadDocPDF({ client: clientName, title: config.title, docNo: doc.doc_no ?? '', meta: [...baseMeta, ...extraMeta], lines, showPrice: config.showPrice })
+    try {
+      const { data } = await supabase.from(config.itemTable as any).select('*').eq(config.itemFK, doc.id)
+      const lines = (data ?? []).map((r: any) => ({ name: prodMap[r.product_id] ?? r.product_id, qty: Number(r[config.qtyField]), price: Number(r.unit_price ?? 0) }))
+      const extraMeta = (config.extraFields ?? []).filter(f => doc[f.name] && showExtra(f, doc))
+        .map(f => ({ label: f.label, value: f.kind === 'relation' ? (relMap(f.relation)[doc[f.name]] ?? doc[f.name]) : String(doc[f.name]) }))
+      const baseMeta = [
+        { label: 'Date', value: formatDate(doc[config.dateField]) },
+        { label: 'Status', value: doc.status },
+        ...(party ? [{ label: partyLabel, value: partyMap[doc[partyField]] ?? '—' }] : []),
+        { label: 'Warehouse', value: warehouses.find(w => w.id === doc.warehouse_id)?.label ?? '—' }
+      ]
+      if (config.pdfKind === 'gatepass') {
+        const ref = config.source ? sources.find(s => s.id === doc[config.source!.fk])?.doc_no : undefined
+        const meta = [...baseMeta.filter(m => m.label !== 'Status'), ...extraMeta, ...(ref ? [{ label: 'Delivery Challan', value: ref }] : [])]
+        await downloadGatePassPDF({ client: clientName, docNo: doc.doc_no ?? '', meta, lines })
+      } else {
+        await downloadDocPDF({ client: clientName, title: config.title, docNo: doc.doc_no ?? '', meta: [...baseMeta, ...extraMeta], lines, showPrice: config.showPrice })
+      }
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate PDF')
     }
-    notify('info', 'Generating PDF…')
   }
 
   const del = async (doc: any) => {

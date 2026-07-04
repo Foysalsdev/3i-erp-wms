@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { downloadBlob } from '@/lib/utils'
 
 export interface PreworkLine { sl: number; code: string; name: string; qty: number; basic: number; vat: number; total: number }
 export interface PreworkSerial { model: string; serial: string }
@@ -68,14 +69,7 @@ export async function downloadPrework(input: PreworkInput) {
 
   const buf = await wb.xlsx.writeBuffer()
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${safe(input.soNo)}_prework.xlsx`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  downloadBlob(blob, `${safe(input.soNo)}_prework.xlsx`)
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100

@@ -66,12 +66,15 @@ export function InboundPurchaseRequisitions() {
 
   // Print: same generic document PDF used by Sales Order & inbound docs.
   const printPR = async (r: any) => {
-    const items = await fetchItems(r.id)
-    const lines = items.map((it: any) => ({
-      name: productLabel(it.product_id), qty: Number(it.qty) || 0, price: Number(it.unit_price) || 0
-    }))
-    notify('info', 'Generating PDF…')
-    await downloadDocPDF({ client: clientName, title: 'Purchase Requisition', docNo: r.pr_no ?? '', meta: prMeta(r), lines, showPrice: true })
+    try {
+      const items = await fetchItems(r.id)
+      const lines = items.map((it: any) => ({
+        name: productLabel(it.product_id), qty: Number(it.qty) || 0, price: Number(it.unit_price) || 0
+      }))
+      await downloadDocPDF({ client: clientName, title: 'Purchase Requisition', docNo: r.pr_no ?? '', meta: prMeta(r), lines, showPrice: true })
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate PDF — check the company logo URL in Settings')
+    }
   }
 
   const rows = useMemo(() => {

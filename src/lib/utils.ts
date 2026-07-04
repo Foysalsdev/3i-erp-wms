@@ -2,6 +2,21 @@ import { clsx, type ClassValue } from 'clsx'
 
 export const cn = (...inputs: ClassValue[]) => clsx(inputs)
 
+// Triggers a browser download for a generated Blob (PDF/CSV/XLSX exports).
+// The anchor MUST be attached to the document for the click to reliably
+// start a download on mobile browsers (Android Chrome/WebView silently do
+// nothing for a detached anchor) — and the object URL is revoked on a delay
+// so the download has actually started before it's freed.
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 4000)
+}
+
 export const formatNumber = (n: number | null | undefined, dp = 0) =>
   (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
 

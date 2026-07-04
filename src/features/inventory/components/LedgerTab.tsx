@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Spinner } from '@/components/ui/States'
 import { formatNumber, formatDateTime } from '@/lib/utils'
+import { movementLabel } from '@/lib/movements'
 
 export function LedgerTab() {
   const clientId = useAuth(s => s.currentClientId)
@@ -36,7 +37,7 @@ export function LedgerTab() {
 
   const columns = [
     { key: 'date', header: 'Date', render: (r: any) => formatDateTime(r.created_at), sortable: true, accessor: (r: any) => r.created_at },
-    { key: 'type', header: 'Movement', render: (r: any) => <Badge tone="info">{r.movement_type}</Badge> },
+    { key: 'type', header: 'Movement', render: (r: any) => <Badge tone="info">{movementLabel(r.movement_type)}</Badge> },
     { key: 'code', header: 'Material', accessor: (r: any) => r.products?.material_code, className: 'font-medium' },
     { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name },
     { key: 'wh', header: 'WH', accessor: (r: any) => r.warehouses?.code },

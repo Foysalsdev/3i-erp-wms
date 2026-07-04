@@ -125,9 +125,12 @@ export function OutboundSalesOrders() {
   ]
 
   const printSO = async (r: any) => {
-    const lines = await soLines(r)
-    downloadDocPDF({ client: clientName, title: 'Sales Order', docNo: r.so_no ?? '', meta: soMeta(r), lines, showPrice: true })
-    notify('info', 'Generating PDF…')
+    try {
+      const lines = await soLines(r)
+      await downloadDocPDF({ client: clientName, title: 'Sales Order', docNo: r.so_no ?? '', meta: soMeta(r), lines, showPrice: true })
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate PDF')
+    }
   }
 
   // "Mail" opens the user's email client pre-filled to the customer; the PDF is
@@ -465,6 +468,7 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
 }
 
 function SOOverview({ so, customerName, products, customers, vehicles, ownerName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
+  const notify = useUI(s => s.notify)
   const [tab, setTab] = useState<'details' | 'scan'>('details')
   const [items, setItems] = useState<any[]>([])
   const [deliveries, setDeliveries] = useState<any[]>([])
@@ -581,7 +585,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-ink-soft">
                       {formatDate(d.challan_date)} {d.posted_at ? <Badge tone="positive">Stock out</Badge> : <Badge tone={tone(d.status)}>{d.status}</Badge>}
-                      <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products })}
+                      <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products }).catch((e: any) => notify('error', e?.message ?? 'Could not generate PDF'))}
                         className="rounded-lg p-1 text-ink-faint hover:bg-surface-sunken hover:text-brand-600"><Icon name="download" className="text-[16px]" /></button>
                     </span>
                   </div>

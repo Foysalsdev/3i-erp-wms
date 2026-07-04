@@ -41,13 +41,16 @@ export function MasterList({ def }: { def: MasterDef }) {
   }, [data, q, def])
 
   const printRecord = async (row: any) => {
-    const fields = def.fields.filter(f => f.type !== 'image').map(f => ({ label: f.label, value: fieldDisplay(def, row, f.name, rel) }))
-    notify('info', 'Generating PDF…')
-    const { downloadRecordPDF } = await import('@/pdf/RecordPDF')
-    await downloadRecordPDF({
-      client: clientName, title: row[def.nameField], code: `${def.singular} · ${row[def.codeField]}`,
-      photo: def.imageField ? row[def.imageField] : undefined, fields
-    })
+    try {
+      const fields = def.fields.filter(f => f.type !== 'image').map(f => ({ label: f.label, value: fieldDisplay(def, row, f.name, rel) }))
+      const { downloadRecordPDF } = await import('@/pdf/RecordPDF')
+      await downloadRecordPDF({
+        client: clientName, title: row[def.nameField], code: `${def.singular} · ${row[def.codeField]}`,
+        photo: def.imageField ? row[def.imageField] : undefined, fields
+      })
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate PDF')
+    }
   }
 
   // The edit/create form modal — rendered in both list and profile views so

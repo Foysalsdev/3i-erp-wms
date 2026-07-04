@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
-import { DocTimeline } from '@/components/shared/DocTimeline'
+import { TrailPanel } from '@/components/shared/TrailPanel'
 import { DocVersions } from '@/components/shared/DocVersions'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -613,8 +613,8 @@ function ChallanOverview({ challan, customerName, vehicles, products, transportV
           </div>
         </Section>
 
-        <Section title="Activity — who, when & what changed">
-          <DocTimeline table="delivery_challans" recordId={challan.id} />
+        <Section title="Activity & stock movement">
+          <TrailPanel table="delivery_challans" recordId={challan.id} referenceNo={challan.challan_no} />
         </Section>
 
         <Section title="Document Versions">

@@ -16,6 +16,7 @@ import { formatNumber, formatDate } from '@/lib/utils'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
 import { GrnSerialScan } from './GrnSerialScan'
+import { TrailPanel } from '@/components/shared/TrailPanel'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'approved' ? 'positive' : s === 'completed' ? 'info' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : 'critical'
@@ -42,6 +43,7 @@ export function InboundGRN() {
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  const [viewing, setViewing] = useState<any>(null)
   const [scanning, setScanning] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -105,6 +107,11 @@ export function InboundGRN() {
     setEditing({ ...r, __items: items ?? [] }); setModal(true)
   }
 
+  const openView = async (r: any) => {
+    const { data: items } = await supabase.from('goods_receipt_items').select('*').eq('grn_id', r.id)
+    setViewing({ ...r, __items: items ?? [] })
+  }
+
   const columns = [
     { key: 'grn_no', header: 'GRN (MIGO)', accessor: (r: any) => r.grn_no, sortable: true, className: 'font-medium' },
     { key: 'sap_miro_ref', header: 'SAP MIRO', accessor: (r: any) => r.sap_miro_ref ?? '—' },
@@ -121,6 +128,7 @@ export function InboundGRN() {
       render: (r: any) => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
+            { icon: 'visibility', label: 'View', onClick: () => openView(r) },
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             ...(canEdit ? [{ icon: 'qr_code_scanner', label: 'Scan Serials (optional)', onClick: () => setScanning(r) }] : []),
             ...(canApprove && !r.posted_at && r.status === 'completed' ? [{ icon: 'check_circle', label: busy === r.id ? 'Approving…' : 'Approve & Add to Stock', onClick: () => approve(r) }] : []),
@@ -141,13 +149,21 @@ export function InboundGRN() {
 
       <Card className="overflow-hidden">
         <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={canEdit ? openEdit : undefined} emptyTitle="No goods receipts yet" />
+          onRowClick={canEdit ? openEdit : openView} emptyTitle="No goods receipts yet" />
       </Card>
 
       {modal && (
         <GRNForm record={editing} suppliers={suppliers} warehouses={warehouses} products={products}
           clientId={currentClientId!} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
+      )}
+
+      {viewing && (
+        <GRNOverview grn={viewing} supplierName={supplierName(viewing.supplier_id)}
+          warehouseName={warehouses.find((w: any) => w.id === viewing.warehouse_id)?.name ?? '—'}
+          products={products} canEdit={canEdit}
+          onEdit={() => { const r = viewing; setViewing(null); openEdit(r) }}
+          onClose={() => setViewing(null)} />
       )}
 
       {scanning && (
@@ -278,6 +294,54 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button icon="save" loading={saving} onClick={save}>{record ? 'Update' : 'Create'}</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// Read-only 360° view of a GRN: header, SAP trail, items, and the merged
+// activity + stock-movement trail (audit_logs + inventory_ledger legs posted
+// on approval) — one place to see everything that happened to this receipt.
+function GRNOverview({ grn, supplierName, warehouseName, products, canEdit, onEdit, onClose }: any) {
+  const items: any[] = grn.__items ?? []
+  const productLabel = (id: string) => { const p = products.find((x: any) => x.id === id); return p ? `${p.material_code} — ${p.name}` : id }
+  const Stat = ({ label, value }: any) => (
+    <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
+  )
+  return (
+    <Modal open onClose={onClose} title={`GRN — ${grn.grn_no}`} size="lg">
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
+          <Stat label="Supplier" value={supplierName} />
+          <Stat label="Warehouse" value={warehouseName} />
+          <Stat label="Receipt Date" value={formatDate(grn.receipt_date)} />
+          <Stat label="SAP MIGO" value={grn.sap_grn_ref || '—'} />
+          <Stat label="SAP MIRO" value={grn.sap_miro_ref || <span className="text-ink-faint">pending</span>} />
+          <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(grn.status)}>{statusLabel(grn.status)}</Badge>{grn.posted_at && <Badge tone="positive">In stock</Badge>}</div>} />
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Items</p>
+          <div className="overflow-hidden rounded-xl border border-surface-line">
+            {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
+              items.map((it: any, i: number) => (
+                <div key={it.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                  <span className="min-w-0 truncate text-ink">{productLabel(it.product_id)}</span>
+                  <span className="shrink-0 text-ink-soft">{formatNumber(Number(it.received_qty) > 0 ? it.received_qty : it.qty)}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Activity & stock movement</p>
+          <TrailPanel table="goods_receipts" recordId={grn.id} referenceNo={grn.grn_no} />
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+          {canEdit && <Button icon="edit" onClick={onEdit}>Edit</Button>}
         </div>
       </div>
     </Modal>

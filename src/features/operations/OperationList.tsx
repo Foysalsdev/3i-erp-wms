@@ -14,6 +14,7 @@ import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { formatDate } from '@/lib/utils'
+import { TrailPanel } from '@/components/shared/TrailPanel'
 import { OperationForm } from './OperationForm'
 
 // Display a field's value for the read-only view / PDF: relations show their
@@ -150,6 +151,11 @@ export function OperationList({ def }: { def: OpDef }) {
                 <img src={viewing[f.name]} alt={f.label} className="max-h-72 rounded-lg border border-surface-line object-contain" />
               </div>
             ))}
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Activity & stock movement</p>
+              <TrailPanel table={def.table} recordId={viewing.id} referenceNo={viewing[def.numberField]} />
+            </div>
 
             <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
               <Button variant="ghost" onClick={() => setViewing(null)}>Close</Button>

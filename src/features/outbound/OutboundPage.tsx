@@ -7,6 +7,7 @@ import { OPERATIONS } from '@/features/operations/registry'
 import { OperationList } from '@/features/operations/OperationList'
 import { OutboundSalesOrders } from './OutboundSalesOrders'
 import { DeliveryChallan } from './DeliveryChallan'
+import { DispatchBoard } from './DispatchBoard'
 
 export default function OutboundPage() {
   const { tab } = useParams()
@@ -26,6 +27,7 @@ export default function OutboundPage() {
         : <PageHeader icon="shopping_cart" title="Orders" subtitle="Raise an order request — warehouse takes it from here" />}
       {tabs.length > 1 && <Tabs tabs={tabs} active={active} onChange={k => nav(`/outbound/${k}`)} />}
       {active === 'sales-order' && <OutboundSalesOrders />}
+      {active === 'board' && <DispatchBoard />}
       {active === 'delivery-challan' && <DeliveryChallan />}
       {active === 'gate-pass' && <OperationList def={OPERATIONS['gate-pass']} />}
       {active === 'pod-upload' && <OperationList def={OPERATIONS['pod-upload']} />}

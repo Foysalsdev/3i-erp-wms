@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 export interface PendingMatter {
   rule: string; icon: string; label: string
   docNo: string; matter: string; route: string
+  owner: string; slaDays?: number
   ageDays: number; overdue: boolean
 }
 
@@ -18,6 +19,7 @@ export interface PendingRule {
   key: string
   icon: string
   label: string               // short group name shown on chips
+  owner: string               // human role that owns the matter (for reports)
   perms: string[]             // any of these permissions owns the matter
   slaDays?: number            // older than this = overdue (red)
   fetch: (clientId: string) => PromiseLike<any[]>
@@ -36,25 +38,25 @@ const openSo = (clientId: string, statuses: string[]) =>
 
 export const PENDING_RULES: PendingRule[] = [
   {
-    key: 'so-scan', icon: 'qr_code_scanner', label: 'Orders to pick', perms: ['outbound.edit', 'outbound.create'], slaDays: 1,
+    key: 'so-scan', icon: 'qr_code_scanner', label: 'Orders to pick', owner: 'Warehouse Picker', perms: ['outbound.edit', 'outbound.create'], slaDays: 1,
     fetch: c => openSo(c, ['draft', 'pending', 'approved']),
     docNo: r => r.so_no, matter: () => 'Pick & scan the ordered items',
     route: r => `/outbound/sales-order?q=${encodeURIComponent(r.so_no)}`, ageFrom: r => r.order_date
   },
   {
-    key: 'so-invoice', icon: 'receipt_long', label: 'Awaiting SAP invoice', perms: ['outbound.edit'], slaDays: 1,
+    key: 'so-invoice', icon: 'receipt_long', label: 'Awaiting SAP invoice', owner: 'Billing', perms: ['outbound.edit'], slaDays: 1,
     fetch: c => openSo(c, ['picking', 'packed']),
     docNo: r => r.so_no, matter: () => 'Enter SAP invoice & issue the challan',
     route: r => `/outbound/sales-order?q=${encodeURIComponent(r.so_no)}`, ageFrom: r => r.order_date
   },
   {
-    key: 'so-dispatch', icon: 'local_shipping', label: 'Ready to dispatch', perms: ['outbound.edit'], slaDays: 1,
+    key: 'so-dispatch', icon: 'local_shipping', label: 'Ready to dispatch', owner: 'Dispatch Desk', perms: ['outbound.edit'], slaDays: 1,
     fetch: c => openSo(c, ['invoiced']),
     docNo: r => r.so_no, matter: () => 'Assign transport / courier & dispatch',
     route: r => `/outbound/sales-order?q=${encodeURIComponent(r.so_no)}`, ageFrom: r => r.order_date
   },
   {
-    key: 'grn-miro', icon: 'request_quote', label: 'GRN awaiting MIRO', perms: ['inbound.edit', 'inbound.create'], slaDays: 3,
+    key: 'grn-miro', icon: 'request_quote', label: 'GRN awaiting MIRO', owner: 'Billing', perms: ['inbound.edit', 'inbound.create'], slaDays: 3,
     fetch: c => supabase.from('goods_receipts').select('grn_no,receipt_date').eq('client_id', c)
       .is('posted_at', null).is('sap_miro_ref', null).neq('status', 'cancelled').order('receipt_date').limit(50)
       .then(({ data }) => data ?? []),
@@ -62,7 +64,7 @@ export const PENDING_RULES: PendingRule[] = [
     route: () => '/inbound/receive', ageFrom: r => r.receipt_date
   },
   {
-    key: 'grn-post', icon: 'move_to_inbox', label: 'GRN to post', perms: ['inbound.post', 'inbound.approve'], slaDays: 1,
+    key: 'grn-post', icon: 'move_to_inbox', label: 'GRN to post', owner: 'Warehouse Manager', perms: ['inbound.post', 'inbound.approve'], slaDays: 1,
     fetch: c => supabase.from('goods_receipts').select('grn_no,receipt_date').eq('client_id', c)
       .eq('status', 'completed').is('posted_at', null).order('receipt_date').limit(50)
       .then(({ data }) => data ?? []),
@@ -70,14 +72,14 @@ export const PENDING_RULES: PendingRule[] = [
     route: () => '/inbound/receive', ageFrom: r => r.receipt_date
   },
   {
-    key: 'challan-draft', icon: 'receipt', label: 'Challans to issue', perms: ['outbound.post', 'outbound.approve'], slaDays: 1,
+    key: 'challan-draft', icon: 'receipt', label: 'Challans to issue', owner: 'Warehouse', perms: ['outbound.post', 'outbound.approve'], slaDays: 1,
     fetch: c => supabase.from('delivery_challans').select('challan_no,challan_date').eq('client_id', c)
       .eq('status', 'draft').order('challan_date').limit(50).then(({ data }) => data ?? []),
     docNo: r => r.challan_no, matter: () => 'Issue challan — stock out + gate pass',
     route: r => `/outbound/delivery-challan?q=${encodeURIComponent(r.challan_no)}`, ageFrom: r => r.challan_date
   },
   {
-    key: 'challan-cn', icon: 'qr_code', label: 'CN missing', perms: ['outbound.edit'], slaDays: 2,
+    key: 'challan-cn', icon: 'qr_code', label: 'CN missing', owner: 'Dispatch Desk', perms: ['outbound.edit'], slaDays: 2,
     fetch: c => supabase.from('delivery_challans').select('challan_no,challan_date').eq('client_id', c)
       .eq('delivery_method', 'courier').not('posted_at', 'is', null).is('courier_tracking_no', null)
       .neq('status', 'cancelled').order('challan_date').limit(50).then(({ data }) => data ?? []),
@@ -85,7 +87,7 @@ export const PENDING_RULES: PendingRule[] = [
     route: r => `/outbound/delivery-challan?q=${encodeURIComponent(r.challan_no)}`, ageFrom: r => r.challan_date
   },
   {
-    key: 'pod-missing', icon: 'task_alt', label: 'POD not received', perms: ['outbound.edit'], slaDays: 5,
+    key: 'pod-missing', icon: 'task_alt', label: 'POD not received', owner: 'Delivery Follow-up', perms: ['outbound.edit'], slaDays: 5,
     fetch: async c => {
       const [{ data: chs }, { data: pods }] = await Promise.all([
         supabase.from('delivery_challans').select('id,challan_no,challan_date').eq('client_id', c)
@@ -99,14 +101,14 @@ export const PENDING_RULES: PendingRule[] = [
     route: () => '/outbound/pod-upload', ageFrom: r => r.challan_date
   },
   {
-    key: 'pr-open', icon: 'assignment', label: 'PR to receive', perms: ['inbound.create', 'inbound.edit'], slaDays: 7,
+    key: 'pr-open', icon: 'assignment', label: 'PR to receive', owner: 'Inbound', perms: ['inbound.create', 'inbound.edit'], slaDays: 7,
     fetch: c => supabase.from('purchase_requisitions').select('pr_no,order_date').eq('client_id', c)
       .in('status', ['pending', 'approved']).order('order_date').limit(50).then(({ data }) => data ?? []),
     docNo: r => r.pr_no, matter: () => 'Goods expected — receive against this PR',
     route: () => '/inbound/receive', ageFrom: r => r.order_date
   },
   {
-    key: 'count-draft', icon: 'fact_check', label: 'Counts to post', perms: ['inventory.adjust'], slaDays: 2,
+    key: 'count-draft', icon: 'fact_check', label: 'Counts to post', owner: 'Inventory Officer', perms: ['inventory.adjust'], slaDays: 2,
     fetch: c => (supabase as any).from('stock_counts').select('doc_no,count_date,count_type').eq('client_id', c)
       .eq('status', 'draft').order('count_date').limit(50).then(({ data }: any) => data ?? []),
     docNo: (r: any) => r.doc_no, matter: () => 'Complete & post the stock count',
@@ -115,22 +117,29 @@ export const PENDING_RULES: PendingRule[] = [
   }
 ]
 
-// Evaluate every rule the current user owns; oldest matters first.
-export async function fetchPendingMatters(
-  clientId: string, can: (p: string) => boolean, isAdmin: boolean
-): Promise<PendingMatter[]> {
-  const mine = PENDING_RULES.filter(r => isAdmin || r.perms.some(p => can(p)))
-  const settled = await Promise.allSettled(mine.map(async rule => {
+async function evaluate(clientId: string, rules: PendingRule[]): Promise<PendingMatter[]> {
+  const settled = await Promise.allSettled(rules.map(async rule => {
     const rows = await rule.fetch(clientId)
     return rows.map((r: any): PendingMatter => {
       const age = days(rule.ageFrom(r))
       return {
         rule: rule.key, icon: rule.icon, label: rule.label,
         docNo: rule.docNo(r), matter: rule.matter(r), route: rule.route(r),
+        owner: rule.owner, slaDays: rule.slaDays,
         ageDays: age, overdue: rule.slaDays != null && age > rule.slaDays
       }
     })
   }))
   return settled.flatMap(s => s.status === 'fulfilled' ? s.value : [])
     .sort((a, b) => Number(b.overdue) - Number(a.overdue) || b.ageDays - a.ageDays)
+}
+
+// Every rule the current user owns (dashboard / My Tasks).
+export function fetchPendingMatters(clientId: string, can: (p: string) => boolean, isAdmin: boolean) {
+  return evaluate(clientId, PENDING_RULES.filter(r => isAdmin || r.perms.some(p => can(p))))
+}
+
+// Every pending matter regardless of owner — the manager's report view.
+export function fetchAllPendingMatters(clientId: string) {
+  return evaluate(clientId, PENDING_RULES)
 }

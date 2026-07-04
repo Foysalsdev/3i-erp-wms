@@ -12,8 +12,10 @@ import { StockAgingReport } from '../components/StockAgingReport'
 import { InventoryValuationReport } from '../components/InventoryValuationReport'
 import { InboundReport, AssetReport, FinanceReport, HrReport, DeliveryRegisterReport } from '../components/RegisterReports'
 import { DailyInOutReport } from '../components/DailyInOutReport'
+import { PendingMattersReport } from '../components/PendingMattersReport'
 
 const REPORTS: Record<string, () => JSX.Element> = {
+  pending: PendingMattersReport,
   'daily-inout': DailyInOutReport,
   outbound: SalesReport,
   'outbound-deliveries': DeliveryRegisterReport,

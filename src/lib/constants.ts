@@ -31,7 +31,7 @@ export const MODULES: NavModule[] = [
     { key: 'supplier-invoice', label: 'Supplier Invoice' }
   ]},
   { key: 'outbound', label: 'Outbound Operations', icon: 'logout', path: '/outbound', permission: 'outbound.view', tabs: [
-    { key: 'sales-order', label: 'Order' },
+    { key: 'sales-order', label: 'Order' }, { key: 'board', label: 'Dispatch Board' },
     { key: 'delivery-challan', label: 'Delivery Challan' }, { key: 'gate-pass', label: 'Gate Pass' },
     { key: 'pod-upload', label: 'Customer POD Upload' }
   ]},
@@ -65,6 +65,7 @@ export const MODULES: NavModule[] = [
     { key: 'roles', label: 'Role Management' }
   ]},
   { key: 'reports', label: 'Reports & Analytics', icon: 'analytics', path: '/reports', permission: 'reports.view', tabs: [
+    { key: 'pending', label: 'Pending Matters' },
     { key: 'daily-inout', label: 'Daily Inbound & Outbound' },
     { key: 'inventory', label: 'Inventory Reports' }, { key: 'stock-aging', label: 'Stock Aging' },
     { key: 'stock-movement', label: 'Stock Movement' }, { key: 'inventory-valuation', label: 'Inventory Valuation' },

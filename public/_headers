@@ -14,10 +14,14 @@
 # CSP: self-hosted app + Supabase (API/auth/storage over https & websockets);
 # images may come from Supabase storage or data URIs (barcode/QR previews);
 # no third-party scripts are used anywhere.
+# 'wasm-unsafe-eval' (NOT the much broader 'unsafe-eval') is required because
+# @react-pdf/renderer's layout engine (yoga-layout) compiles a WebAssembly
+# module at runtime — without it every PDF/print action fails with
+# "CompileError: WebAssembly.instantiate() violates CSP".
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Permissions-Policy: camera=(self), geolocation=(), microphone=()
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'

@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
+import { downloadBlob } from '@/lib/utils'
 
 const s = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#212326' },
@@ -132,8 +133,5 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
 
 export async function downloadChallanPDF(opts: any) {
   const blob = await pdf(<Doc {...opts} />).toBlob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `Challan-${String(opts.challan.challan_no || 'DC').replace(/[^\w]+/g, '_')}.pdf`; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `Challan-${String(opts.challan.challan_no || 'DC').replace(/[^\w]+/g, '_')}.pdf`)
 }

@@ -42,20 +42,23 @@ export function OperationList({ def }: { def: OpDef }) {
 
   // Print the document header via the matching PDF template (gate pass / generic).
   const printRow = async (row: any) => {
-    const meta = [
-      { label: `${def.singular} No`, value: String(row[def.numberField] ?? '') },
-      ...def.fields.filter(f => f.type !== 'image' && f.type !== 'textarea' && f.name !== 'status')
-        .map(f => ({ label: f.label, value: displayValue(f, row) })),
-      { label: 'Status', value: String(row.status ?? '') }
-    ]
-    const docNo = String(row[def.numberField] ?? '')
-    notify('info', 'Generating PDF…')
-    if (def.pdf === 'gatepass') {
-      const { downloadGatePassPDF } = await import('@/pdf/GatePassPDF')
-      await downloadGatePassPDF({ client: clientName, docNo, meta, lines: [] })
-    } else {
-      const { downloadDocPDF } = await import('@/pdf/DocumentPDF')
-      await downloadDocPDF({ client: clientName, title: def.title, docNo, meta, lines: [] })
+    try {
+      const meta = [
+        { label: `${def.singular} No`, value: String(row[def.numberField] ?? '') },
+        ...def.fields.filter(f => f.type !== 'image' && f.type !== 'textarea' && f.name !== 'status')
+          .map(f => ({ label: f.label, value: displayValue(f, row) })),
+        { label: 'Status', value: String(row.status ?? '') }
+      ]
+      const docNo = String(row[def.numberField] ?? '')
+      if (def.pdf === 'gatepass') {
+        const { downloadGatePassPDF } = await import('@/pdf/GatePassPDF')
+        await downloadGatePassPDF({ client: clientName, docNo, meta, lines: [] })
+      } else {
+        const { downloadDocPDF } = await import('@/pdf/DocumentPDF')
+        await downloadDocPDF({ client: clientName, title: def.title, docNo, meta, lines: [] })
+      }
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate PDF')
     }
   }
 

@@ -137,7 +137,10 @@ export function DeliveryChallan() {
     }
   }
 
-  const printChallan = async (c: any) => downloadChallanPdfFor(c, { customers, vehicles, products })
+  const printChallan = async (c: any) => {
+    try { await downloadChallanPdfFor(c, { customers, vehicles, products }) }
+    catch (e: any) { notify('error', e?.message ?? 'Could not generate PDF') }
+  }
 
   const openEdit = async (r: any) => {
     const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', r.id)

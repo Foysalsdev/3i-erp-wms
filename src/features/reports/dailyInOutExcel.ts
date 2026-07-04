@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { downloadBlob } from '@/lib/utils'
 
 // One row per SKU with the month's aggregates and per-day matrices.
 export interface DailyRow {
@@ -99,10 +100,5 @@ export async function downloadDailyInOutExcel({ clientName, ym, days, rows }:
 
   const buf = await wb.xlsx.writeBuffer()
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `Daily_Inbound_Outbound_Report_${ym}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `Daily_Inbound_Outbound_Report_${ym}.xlsx`)
 }

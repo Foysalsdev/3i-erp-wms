@@ -57,12 +57,16 @@ export function StockTab({ statusFilter, title }: { statusFilter?: 'good' | 'dam
   // diverges on-hand from the ledger. Zero a row out with an ADJUST movement
   // instead — that keeps the audit trail consistent.
   const exportPDF = async () => {
-    const data: StockRow[] = filtered.map(r => ({
-      code: r.products?.material_code ?? '', name: r.products?.name ?? '', warehouse: r.warehouses?.code ?? '',
-      status: r.stock_status, qty: Number(r.quantity)
-    }))
-    const { downloadStockPDF } = await import('@/pdf/StockReportPDF')
-    await downloadStockPDF(client?.name ?? '', data, title)
+    try {
+      const data: StockRow[] = filtered.map(r => ({
+        code: r.products?.material_code ?? '', name: r.products?.name ?? '', warehouse: r.warehouses?.code ?? '',
+        status: r.stock_status, qty: Number(r.quantity)
+      }))
+      const { downloadStockPDF } = await import('@/pdf/StockReportPDF')
+      await downloadStockPDF(client?.name ?? '', data, title)
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate PDF')
+    }
   }
 
   if (loading) return <Spinner label="Loading stock…" />

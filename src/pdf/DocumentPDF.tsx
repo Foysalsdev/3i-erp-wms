@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
+import { downloadBlob } from '@/lib/utils'
 
 const s = StyleSheet.create({
   page: { padding: 30, fontSize: 9, fontFamily: 'Helvetica', color: '#212326' },
@@ -63,8 +64,5 @@ function DocPDF({ client, title, docNo, meta, lines, showPrice }:
 
 export async function downloadDocPDF(opts: { client: string; title: string; docNo: string; meta: DocMeta[]; lines: DocLine[]; showPrice?: boolean }) {
   const blob = await pdf(<DocPDF {...opts} />).toBlob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `${opts.docNo.replace(/[^\w]+/g, '_') || opts.title}.pdf`; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${opts.docNo.replace(/[^\w]+/g, '_') || opts.title}.pdf`)
 }

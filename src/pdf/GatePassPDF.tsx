@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import type { DocMeta, DocLine } from './DocumentPDF'
 import { getCompanyInfo } from '@/lib/settings'
+import { downloadBlob } from '@/lib/utils'
 
 const s = StyleSheet.create({
   page: { padding: 30, fontSize: 10, fontFamily: 'Helvetica', color: '#212326' },
@@ -61,8 +62,5 @@ function GatePass({ client, docNo, meta, lines }: { client: string; docNo: strin
 
 export async function downloadGatePassPDF(opts: { client: string; docNo: string; meta: DocMeta[]; lines: DocLine[] }) {
   const blob = await pdf(<GatePass {...opts} />).toBlob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `GatePass_${opts.docNo.replace(/[^\w]+/g, '_')}.pdf`; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `GatePass_${opts.docNo.replace(/[^\w]+/g, '_')}.pdf`)
 }

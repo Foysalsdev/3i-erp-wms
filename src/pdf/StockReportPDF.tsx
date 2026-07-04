@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
+import { downloadBlob } from '@/lib/utils'
 
 const s = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#1d2d3e' },
@@ -45,8 +46,5 @@ function Report({ client, rows, title }: { client: string; rows: StockRow[]; tit
 
 export async function downloadStockPDF(client: string, rows: StockRow[], title = 'Inventory Stock Report') {
   const blob = await pdf(<Report client={client} rows={rows} title={title} />).toBlob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `${title.replace(/\s+/g, '_')}_${Date.now()}.pdf`; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${title.replace(/\s+/g, '_')}_${Date.now()}.pdf`)
 }

@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
+import { downloadBlob } from '@/lib/utils'
 
 const s = StyleSheet.create({
   page: { padding: 32, fontSize: 10, fontFamily: 'Helvetica', color: '#212326' },
@@ -44,8 +45,5 @@ function Doc({ client, title, code, photo, fields }:
 
 export async function downloadRecordPDF(opts: { client: string; title: string; code?: string; photo?: string; fields: RecordField[] }) {
   const blob = await pdf(<Doc {...opts} />).toBlob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `${(opts.code || opts.title).replace(/[^\w]+/g, '_')}.pdf`; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${(opts.code || opts.title).replace(/[^\w]+/g, '_')}.pdf`)
 }

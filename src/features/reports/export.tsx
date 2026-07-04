@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
+import { downloadBlob } from '@/lib/utils'
 
 export interface RepCol { key: string; header: string; align?: 'right' | 'left'; width?: string }
 
@@ -9,10 +10,7 @@ export function downloadCSV(filename: string, cols: RepCol[], rows: any[]) {
   const head = cols.map(c => esc(c.header)).join(',')
   const body = rows.map(r => cols.map(c => esc(r[c.key])).join(',')).join('\n')
   const blob = new Blob(['﻿' + head + '\n' + body], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `${filename.replace(/[^\w]+/g, '_')}.csv`; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${filename.replace(/[^\w]+/g, '_')}.csv`)
 }
 
 const s = StyleSheet.create({
@@ -61,10 +59,7 @@ function ReportDoc({ title, subtitle, cols, rows }: { title: string; subtitle?: 
 
 export async function downloadReportPDF(title: string, subtitle: string, cols: RepCol[], rows: any[]) {
   const blob = await pdf(<ReportDoc title={title} subtitle={subtitle} cols={cols} rows={rows} />).toBlob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `${title.replace(/[^\w]+/g, '_')}.pdf`; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${title.replace(/[^\w]+/g, '_')}.pdf`)
 }
 
 // Shared toolbar: record count + CSV/PDF export buttons.

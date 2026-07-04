@@ -141,9 +141,12 @@ export function DailyInOutReport() {
   const pickDay = (r: DailyRow) => flow === 'inbound' ? r.inByDay : flow === 'outbound' ? r.outByDay : r.replByDay
 
   const exportExcel = async () => {
-    notify('info', 'Generating Excel…')
-    const { downloadDailyInOutExcel } = await import('../dailyInOutExcel')
-    await downloadDailyInOutExcel({ clientName, ym, days, rows })
+    try {
+      const { downloadDailyInOutExcel } = await import('../dailyInOutExcel')
+      await downloadDailyInOutExcel({ clientName, ym, days, rows })
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate Excel file')
+    }
   }
 
   const exportCsvPdf = (kind: 'csv' | 'pdf') => {

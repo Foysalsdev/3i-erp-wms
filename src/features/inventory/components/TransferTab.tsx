@@ -8,7 +8,7 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Combobox } from '@/components/ui/Combobox'
 import { StockMovementHistory } from './StockMovementHistory'
 
-const CONDITIONS = [{ id: 'good', label: 'Good' }, { id: 'damaged', label: 'Damaged' }, { id: 'quarantine', label: 'Quarantine' }]
+import { CONDITION_OPTIONS as CONDITIONS } from '@/lib/conditions'
 
 // Inter-warehouse / inter-location stock transfer. Posts a paired TRANSFER
 // movement (out of source, into destination) so the ledger and on-hand stay

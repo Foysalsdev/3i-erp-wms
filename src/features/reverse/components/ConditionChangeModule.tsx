@@ -17,13 +17,12 @@ import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/States'
 import { formatDate, formatNumber } from '@/lib/utils'
 
-// Stock conditions a returned/refurbished unit can move between. `scrap` is a
-// write-off (outbound only) and is therefore a valid *destination* only.
-const CONDITIONS = [
-  { id: 'good', label: 'Good' },
-  { id: 'damaged', label: 'Damaged' },
-  { id: 'quarantine', label: 'Quarantine' }
-]
+// Stock conditions a unit can move between come from the shared registry
+// (fresh / replacement return / box damaged / parts removed / damaged /
+// quarantine). `scrap` is a write-off (outbound only) and is therefore a
+// valid *destination* only.
+import { CONDITION_OPTIONS } from '@/lib/conditions'
+const CONDITIONS = CONDITION_OPTIONS
 const TO_CONDITIONS_WITH_SCRAP = [...CONDITIONS, { id: 'scrap', label: 'Scrap (write-off)' }]
 
 export interface CCConfig {

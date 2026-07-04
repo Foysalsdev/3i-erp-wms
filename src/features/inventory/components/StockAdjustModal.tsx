@@ -7,7 +7,7 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Combobox } from '@/components/ui/Combobox'
 import { Button } from '@/components/ui/Button'
 
-const CONDITIONS = [{ id: 'good', label: 'Good' }, { id: 'damaged', label: 'Damaged' }, { id: 'quarantine', label: 'Quarantine' }]
+import { CONDITION_OPTIONS as CONDITIONS } from '@/lib/conditions'
 const DIRECTION = [{ id: 'in', label: 'Stock In (+)' }, { id: 'out', label: 'Stock Out (−)' }]
 const MOVES = ['ADJUST', 'GRN', 'PUTAWAY', 'PICK', 'DELIVERY', 'RETURN', 'TRANSFER'].map(m => ({ id: m, label: m }))
 

@@ -69,7 +69,7 @@ export function FifoTab() {
     { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name },
     { key: 'wh', header: 'WH', accessor: (r: any) => r.warehouses?.code },
     { key: 'loc', header: 'Location', accessor: (r: any) => r.locations?.location_code ?? '—' },
-    { key: 'status', header: 'Condition', render: (r: any) => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{r.stock_status}</Badge> },
+    { key: 'status', header: 'Condition', render: (r: any) => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.label ?? r.stock_status}</Badge> },
     { key: 'qty', header: 'On Hand', accessor: (r: any) => r.quantity, className: 'text-right font-medium', render: (r: any) => formatNumber(r.quantity) },
     { key: 'received', header: 'In Stock Since', render: (r: any) => r.__received ? formatDate(r.__received) : '—' },
     { key: 'age', header: 'Age (days)', className: 'text-right', render: (r: any) => r.__age === null ? '—' : <span className={r.__age > 90 ? 'font-semibold text-horizon-critical' : ''}>{r.__age}</span> }

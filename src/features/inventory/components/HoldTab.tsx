@@ -54,7 +54,7 @@ export function HoldTab() {
     { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name },
     { key: 'wh', header: 'WH', accessor: (r: any) => r.warehouses?.code },
     { key: 'loc', header: 'Location', accessor: (r: any) => r.locations?.location_code ?? '—' },
-    { key: 'status', header: 'Condition', render: (r: any) => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{r.stock_status}</Badge> },
+    { key: 'status', header: 'Condition', render: (r: any) => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.label ?? r.stock_status}</Badge> },
     { key: 'qty', header: 'On Hand', accessor: (r: any) => r.quantity, className: 'text-right' },
     { key: 'held', header: 'Held', className: 'text-right', render: (r: any) => Number(r.reserved_qty) > 0 ? <span className="font-semibold text-horizon-critical">{formatNumber(r.reserved_qty)}</span> : '—' },
     { key: 'avail', header: 'Available', className: 'text-right font-medium', render: (r: any) => formatNumber(Number(r.quantity) - Number(r.reserved_qty ?? 0)) },

@@ -16,7 +16,8 @@ export const MODULES: NavModule[] = [
     { key: 'assets', label: 'Asset' }, { key: 'non-inventory', label: 'Non-Inventory' }
   ]},
   { key: 'inventory', label: 'Inventory Management', icon: 'warehouse', path: '/inventory', permission: 'inventory.view', tabs: [
-    { key: 'stock', label: 'Stock Overview' }, { key: 'ledger', label: 'Inventory Ledger' },
+    { key: 'stock', label: 'Stock Overview' }, { key: 'non-saleable', label: 'Non-Saleable' },
+    { key: 'ledger', label: 'Inventory Ledger' },
     { key: 'transfer', label: 'Stock Transfer' }, { key: 'adjustment', label: 'Stock Adjustment' },
     { key: 'cycle-count', label: 'Cycle Count' }, { key: 'physical-verification', label: 'Physical Verification' },
     { key: 'damaged', label: 'Damaged Stock' }, { key: 'quarantine', label: 'Quarantine Stock' },
@@ -83,8 +84,8 @@ export const MODULES: NavModule[] = [
   ]}
 ]
 
-export const STOCK_STATUS = {
-  good: { label: 'Good', tone: 'positive' as const },
-  damaged: { label: 'Damaged', tone: 'negative' as const },
-  quarantine: { label: 'Quarantine', tone: 'critical' as const }
-}
+// Derived from the condition registry so badges stay in sync with the full
+// condition set (fresh / replacement return / box damaged / parts removed / …).
+import { STOCK_CONDITIONS } from './conditions'
+export const STOCK_STATUS: Record<string, { label: string; tone: 'positive' | 'negative' | 'neutral' | 'info' | 'critical' }> =
+  Object.fromEntries(Object.values(STOCK_CONDITIONS).map(c => [c.key, { label: c.label, tone: c.tone }]))

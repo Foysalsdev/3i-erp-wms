@@ -14,7 +14,7 @@ import { CountTab } from '../components/CountTab'
 import { FifoTab } from '../components/FifoTab'
 import { SnapshotTab } from '../components/SnapshotTab'
 
-const IMPLEMENTED = ['stock', 'ledger', 'serials', 'damaged', 'quarantine', 'transfer', 'adjustment', 'cycle-count', 'physical-verification', 'hold', 'fifo', 'snapshot']
+const IMPLEMENTED = ['stock', 'non-saleable', 'ledger', 'serials', 'damaged', 'quarantine', 'transfer', 'adjustment', 'cycle-count', 'physical-verification', 'hold', 'fifo', 'snapshot']
 
 export default function InventoryPage() {
   const { tab } = useParams()
@@ -28,6 +28,7 @@ export default function InventoryPage() {
       <PageHeader icon="warehouse" title="Inventory Management" subtitle="Stock, movements, transfers, counts, holds & serials" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/inventory/${k}`)} />
       {active === 'stock' && <StockTab title="Stock Overview" />}
+      {active === 'non-saleable' && <StockTab statusFilter="nonsaleable" title="Non-Saleable Stock" />}
       {active === 'ledger' && <LedgerTab />}
       {active === 'serials' && <SerialsTab />}
       {active === 'damaged' && <StockTab statusFilter="damaged" title="Damaged Stock Report" />}

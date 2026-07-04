@@ -12,6 +12,7 @@ import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { normaliseSerial, describeSerialHistory, type SerialHistoryItem } from '@/lib/serials'
 import { SerialHistoryModal } from '@/components/shared/SerialHistoryModal'
+import { CONDITION_LIST, conditionLabel } from '@/lib/conditions'
 
 // ---------------------------------------------------------------------------
 // Receive — the task-first inbound flow. One continuous journey instead of
@@ -28,16 +29,12 @@ interface WLine {
   product_id: string
   expected: number          // from PR (0 = no expectation)
   qty: string               // received qty (editable)
-  stock_status: 'good' | 'damaged' | 'quarantine'
+  stock_status: string      // key from the condition registry (lib/conditions)
   location_id: string
   serials: SRow[]
   scanOpen?: boolean
   scanInput?: string
 }
-
-const CONDITIONS: { id: WLine['stock_status']; label: string }[] = [
-  { id: 'good', label: 'Good' }, { id: 'damaged', label: 'Damaged' }, { id: 'quarantine', label: 'Quarantine' }
-]
 
 // SAP trail chip: filled = done, hollow = pending.
 function SapChip({ done, label }: { done: boolean; label: string }) {
@@ -450,14 +447,14 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
                     <Field label="Received Qty" required>
                       <Input type="number" min={0} value={l.qty} onChange={e => setLine(i, { qty: e.target.value })} placeholder="0" />
                     </Field>
-                    <div>
+                    <div className="col-span-2">
                       <p className="fiori-label">Condition</p>
-                      <div className="flex overflow-hidden rounded-lg border border-surface-line">
-                        {CONDITIONS.map(c => (
-                          <button key={c.id} type="button" onClick={() => setLine(i, { stock_status: c.id })}
-                            className={'flex-1 px-2 py-2 text-xs font-semibold ' + (l.stock_status === c.id
-                              ? (c.id === 'good' ? 'bg-ok/15 text-ok' : c.id === 'damaged' ? 'bg-bad/10 text-bad' : 'bg-warn/10 text-warn')
-                              : 'text-ink-faint hover:bg-surface-sunken')}>
+                      <div className="flex flex-wrap gap-1.5">
+                        {CONDITION_LIST.map(c => (
+                          <button key={c.key} type="button" title={c.hint} onClick={() => setLine(i, { stock_status: c.key })}
+                            className={'rounded-lg border px-2.5 py-1.5 text-xs font-semibold ' + (l.stock_status === c.key
+                              ? (c.saleable ? 'border-ok/40 bg-ok/10 text-ok' : 'border-warn/40 bg-warn/10 text-warn')
+                              : 'border-surface-line text-ink-faint hover:bg-surface-sunken')}>
                             {c.label}
                           </button>
                         ))}
@@ -555,7 +552,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
               {lines.filter(l => l.product_id).map((l, i) => (
                 <div key={l.product_id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{prodLabel(l.product_id)}
-                    {l.stock_status !== 'good' && <Badge tone={l.stock_status === 'damaged' ? 'negative' : 'critical'}>{l.stock_status}</Badge>}
+                    {l.stock_status !== 'good' && <Badge tone={l.stock_status === 'damaged' ? 'negative' : 'critical'}>{conditionLabel(l.stock_status)}</Badge>}
                     {l.serials.length > 0 && <span className="ml-2 text-xs text-ink-faint">{l.serials.length} serial(s)</span>}
                   </span>
                   <span className="shrink-0 font-semibold text-ink">{formatNumber(Number(l.qty) || 0)}</span>

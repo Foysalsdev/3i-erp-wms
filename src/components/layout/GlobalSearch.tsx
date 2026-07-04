@@ -27,7 +27,7 @@ const MASTERS = [
 // Transaction documents — navigate to the relevant tab pre-filtered (?q=) on the
 // document's own number, so the destination list lands directly on the record.
 const TXNS = [
-  { table: 'sales_orders', icon: 'shopping_cart', cat: 'Sales Order', idField: 'so_no',
+  { table: 'sales_orders', icon: 'shopping_cart', cat: 'Order', idField: 'so_no',
     cols: 'id,so_no,reference_no,invoice_no,sap_so_no,outbound_delivery_no,transfer_order_no,billing_doc_no',
     search: ['so_no', 'reference_no', 'invoice_no', 'sap_so_no', 'outbound_delivery_no', 'transfer_order_no', 'billing_doc_no'],
     sub: (r: any) => r.reference_no ? `PO ${r.reference_no}` : r.sap_so_no ? `SAP SO ${r.sap_so_no}` : '', path: '/outbound/sales-order' },

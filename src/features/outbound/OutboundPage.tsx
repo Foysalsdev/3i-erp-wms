@@ -23,7 +23,7 @@ export default function OutboundPage() {
     <div className="space-y-4">
       {dispatchAccess
         ? <PageHeader icon="logout" title="Outbound Operations" subtitle="Sales orders, picking, dispatch & delivery" />
-        : <PageHeader icon="shopping_cart" title="Sales Orders" subtitle="Create and track your sales orders" />}
+        : <PageHeader icon="shopping_cart" title="Orders" subtitle="Raise an order request — warehouse takes it from here" />}
       {tabs.length > 1 && <Tabs tabs={tabs} active={active} onChange={k => nav(`/outbound/${k}`)} />}
       {active === 'sales-order' && <OutboundSalesOrders />}
       {active === 'delivery-challan' && <DeliveryChallan />}

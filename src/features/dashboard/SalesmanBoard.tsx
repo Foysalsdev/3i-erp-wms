@@ -186,7 +186,7 @@ export default function SalesmanBoard() {
                 <div className="mt-3 rounded-lg bg-surface-sunken px-2 py-2"><Stepper status={o.status} /></div>
               </Card>
             ))}
-            {rows.length === 0 && <Card className="p-6 text-center text-sm text-ink-faint">No orders yet — create one in Sales Order.</Card>}
+            {rows.length === 0 && <Card className="p-6 text-center text-sm text-ink-faint">No orders yet — create one in Order.</Card>}
           </div>
         </>
       ) : (

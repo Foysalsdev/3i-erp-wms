@@ -209,7 +209,7 @@ export function OutboundSalesOrders() {
           {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
-        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Sales Order</Button>}
+        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Order</Button>}
       </div>
 
       <Card className="overflow-hidden">
@@ -349,7 +349,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
         const { error } = await (supabase as any).from('sales_order_items').insert(payloadLines)
         if (error) throw error
       }
-      notify('success', `Sales Order ${record ? 'updated' : 'created'}`)
+      notify('success', `Order ${record ? 'updated' : 'created'}`)
       onDone()
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not save sales order')
@@ -510,7 +510,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
   )
 
   return (
-    <Modal open onClose={onClose} title={`Sales Order — ${so.so_no}`} size="xl">
+    <Modal open onClose={onClose} title={`Order — ${so.so_no}`} size="xl">
       <div className="space-y-5">
         <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }]} active={tab} onChange={(k: any) => setTab(k)} />
 

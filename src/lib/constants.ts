@@ -31,7 +31,7 @@ export const MODULES: NavModule[] = [
     { key: 'supplier-invoice', label: 'Supplier Invoice' }
   ]},
   { key: 'outbound', label: 'Outbound Operations', icon: 'logout', path: '/outbound', permission: 'outbound.view', tabs: [
-    { key: 'sales-order', label: 'Sales Order' },
+    { key: 'sales-order', label: 'Order' },
     { key: 'delivery-challan', label: 'Delivery Challan' }, { key: 'gate-pass', label: 'Gate Pass' },
     { key: 'pod-upload', label: 'Customer POD Upload' }
   ]},

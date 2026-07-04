@@ -10,6 +10,7 @@ import { Tabs } from '@/components/ui/Tabs'
 import { formatNumber, formatDateTime } from '@/lib/utils'
 import { MODULES } from '@/lib/constants'
 import { OPERATIONS } from '@/features/operations/registry'
+import { PendingMattersPanel } from '@/components/shared/PendingMattersPanel'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid
@@ -132,6 +133,9 @@ function AdminDashboard() {
           {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
         </div>
       </div>
+
+      {/* Every pending matter the user owns — rule-driven (lib/pending.ts). */}
+      <PendingMattersPanel />
 
       <Tabs tabs={dashTabs} active={active} onChange={k => nav(`/dashboard/${k}`)} />
 

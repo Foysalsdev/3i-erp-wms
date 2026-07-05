@@ -15,7 +15,6 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
-import { Spinner } from '@/components/ui/States'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatDate, formatNumber } from '@/lib/utils'
 
@@ -102,8 +101,8 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {singular}</Button>}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {loading ? <Spinner /> : <DataTable fill columns={columns} rows={filteredDocs} rowKey={(r: any) => r.id}
-          onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${title.toLowerCase()} yet`} />}
+        <DataTable fill loading={loading} columns={columns} rows={filteredDocs} rowKey={(r: any) => r.id}
+          onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${title.toLowerCase()} yet`} />
       </Card>
 
       {modal && (

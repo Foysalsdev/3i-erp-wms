@@ -1,8 +1,12 @@
 import { useState, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Icon } from './Icon'
-import { Spinner, EmptyState } from './States'
+import { EmptyState } from './States'
 import { useUI } from '@/store/ui'
+
+// Varying widths so a loading table reads as content, not a uniform gray block.
+const SKELETON_ROWS = 8
+const BAR_WIDTHS = ['w-3/4', 'w-1/2', 'w-5/6', 'w-2/5', 'w-full', 'w-3/5', 'w-4/5', 'w-1/3']
 
 export interface Column<T> {
   key: string; header: string; className?: string
@@ -17,14 +21,14 @@ interface Selection {
 }
 interface Props<T> {
   columns: Column<T>[]; rows: T[]; loading?: boolean
-  rowKey: (row: T) => string; onRowClick?: (row: T) => void; emptyTitle?: string
+  rowKey: (row: T) => string; onRowClick?: (row: T) => void; emptyTitle?: string; emptyIcon?: string; emptyHint?: string
   // Fill the parent's height and scroll internally (with a sticky header),
   // so the surrounding toolbar/header stay put instead of the whole page scrolling.
   fill?: boolean
   // Row checkboxes + a header "select all (visible)" checkbox, for bulk actions.
   selection?: Selection
 }
-export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records', fill, selection }: Props<T>) {
+export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records', emptyIcon, emptyHint, fill, selection }: Props<T>) {
   const compact = useUI(s => s.density) === 'compact'
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [dir, setDir] = useState<1 | -1>(1)
@@ -39,11 +43,14 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
     })
   }, [rows, sortKey, dir, columns])
 
-  if (loading) return <Spinner label="Loading…" />
-  if (!rows.length) return <EmptyState title={emptyTitle} />
+  if (!loading && !rows.length) return <EmptyState title={emptyTitle} icon={emptyIcon} hint={emptyHint} />
 
   const actionsCol = columns.find(c => c.key === '__actions')
   const cellValue = (c: Column<T>, row: T) => (c.render ? c.render(row) : String(c.accessor?.(row) ?? '—'))
+  const skeletonCell = (c: Column<T>, i: number) => c.key === '__thumb'
+    ? <div className="h-9 w-9 animate-pulse rounded-lg bg-surface-sunken" />
+    : c.key === '__actions' ? null
+    : <div className={cn('h-3.5 animate-pulse rounded bg-surface-sunken', BAR_WIDTHS[i % BAR_WIDTHS.length])} />
 
   const visibleKeys = sorted.map(rowKey)
   const allSelected = !!selection && visibleKeys.length > 0 && visibleKeys.every(k => selection.selected.has(k))
@@ -76,7 +83,14 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
             </tr>
           </thead>
           <tbody>
-            {sorted.map(row => (
+            {loading ? Array.from({ length: SKELETON_ROWS }, (_, i) => (
+              <tr key={`sk-${i}`} className="border-b border-horizon-line/70">
+                {selection && <td className={cn('px-3', compact ? 'py-1' : 'py-3')} />}
+                {columns.map((c, ci) => (
+                  <td key={c.key} className={cn('px-4', compact ? 'py-1' : 'py-3', c.className)}>{skeletonCell(c, ci + i)}</td>
+                ))}
+              </tr>
+            )) : sorted.map(row => (
               <tr key={rowKey(row)} onClick={() => onRowClick?.(row)}
                 className={cn('border-b border-horizon-line/70 transition', onRowClick && 'cursor-pointer hover:bg-surface-sunken', selection?.selected.has(rowKey(row)) && 'bg-brand-500/5')}>
                 {selection && (
@@ -98,7 +112,15 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
 
       {/* Mobile: each row as a stacked card (avoids cramped horizontal scrolling) */}
       <div className={cn('divide-y divide-horizon-line md:hidden', fill && 'min-h-0 flex-1 overflow-auto')}>
-        {sorted.map(row => (
+        {loading ? Array.from({ length: SKELETON_ROWS }, (_, i) => (
+          <div key={`sk-${i}`} className={cn('flex items-start gap-3 px-4', compact ? 'py-1.5' : 'py-3')}>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              {columns.filter(c => c.key !== '__actions' && c.key !== '__thumb').slice(0, 3).map((c, ci) => (
+                <div key={c.key} className={cn('h-3.5 animate-pulse rounded bg-surface-sunken', BAR_WIDTHS[(ci + i) % BAR_WIDTHS.length])} />
+              ))}
+            </div>
+          </div>
+        )) : sorted.map(row => (
           <div key={rowKey(row)} onClick={() => onRowClick?.(row)}
             className={cn('flex items-start justify-between gap-3 px-4', compact ? 'py-1.5' : 'py-3', onRowClick && 'cursor-pointer active:bg-surface-sunken', selection?.selected.has(rowKey(row)) && 'bg-brand-500/5')}>
             {selection && (

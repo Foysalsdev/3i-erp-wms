@@ -6,7 +6,6 @@ import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Spinner } from '@/components/ui/States'
 import { formatNumber, formatDateTime } from '@/lib/utils'
 import { movementLabel } from '@/lib/movements'
 
@@ -50,12 +49,11 @@ export function LedgerTab() {
   // The ledger is the immutable audit trail: no deletes, even for admins.
   // Wrong postings are corrected by a compensating ADJUST movement, keeping
   // the running balances and the who-did-what history intact.
-  if (loading) return <Spinner label="Loading ledger…" />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search movements…" /></div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={filtered} rowKey={(r: any) => String(r.id)} emptyTitle="No movements recorded" />
+        <DataTable fill loading={loading} columns={columns} rows={filtered} rowKey={(r: any) => String(r.id)} emptyTitle="No movements recorded" />
       </Card>
     </div>
   )

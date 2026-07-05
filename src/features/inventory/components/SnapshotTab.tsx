@@ -5,7 +5,6 @@ import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
-import { Spinner, EmptyState } from '@/components/ui/States'
 import { formatNumber, formatDate } from '@/lib/utils'
 
 // Captures a point-in-time snapshot of current on-hand stock.
@@ -51,13 +50,12 @@ export function SnapshotTab() {
     { key: 'qty', header: 'Quantity', render: (r: any) => formatNumber(r.quantity), className: 'text-right font-medium' }
   ]
 
-  if (loading) return <Spinner label="Loading snapshots…" />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex justify-end"><Button icon="photo_camera" loading={busy} onClick={capture}>Capture Snapshot</Button></div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {rows.length ? <DataTable fill columns={columns} rows={rows} rowKey={(r: any) => r.id} /> :
-          <EmptyState icon="photo_camera" title="No snapshots yet" hint="Capture a point-in-time view of current stock for audit & reconciliation." />}
+        <DataTable fill loading={loading} columns={columns} rows={rows} rowKey={(r: any) => r.id}
+          emptyIcon="photo_camera" emptyTitle="No snapshots yet" emptyHint="Capture a point-in-time view of current stock for audit & reconciliation." />
       </Card>
     </div>
   )

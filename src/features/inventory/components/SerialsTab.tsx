@@ -9,7 +9,6 @@ import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
-import { Spinner } from '@/components/ui/States'
 import { formatDate } from '@/lib/utils'
 
 const tone: Record<string, any> = { in_stock: 'positive', reserved: 'info', delivered: 'neutral', returned: 'critical', damaged: 'negative', quarantine: 'critical', scrapped: 'neutral' }
@@ -62,12 +61,11 @@ export function SerialsTab() {
   }
   const allColumns = isAdmin ? [...columns, actionCol] : columns
 
-  if (loading) return <Spinner label="Loading serials…" />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search serial / product…" /></div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={allColumns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No serial numbers tracked yet" />
+        <DataTable fill loading={loading} columns={allColumns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No serial numbers tracked yet" />
       </Card>
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `serial · ${deleting.serial_no}` : undefined}

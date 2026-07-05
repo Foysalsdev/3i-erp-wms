@@ -15,7 +15,6 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
-import { Spinner } from '@/components/ui/States'
 import { formatDate, formatNumber } from '@/lib/utils'
 
 // Stock conditions a unit can move between come from the shared registry
@@ -128,8 +127,8 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
         {canEdit && <Button icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {config.singular}</Button>}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {loading ? <Spinner /> : <DataTable fill columns={columns} rows={docs} rowKey={(r: any) => r.id}
-          onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />}
+        <DataTable fill loading={loading} columns={columns} rows={docs} rowKey={(r: any) => r.id}
+          onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />
       </Card>
 
       {modal && (

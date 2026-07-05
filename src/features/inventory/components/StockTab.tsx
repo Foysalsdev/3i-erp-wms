@@ -7,7 +7,6 @@ import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Spinner } from '@/components/ui/States'
 import { formatNumber, formatDateTime } from '@/lib/utils'
 import { STOCK_STATUS } from '@/lib/constants'
 import { NON_SALEABLE, conditionLabel } from '@/lib/conditions'
@@ -89,7 +88,6 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
     }
   }
 
-  if (loading) return <Spinner label="Loading stock…" />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -120,7 +118,7 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
         </div>
       )}
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={filtered} rowKey={(r: any) => r.id}
+        <DataTable fill loading={loading} columns={columns} rows={filtered} rowKey={(r: any) => r.id}
           onRowClick={r => setTrail(r)} emptyTitle="No stock records" />
       </Card>
       <StockAdjustModal open={adjust} onClose={() => setAdjust(false)} onDone={() => { setAdjust(false); load() }} />

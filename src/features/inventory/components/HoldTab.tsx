@@ -10,7 +10,6 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { Field, Input } from '@/components/ui/Field'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Spinner } from '@/components/ui/States'
 import { formatNumber } from '@/lib/utils'
 import { STOCK_STATUS } from '@/lib/constants'
 
@@ -71,7 +70,6 @@ export function HoldTab() {
     }] : [])
   ]
 
-  if (loading) return <Spinner label="Loading stock…" />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -82,7 +80,7 @@ export function HoldTab() {
         <span className="text-sm text-ink-soft">{filtered.length} records</span>
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
+        <DataTable fill loading={loading} columns={columns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
       </Card>
       {action && <HoldModal action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); load() }} />}
     </div>

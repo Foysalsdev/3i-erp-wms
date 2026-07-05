@@ -6,7 +6,6 @@ import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Spinner } from '@/components/ui/States'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { STOCK_STATUS } from '@/lib/constants'
 
@@ -75,7 +74,6 @@ export function FifoTab() {
     { key: 'age', header: 'Age (days)', className: 'text-right', render: (r: any) => r.__age === null ? '—' : <span className={r.__age > 90 ? 'font-semibold text-horizon-critical' : ''}>{r.__age}</span> }
   ]
 
-  if (loading) return <Spinner label="Computing FIFO order…" />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -83,7 +81,7 @@ export function FifoTab() {
         <span className="text-sm text-ink-soft">{rows.length} lots · oldest first</span>
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No stock to order" />
+        <DataTable fill loading={loading} columns={columns} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No stock to order" />
       </Card>
       <p className="text-xs text-ink-faint">Stock is ordered by its earliest recorded inbound movement. Consume the top rows first to follow FIFO.</p>
     </div>

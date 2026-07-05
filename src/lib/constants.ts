@@ -6,9 +6,7 @@ export interface NavModule {
 }
 
 export const MODULES: NavModule[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/dashboard', permission: 'dashboard.view', tabs: [
-    { key: 'executive', label: 'Executive Dashboard' }, { key: 'operational', label: 'Operational Dashboard' }
-  ]},
+  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/dashboard', permission: 'dashboard.view' },
   { key: 'masters', label: 'Masters', icon: 'inventory_2', path: '/masters', permission: 'masters.view', tabs: [
     { key: 'products', label: 'Product / SKU' }, { key: 'customers', label: 'Customer' },
     { key: 'suppliers', label: 'Supplier' }, { key: 'transporters', label: 'Transport Vendor' },

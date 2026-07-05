@@ -130,11 +130,12 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
             }}
             className={'fiori-input pl-10 pr-9 ' + accent} />
           {open && matches.length > 0 && (
-            <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-surface-line bg-surface shadow-fiori-lg">
+            <div className="absolute left-0 top-full z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl bg-surface p-1 shadow-pop ring-1 ring-surface-line">
               {matches.map((p, si) => (
                 <button key={p.id} type="button" onMouseDown={e => { e.preventDefault(); setCode(p.material_code); setOpen(false); requestAnimationFrame(() => qtyRef.current?.focus()) }}
-                  className={'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ' + (si === acIdx ? 'bg-surface-sunken' : 'hover:bg-surface-sunken')}>
-                  <span className="font-mono font-medium text-ink">{p.material_code}</span><span className="truncate text-ink-soft">{p.name}{meta(p) ? ' · ' + meta(p) : ''}</span>
+                  className={'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ' + (si === acIdx ? 'bg-brand-500/10' : 'hover:bg-surface-sunken')}>
+                  <span className="shrink-0 rounded-md bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px] font-semibold text-ink-soft">{p.material_code}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{p.name}{meta(p) ? <span className="text-ink-faint"> · {meta(p)}</span> : null}</span>
                 </button>
               ))}
             </div>

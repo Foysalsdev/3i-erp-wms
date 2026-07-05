@@ -53,7 +53,7 @@ export function SelectBox({ value, onChange, options, children, placeholder = 'S
   // Options whose value is '' act as the placeholder, not a real choice.
   const real = opts.filter(o => o.value !== '')
   const selected = real.find(o => o.value === value)
-  const searchable = real.length > 8
+  const searchable = real.length > 6
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -89,6 +89,8 @@ export function SelectBox({ value, onChange, options, children, placeholder = 'S
         onKeyDown={e => {
           if (disabled) return
           if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setQ(''); setOpen(true) }
+          // Type-ahead: start typing on the closed control to open + filter.
+          else if (!open && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { setQ(e.key); setHi(0); setOpen(true) }
           else if (open) {
             if (e.key === 'ArrowDown') { e.preventDefault(); setHi(a => Math.min(a + 1, filtered.length - 1)) }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(a => Math.max(a - 1, 0)) }
@@ -123,7 +125,9 @@ export function SelectBox({ value, onChange, options, children, placeholder = 'S
             ) : filtered.map((o, i) => {
               const on = o.value === value
               return (
-                <button key={o.value} type="button" onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); choose(o.value) }}
+                <button key={o.value} type="button"
+                  ref={el => { if (i === hi && el) el.scrollIntoView({ block: 'nearest' }) }}
+                  onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); choose(o.value) }}
                   className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                     i === hi ? 'bg-brand-500/10' : 'hover:bg-surface-sunken', on ? 'font-medium text-ink' : 'text-ink-soft')}>
                   <span className="min-w-0 flex-1 truncate">{o.label}</span>

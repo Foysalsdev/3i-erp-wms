@@ -14,6 +14,7 @@ import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { SavedViewsBar } from '@/components/shared/SavedViewsBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { formatDate } from '@/lib/utils'
 import { downloadCSV } from '@/lib/csv'
@@ -150,6 +151,9 @@ export function OperationList({ def }: { def: OpDef }) {
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {def.singular}</Button>}
       </div>
+
+      <SavedViewsBar scope={`ops:${def.key}`} current={{ q, statusFilter }}
+        onApply={s => { setQ(s.q ?? ''); setStatusFilter(s.statusFilter ?? 'all') }} />
 
       <BulkActionBar count={selectedRows.length} onClear={() => setChecked(new Set())} actions={[
         { icon: 'download', label: 'Export CSV', onClick: exportSelected },

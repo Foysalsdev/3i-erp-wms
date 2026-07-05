@@ -14,6 +14,7 @@ import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { Tabs } from '@/components/ui/Tabs'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { SavedViewsBar } from '@/components/shared/SavedViewsBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
@@ -92,7 +93,7 @@ function OrderLinesPreview({ so, products, onView }: { so: any; products: any[];
 
 export function OutboundSalesOrders() {
   const { data, loading, refresh } = useCollection('sales_orders', { order: 'created_at' })
-  const { currentClientId, can, isPlatformAdmin, clients } = useAuth()
+  const { currentClientId, can, isPlatformAdmin, clients, session } = useAuth()
   const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
   // Warehouse/dispatch actions are hidden from sales-only users (no inventory access).
   const dispatchAccess = isPlatformAdmin || can('inventory.view')
@@ -100,6 +101,8 @@ export function OutboundSalesOrders() {
   const canEdit = can('outbound.create') || can('outbound.edit')
   const [q, setQ] = useUrlSearch()
   const [statusFilter, setStatusFilter] = useState('all')
+  const [mineOnly, setMineOnly] = useState(false)
+  const [overdueOnly, setOverdueOnly] = useState(false)
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [scanning, setScanning] = useState<any>(null)
@@ -130,12 +133,14 @@ export function OutboundSalesOrders() {
   const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
 
   const rows = useMemo(() => {
-    const byStatus = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
-    if (!q.trim()) return byStatus
+    let out = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
+    if (mineOnly) out = out.filter(r => r.assigned_to === session?.user.id)
+    if (overdueOnly) out = out.filter(r => workflowState(r).overdue)
+    if (!q.trim()) return out
     const t = q.toLowerCase()
     const fields = ['so_no', 'reference_no', 'invoice_no', 'sap_so_no', 'outbound_delivery_no', 'transfer_order_no', 'billing_doc_no']
-    return byStatus.filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
-  }, [data, q, statusFilter])
+    return out.filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+  }, [data, q, statusFilter, mineOnly, overdueOnly, session])
 
   const closeRemaining = async (r: any) => {
     if (!window.confirm(`Close remaining (undelivered) qty for ${r.so_no}? The order will be marked closed.`)) return
@@ -249,9 +254,22 @@ export function OutboundSalesOrders() {
           <option value="all">All statuses</option>
           {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
         </SelectBox>
+        <button type="button" onClick={() => setMineOnly(v => !v)}
+          className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-semibold',
+            mineOnly ? 'border-brand-400 bg-brand-500/10 text-brand-700' : 'border-surface-line text-ink-soft hover:bg-surface-sunken')}>
+          Assigned to me
+        </button>
+        <button type="button" onClick={() => setOverdueOnly(v => !v)}
+          className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-semibold',
+            overdueOnly ? 'border-bad/40 bg-bad/10 text-bad' : 'border-surface-line text-ink-soft hover:bg-surface-sunken')}>
+          Overdue only
+        </button>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Order</Button>}
       </div>
+
+      <SavedViewsBar scope="sales-orders" current={{ q, statusFilter, mineOnly, overdueOnly }}
+        onApply={s => { setQ(s.q ?? ''); setStatusFilter(s.statusFilter ?? 'all'); setMineOnly(!!s.mineOnly); setOverdueOnly(!!s.overdueOnly) }} />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}

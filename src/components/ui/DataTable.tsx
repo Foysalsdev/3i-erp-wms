@@ -1,4 +1,5 @@
-import { Fragment, useState, useMemo } from 'react'
+import { Fragment, useState, useMemo, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/utils'
 import { Icon } from './Icon'
 import { EmptyState } from './States'
@@ -7,6 +8,11 @@ import { useUI } from '@/store/ui'
 // Varying widths so a loading table reads as content, not a uniform gray block.
 const SKELETON_ROWS = 8
 const BAR_WIDTHS = ['w-3/4', 'w-1/2', 'w-5/6', 'w-2/5', 'w-full', 'w-3/5', 'w-4/5', 'w-1/3']
+// Past this many rows, only render what's on screen (large master data, ledgers,
+// audit logs…) so the list stays smooth instead of mounting thousands of rows.
+// Needs a bounded scroll container (fill) and fixed row heights, so it's skipped
+// when a row can expand to a different height (the `expand` feature).
+const VIRTUALIZE_THRESHOLD = 150
 
 export interface Column<T> {
   key: string; header: string; className?: string
@@ -53,6 +59,21 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
     })
   }, [rows, sortKey, dir, columns])
 
+  const shouldVirtualize = !!fill && !expand && !loading && sorted.length > VIRTUALIZE_THRESHOLD
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? sorted.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => (compact ? 33 : 45),
+    overscan: 12
+  })
+  // Fixed-ish column widths (not content-driven) so the virtualized rows —
+  // each its own absolutely-positioned box — line up with the header exactly.
+  const gridTemplate = useMemo(() => [
+    ...(selection ? ['40px'] : []),
+    ...columns.map(c => (c.key === '__thumb' || c.key === '__actions') ? 'max-content' : 'minmax(140px, 1fr)')
+  ].join(' '), [columns, selection])
+
   if (!loading && !rows.length) return <EmptyState title={emptyTitle} icon={emptyIcon} hint={emptyHint} />
 
   const actionsCol = columns.find(c => c.key === '__actions')
@@ -68,7 +89,56 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
 
   return (
     <div className={cn(fill && 'flex min-h-0 flex-1 flex-col')}>
-      {/* Desktop / tablet: classic table */}
+      {/* Desktop / tablet, virtualized: large lists render only the rows in view */}
+      {shouldVirtualize ? (
+        <div className="hidden md:flex md:min-h-0 md:flex-1 md:flex-col">
+          <div className="sticky top-0 z-10 grid border-b border-horizon-line bg-surface-sunken text-left text-sm" style={{ gridTemplateColumns: gridTemplate }}>
+            {selection && (
+              <div className={cn('flex items-center bg-surface-sunken px-3', compact ? 'py-1' : 'py-2.5')}>
+                <input type="checkbox" checked={allSelected}
+                  ref={el => { if (el) el.indeterminate = !allSelected && someSelected }}
+                  onChange={() => selection.onToggleAll(visibleKeys)}
+                  className="h-4 w-4 rounded accent-brand-500" aria-label="Select all" />
+              </div>
+            )}
+            {columns.map(c => (
+              <div key={c.key} className={cn('bg-surface-sunken px-4 font-semibold text-horizon-muted', compact ? 'py-1' : 'py-2.5', c.className)}>
+                <button className={cn('inline-flex items-center gap-1', c.sortable && 'hover:text-horizon-text')}
+                  onClick={() => c.sortable && (sortKey === c.key ? setDir(d => (d === 1 ? -1 : 1)) : (setSortKey(c.key), setDir(1)))}>
+                  {c.header}
+                  {c.sortable && sortKey === c.key && <Icon name={dir === 1 ? 'arrow_upward' : 'arrow_downward'} className="text-[14px]" />}
+                </button>
+              </div>
+            ))}
+          </div>
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+            <div style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+              {virtualizer.getVirtualItems().map(vi => {
+                const row = sorted[vi.index]
+                const key = rowKey(row)
+                return (
+                  <div key={vi.key} data-index={vi.index} ref={virtualizer.measureElement}
+                    onClick={() => onRowClick?.(row)}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)`, display: 'grid', gridTemplateColumns: gridTemplate }}
+                    className={cn('border-b border-horizon-line/70 text-sm transition', onRowClick && 'cursor-pointer hover:bg-surface-sunken', selection?.selected.has(key) && 'bg-brand-500/5')}>
+                    {selection && (
+                      <div className={cn('flex items-center px-3', compact ? 'py-1' : 'py-3')} onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selection.selected.has(key)} onChange={() => selection.onToggle(key)}
+                          className="h-4 w-4 rounded accent-brand-500" aria-label="Select row" />
+                      </div>
+                    )}
+                    {columns.map(c => (
+                      <div key={c.key} className={cn('flex items-center px-4 text-horizon-text', compact ? 'py-1' : 'py-3', c.className)}>
+                        {cellValue(c, row)}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className={cn('hidden md:block', fill ? 'min-h-0 flex-1 overflow-auto' : 'overflow-x-auto')}>
         <table className="w-full border-collapse text-sm">
           <thead className={cn(fill && 'sticky top-0 z-10')}>
@@ -142,6 +212,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Mobile: each row as a stacked card (avoids cramped horizontal scrolling) */}
       <div className={cn('divide-y divide-horizon-line md:hidden', fill && 'min-h-0 flex-1 overflow-auto')}>

@@ -12,9 +12,11 @@ import { SelectBox } from '@/components/ui/SelectBox'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
+import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { formatDate } from '@/lib/utils'
+import { downloadCSV } from '@/lib/csv'
 import { TrailPanel } from '@/components/shared/TrailPanel'
 import { OperationForm } from './OperationForm'
 
@@ -41,6 +43,8 @@ export function OperationList({ def }: { def: OpDef }) {
   const [viewing, setViewing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [rel, setRel] = useState<Record<string, Record<string, string>>>({})
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   // Print the document header via the matching PDF template (gate pass / generic).
   const printRow = async (row: any) => {
@@ -103,7 +107,37 @@ export function OperationList({ def }: { def: OpDef }) {
       </div>
     )
   }
-  const columns = [...opColumns(def), actionCol]
+  const baseColumns = opColumns(def)
+  const columns = [...baseColumns, actionCol]
+
+  // Only ids still present in the current filter count toward the bulk bar —
+  // a stale checked id from a deleted/filtered-out row is simply dropped.
+  const selectedRows = rows.filter((r: any) => checked.has(r.id))
+
+  const toggleOne = (id: string) => setChecked(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const toggleAll = (ids: string[]) => setChecked(prev => {
+    const allIn = ids.every(id => prev.has(id))
+    const next = new Set(prev)
+    ids.forEach(id => allIn ? next.delete(id) : next.add(id))
+    return next
+  })
+
+  const exportSelected = () => {
+    const cols = baseColumns.map(c => ({ key: c.key, header: c.header }))
+    const csvRows = selectedRows.map((r: any) => Object.fromEntries(baseColumns.map(c => [c.key, c.accessor?.(r) ?? r[c.key] ?? ''])))
+    downloadCSV(`${def.title} (selected)`, cols, csvRows)
+  }
+
+  const bulkDelete = async () => {
+    const ids = selectedRows.map((r: any) => r.id)
+    const res = await supabase.from(def.table as any).delete().in('id', ids)
+    if (!res.error) { setChecked(new Set()); refresh() }
+    return res
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -117,10 +151,16 @@ export function OperationList({ def }: { def: OpDef }) {
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {def.singular}</Button>}
       </div>
 
+      <BulkActionBar count={selectedRows.length} onClear={() => setChecked(new Set())} actions={[
+        { icon: 'download', label: 'Export CSV', onClick: exportSelected },
+        ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setBulkDeleting(true) }] : [])
+      ]} />
+
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
           onRowClick={canEdit ? (r => { setEditing(r); setModal(true) }) : (r => setViewing(r))}
-          emptyTitle={`No ${def.singular.toLowerCase()} records yet`} />
+          emptyTitle={`No ${def.singular.toLowerCase()} records yet`}
+          selection={{ selected: checked, onToggle: toggleOne, onToggleAll: toggleAll }} />
       </Card>
 
       <Modal open={modal} onClose={() => setModal(false)} title={`${editing ? 'Edit' : 'New'} ${def.singular}`} size="lg">
@@ -174,6 +214,10 @@ export function OperationList({ def }: { def: OpDef }) {
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }} />
+
+      <ConfirmDelete open={bulkDeleting} onClose={() => setBulkDeleting(false)}
+        name={`${selectedRows.length} ${def.singular.toLowerCase()}`}
+        onConfirm={bulkDelete} />
     </div>
   )
 }

@@ -1,17 +1,11 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
 import { downloadBlob } from '@/lib/utils'
+import { downloadCSV, type CsvCol } from '@/lib/csv'
 
-export interface RepCol { key: string; header: string; align?: 'right' | 'left'; width?: string }
+export interface RepCol extends CsvCol { align?: 'right' | 'left'; width?: string }
 
-// CSV download — opens directly in Excel, no extra library needed.
-export function downloadCSV(filename: string, cols: RepCol[], rows: any[]) {
-  const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const head = cols.map(c => esc(c.header)).join(',')
-  const body = rows.map(r => cols.map(c => esc(r[c.key])).join(',')).join('\n')
-  const blob = new Blob(['﻿' + head + '\n' + body], { type: 'text/csv;charset=utf-8;' })
-  downloadBlob(blob, `${filename.replace(/[^\w]+/g, '_')}.csv`)
-}
+export { downloadCSV }
 
 const s = StyleSheet.create({
   page: { padding: 26, fontSize: 8, fontFamily: 'Helvetica', color: '#212326' },

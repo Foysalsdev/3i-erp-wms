@@ -13,6 +13,8 @@ import { NON_SALEABLE, conditionLabel } from '@/lib/conditions'
 import { movementLabel } from '@/lib/movements'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
+import { FilterPanel } from '@/components/ui/FilterPanel'
+import { Combobox } from '@/components/shared/Combobox'
 import { StockAdjustModal } from './StockAdjustModal'
 import type { StockRow } from '@/pdf/StockReportPDF'
 
@@ -26,10 +28,17 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [cond, setCond] = useState<string | null>(null)   // chip filter within the view
+  const [warehouseFilter, setWarehouseFilter] = useState('')
+  const [warehouses, setWarehouses] = useState<any[]>([])
   const [adjust, setAdjust] = useState(false)
   const [trail, setTrail] = useState<any | null>(null)    // row whose movement history is open
   const client = clients.find(c => c.id === currentClientId)
   const nonSaleableMode = statusFilter === 'nonsaleable'
+
+  useEffect(() => {
+    if (!currentClientId) return
+    supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
+  }, [currentClientId])
 
   const load = () => {
     if (!currentClientId) return
@@ -56,10 +65,11 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
   const filtered = useMemo(() => {
     let list = rows
     if (cond) list = list.filter(r => r.stock_status === cond)
+    if (warehouseFilter) list = list.filter(r => r.warehouse_id === warehouseFilter)
     if (!q.trim()) return list
     const t = q.toLowerCase()
     return list.filter(r => (r.products?.name ?? '').toLowerCase().includes(t) || (r.products?.material_code ?? '').toLowerCase().includes(t))
-  }, [rows, q, cond])
+  }, [rows, q, cond, warehouseFilter])
 
   const columns = [
     { key: 'code', header: 'Material Code', accessor: (r: any) => r.products?.material_code, sortable: true, className: 'font-medium' },
@@ -92,6 +102,13 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search product…" /></div>
+        <FilterPanel activeCount={warehouseFilter ? 1 : 0} onClear={() => setWarehouseFilter('')}>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-soft">Warehouse</label>
+            <Combobox items={warehouses.map((w: any) => ({ id: w.id, label: `${w.code} — ${w.name}` }))}
+              value={warehouseFilter} onChange={setWarehouseFilter} placeholder="All warehouses" />
+          </div>
+        </FilterPanel>
         <span className="text-sm text-horizon-muted">{filtered.length} records</span>
         <div className="ml-auto flex gap-2">
           <Button variant="secondary" icon="picture_as_pdf" onClick={exportPDF}>PDF</Button>

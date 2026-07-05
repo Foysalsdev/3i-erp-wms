@@ -14,7 +14,9 @@ import { ActionMenu } from '@/components/ui/ActionMenu'
 import { TrailPanel } from '@/components/shared/TrailPanel'
 import { DocVersions } from '@/components/shared/DocVersions'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
+import { FilterPanel } from '@/components/ui/FilterPanel'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { SavedViewsBar } from '@/components/shared/SavedViewsBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { Field, Input, Textarea } from '@/components/ui/Field'
@@ -38,6 +40,9 @@ export function DeliveryChallan() {
   const canPost = can('outbound.approve') || can('outbound.post') || isPlatformAdmin
   const [q, setQ] = useUrlSearch()
   const [statusFilter, setStatusFilter] = useState('all')
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
@@ -65,14 +70,17 @@ export function DeliveryChallan() {
   const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} - ${c.name}` : '-' }
 
   const rows = useMemo(() => {
-    const byStatus = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
-    if (!q.trim()) return byStatus
+    let out = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
+    if (customerFilter) out = out.filter(r => r.customer_id === customerFilter)
+    if (dateFrom) { const from = new Date(dateFrom); out = out.filter(r => new Date(r.challan_date) >= from) }
+    if (dateTo) { const to = new Date(dateTo); to.setHours(23, 59, 59, 999); out = out.filter(r => new Date(r.challan_date) <= to) }
+    if (!q.trim()) return out
     const t = q.toLowerCase()
-    return byStatus.filter(r =>
+    return out.filter(r =>
       String(r.challan_no ?? '').toLowerCase().includes(t) ||
       String(r.invoice_no ?? '').toLowerCase().includes(t) ||
       String(r.po_no ?? '').toLowerCase().includes(t))
-  }, [data, q, statusFilter])
+  }, [data, q, statusFilter, customerFilter, dateFrom, dateTo])
 
   // Issue the challan: deduct stock for every line, then auto-create a linked gate pass.
   const issue = async (c: any) => {
@@ -189,9 +197,33 @@ export function DeliveryChallan() {
           <option value="all">All statuses</option>
           {DC_STATUS.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </SelectBox>
+        <FilterPanel activeCount={(customerFilter ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0)}
+          onClear={() => { setCustomerFilter(''); setDateFrom(''); setDateTo('') }}>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-soft">Customer</label>
+            <Combobox items={customers.map((c: any) => ({ id: c.id, label: `${c.customer_code} — ${c.name}` }))}
+              value={customerFilter} onChange={setCustomerFilter} placeholder="All customers" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-soft">Challan date from</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="fiori-input py-1.5 text-xs" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-soft">to</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="fiori-input py-1.5 text-xs" />
+            </div>
+          </div>
+        </FilterPanel>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Challan</Button>}
       </div>
+
+      <SavedViewsBar scope="delivery-challan" current={{ q, statusFilter, customerFilter, dateFrom, dateTo }}
+        onApply={s => {
+          setQ(s.q ?? ''); setStatusFilter(s.statusFilter ?? 'all')
+          setCustomerFilter(s.customerFilter ?? ''); setDateFrom(s.dateFrom ?? ''); setDateTo(s.dateTo ?? '')
+        }} />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}

@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { Tabs } from '@/components/ui/Tabs'
+import { FilterPanel } from '@/components/ui/FilterPanel'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { SavedViewsBar } from '@/components/shared/SavedViewsBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
@@ -104,6 +105,9 @@ export function OutboundSalesOrders() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [mineOnly, setMineOnly] = useState(false)
   const [overdueOnly, setOverdueOnly] = useState(false)
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
@@ -138,11 +142,14 @@ export function OutboundSalesOrders() {
     let out = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
     if (mineOnly) out = out.filter(r => r.assigned_to === session?.user.id)
     if (overdueOnly) out = out.filter(r => workflowState(r).overdue)
+    if (customerFilter) out = out.filter(r => r.customer_id === customerFilter)
+    if (dateFrom) { const from = new Date(dateFrom); out = out.filter(r => new Date(r.order_date) >= from) }
+    if (dateTo) { const to = new Date(dateTo); to.setHours(23, 59, 59, 999); out = out.filter(r => new Date(r.order_date) <= to) }
     if (!q.trim()) return out
     const t = q.toLowerCase()
     const fields = ['so_no', 'reference_no', 'invoice_no', 'sap_so_no', 'outbound_delivery_no', 'transfer_order_no', 'billing_doc_no']
     return out.filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
-  }, [data, q, statusFilter, mineOnly, overdueOnly, session])
+  }, [data, q, statusFilter, mineOnly, overdueOnly, customerFilter, dateFrom, dateTo, session])
 
   const closeRemaining = async (r: any) => {
     if (!window.confirm(`Close remaining (undelivered) qty for ${r.so_no}? The order will be marked closed.`)) return
@@ -266,12 +273,33 @@ export function OutboundSalesOrders() {
             overdueOnly ? 'border-bad/40 bg-bad/10 text-bad' : 'border-surface-line text-ink-soft hover:bg-surface-sunken')}>
           Overdue only
         </button>
+        <FilterPanel activeCount={(customerFilter ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0)}
+          onClear={() => { setCustomerFilter(''); setDateFrom(''); setDateTo('') }}>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-soft">Customer</label>
+            <Combobox items={customers.map((c: any) => ({ id: c.id, label: `${c.customer_code} — ${c.name}` }))}
+              value={customerFilter} onChange={setCustomerFilter} placeholder="All customers" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-soft">Order date from</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="fiori-input py-1.5 text-xs" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-soft">to</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="fiori-input py-1.5 text-xs" />
+            </div>
+          </div>
+        </FilterPanel>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Order</Button>}
       </div>
 
-      <SavedViewsBar scope="sales-orders" current={{ q, statusFilter, mineOnly, overdueOnly }}
-        onApply={s => { setQ(s.q ?? ''); setStatusFilter(s.statusFilter ?? 'all'); setMineOnly(!!s.mineOnly); setOverdueOnly(!!s.overdueOnly) }} />
+      <SavedViewsBar scope="sales-orders" current={{ q, statusFilter, mineOnly, overdueOnly, customerFilter, dateFrom, dateTo }}
+        onApply={s => {
+          setQ(s.q ?? ''); setStatusFilter(s.statusFilter ?? 'all'); setMineOnly(!!s.mineOnly); setOverdueOnly(!!s.overdueOnly)
+          setCustomerFilter(s.customerFilter ?? ''); setDateFrom(s.dateFrom ?? ''); setDateTo(s.dateTo ?? '')
+        }} />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}

@@ -8,16 +8,16 @@ import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { SelectBox } from '@/components/ui/SelectBox'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { BulkActionBar } from '@/components/ui/BulkActionBar'
+import { FilterPanel } from '@/components/ui/FilterPanel'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { SavedViewsBar } from '@/components/shared/SavedViewsBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
-import { formatDate } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
 import { downloadCSV } from '@/lib/csv'
 import { TrailPanel } from '@/components/shared/TrailPanel'
 import { OperationForm } from './OperationForm'
@@ -39,7 +39,9 @@ export function OperationList({ def }: { def: OpDef }) {
   const notify = useUI(s => s.notify)
   const canEdit = can(`${def.permission}.create`) || can(`${def.permission}.edit`)
   const [q, setQ] = useUrlSearch()
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [viewing, setViewing] = useState<any>(null)
@@ -89,11 +91,13 @@ export function OperationList({ def }: { def: OpDef }) {
       ...row,
       __rel: Object.fromEntries(def.fields.filter(f => f.relation).map(f => [f.name, rel[f.name]?.[row[f.name]] ?? '—']))
     }))
-    const byStatus = statusFilter === 'all' ? withRel : withRel.filter(r => r.status === statusFilter)
-    if (!q.trim()) return byStatus
+    let out = statusFilter.length ? withRel.filter(r => statusFilter.includes(r.status)) : withRel
+    if (dateFrom) { const from = new Date(dateFrom); out = out.filter(r => new Date(r.created_at) >= from) }
+    if (dateTo) { const to = new Date(dateTo); to.setHours(23, 59, 59, 999); out = out.filter(r => new Date(r.created_at) <= to) }
+    if (!q.trim()) return out
     const t = q.toLowerCase()
-    return byStatus.filter(r => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
-  }, [data, rel, q, statusFilter, def])
+    return out.filter(r => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+  }, [data, rel, q, statusFilter, dateFrom, dateTo, def])
 
   const rowActions = (row: any): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => setViewing(row) },
@@ -146,16 +150,40 @@ export function OperationList({ def }: { def: OpDef }) {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder={`Search ${def.singular.toLowerCase()}…`} /></div>
-        <SelectBox value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-auto py-2">
-          <option value="all">All statuses</option>
-          {def.statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </SelectBox>
+        <FilterPanel activeCount={(statusFilter.length ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0)}
+          onClear={() => { setStatusFilter([]); setDateFrom(''); setDateTo('') }}>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-soft">Status</label>
+            <div className="flex flex-wrap gap-1.5">
+              {def.statuses.map(s => {
+                const on = statusFilter.includes(s.value)
+                return (
+                  <button key={s.value} type="button"
+                    onClick={() => setStatusFilter(prev => on ? prev.filter(v => v !== s.value) : [...prev, s.value])}
+                    className={cn('rounded-md px-2 py-1 text-xs font-medium', on ? 'bg-brand-500/15 text-brand-700' : 'bg-surface-sunken text-ink-soft hover:text-ink')}>
+                    {s.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-soft">From</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="fiori-input py-1.5 text-xs" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-soft">To</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="fiori-input py-1.5 text-xs" />
+            </div>
+          </div>
+        </FilterPanel>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {def.singular}</Button>}
       </div>
 
-      <SavedViewsBar scope={`ops:${def.key}`} current={{ q, statusFilter }}
-        onApply={s => { setQ(s.q ?? ''); setStatusFilter(s.statusFilter ?? 'all') }} />
+      <SavedViewsBar scope={`ops:${def.key}`} current={{ q, statusFilter, dateFrom, dateTo }}
+        onApply={s => { setQ(s.q ?? ''); setStatusFilter(s.statusFilter ?? []); setDateFrom(s.dateFrom ?? ''); setDateTo(s.dateTo ?? '') }} />
 
       <BulkActionBar count={selectedRows.length} onClear={() => setChecked(new Set())} actions={[
         { icon: 'download', label: 'Export CSV', onClick: exportSelected },

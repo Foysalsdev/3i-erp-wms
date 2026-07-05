@@ -21,7 +21,7 @@ import { LineItems, lineUnitPrice, lineTotal, type LineRow } from '@/components/
 import { Combobox } from '@/components/shared/Combobox'
 import { SerialScan } from './SerialScan'
 import { ChallanForm } from './DeliveryChallan'
-import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
+import { formatNumber, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { DocVersions } from '@/components/shared/DocVersions'
@@ -46,6 +46,46 @@ function NextActionCell({ order, ownerName }: { order: any; ownerName?: string |
         {wf.overdue && <Badge tone="negative">Overdue</Badge>}
       </div>
       {!done && <div className="truncate text-[11px] text-ink-faint">{ownerName || wf.role}</div>}
+    </div>
+  )
+}
+
+// Row-expand preview (DataTable's `expand`): a quick look at what's in the
+// order — ordered/delivered/pending per line — without opening the full
+// overview modal. Lines are fetched lazily, only when a row is expanded.
+function OrderLinesPreview({ so, products, onView }: { so: any; products: any[]; onView: () => void }) {
+  const [items, setItems] = useState<any[] | null>(null)
+  useEffect(() => {
+    let active = true
+    supabase.from('sales_order_items').select('*').eq('so_id', so.id).then(({ data }) => { if (active) setItems(data ?? []) })
+    return () => { active = false }
+  }, [so.id])
+
+  if (items === null) return (
+    <div className="flex items-center gap-2 py-1 text-sm text-ink-faint">
+      <Icon name="progress_activity" className="animate-spin text-[16px]" /> Loading lines…
+    </div>
+  )
+  if (!items.length) return <p className="py-1 text-sm text-ink-faint">No line items yet.</p>
+
+  return (
+    <div className="space-y-2">
+      <div className="overflow-hidden rounded-xl border border-surface-line bg-surface">
+        {items.map((it: any, i: number) => {
+          const p = products.find((x: any) => x.id === it.product_id)
+          const pending = Math.max(0, Number(it.qty) - Number(it.delivered_qty || 0))
+          return (
+            <div key={it.id} className={cn('flex items-center justify-between gap-3 px-3.5 py-2 text-sm', i > 0 && 'border-t border-surface-line')}>
+              <span className="min-w-0 truncate text-ink">{p ? `${p.material_code} — ${p.name}` : it.product_id}</span>
+              <span className="shrink-0 text-xs text-ink-soft">
+                ordered {formatNumber(it.qty)} · delivered {formatNumber(it.delivered_qty || 0)}
+                {pending > 0 ? <span className="ml-1 font-medium text-bad">· {formatNumber(pending)} pending</span> : <span className="ml-1 font-medium text-ok">· complete</span>}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <button type="button" onClick={onView} className="text-xs font-medium text-brand-700 hover:underline">View full order →</button>
     </div>
   )
 }
@@ -215,7 +255,8 @@ export function OutboundSalesOrders() {
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          emptyTitle="No sales orders yet" />
+          emptyTitle="No sales orders yet"
+          expand={{ render: (r: any) => <OrderLinesPreview so={r} products={products} onView={() => setOverview(r)} /> }} />
       </Card>
 
       {modal && (

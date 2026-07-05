@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Icon } from './Icon'
 import { EmptyState } from './States'
@@ -27,11 +27,21 @@ interface Props<T> {
   fill?: boolean
   // Row checkboxes + a header "select all (visible)" checkbox, for bulk actions.
   selection?: Selection
+  // A chevron toggles an inline detail row under the clicked row — a quick
+  // look (e.g. line items) without leaving the list or opening a modal.
+  // Independent of onRowClick, so both can be wired on the same table.
+  expand?: { render: (row: T) => React.ReactNode }
 }
-export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records', emptyIcon, emptyHint, fill, selection }: Props<T>) {
+export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records', emptyIcon, emptyHint, fill, selection, expand }: Props<T>) {
   const compact = useUI(s => s.density) === 'compact'
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [dir, setDir] = useState<1 | -1>(1)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpand = (key: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    next.has(key) ? next.delete(key) : next.add(key)
+    return next
+  })
 
   const sorted = useMemo(() => {
     if (!sortKey) return rows
@@ -63,6 +73,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
         <table className="w-full border-collapse text-sm">
           <thead className={cn(fill && 'sticky top-0 z-10')}>
             <tr className="border-b border-horizon-line bg-surface-sunken text-left">
+              {expand && <th className={cn('w-px bg-surface-sunken px-2', compact ? 'py-1' : 'py-2.5')} />}
               {selection && (
                 <th className={cn('w-px bg-surface-sunken px-3', compact ? 'py-1' : 'py-2.5')}>
                   <input type="checkbox" checked={allSelected}
@@ -85,27 +96,49 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
           <tbody>
             {loading ? Array.from({ length: SKELETON_ROWS }, (_, i) => (
               <tr key={`sk-${i}`} className="border-b border-horizon-line/70">
+                {expand && <td className={cn('px-2', compact ? 'py-1' : 'py-3')} />}
                 {selection && <td className={cn('px-3', compact ? 'py-1' : 'py-3')} />}
                 {columns.map((c, ci) => (
                   <td key={c.key} className={cn('px-4', compact ? 'py-1' : 'py-3', c.className)}>{skeletonCell(c, ci + i)}</td>
                 ))}
               </tr>
-            )) : sorted.map(row => (
-              <tr key={rowKey(row)} onClick={() => onRowClick?.(row)}
-                className={cn('border-b border-horizon-line/70 transition', onRowClick && 'cursor-pointer hover:bg-surface-sunken', selection?.selected.has(rowKey(row)) && 'bg-brand-500/5')}>
-                {selection && (
-                  <td className={cn('px-3', compact ? 'py-1' : 'py-3')} onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" checked={selection.selected.has(rowKey(row))} onChange={() => selection.onToggle(rowKey(row))}
-                      className="h-4 w-4 rounded accent-brand-500" aria-label="Select row" />
-                  </td>
-                )}
-                {columns.map(c => (
-                  <td key={c.key} className={cn('px-4 text-horizon-text', compact ? 'py-1' : 'py-3', c.className)}>
-                    {cellValue(c, row)}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            )) : sorted.map(row => {
+              const key = rowKey(row)
+              const isOpen = expand && expanded.has(key)
+              return (
+                <Fragment key={key}>
+                  <tr onClick={() => onRowClick?.(row)}
+                    className={cn('border-b border-horizon-line/70 transition', onRowClick && 'cursor-pointer hover:bg-surface-sunken', selection?.selected.has(key) && 'bg-brand-500/5')}>
+                    {expand && (
+                      <td className={cn('px-2', compact ? 'py-1' : 'py-3')} onClick={e => e.stopPropagation()}>
+                        <button type="button" onClick={() => toggleExpand(key)} aria-label={isOpen ? 'Collapse' : 'Expand'}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-surface-sunken hover:text-ink">
+                          <Icon name="chevron_right" className={cn('text-[18px] transition-transform', isOpen && 'rotate-90')} />
+                        </button>
+                      </td>
+                    )}
+                    {selection && (
+                      <td className={cn('px-3', compact ? 'py-1' : 'py-3')} onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selection.selected.has(key)} onChange={() => selection.onToggle(key)}
+                          className="h-4 w-4 rounded accent-brand-500" aria-label="Select row" />
+                      </td>
+                    )}
+                    {columns.map(c => (
+                      <td key={c.key} className={cn('px-4 text-horizon-text', compact ? 'py-1' : 'py-3', c.className)}>
+                        {cellValue(c, row)}
+                      </td>
+                    ))}
+                  </tr>
+                  {isOpen && (
+                    <tr className="border-b border-horizon-line/70 bg-surface-sunken/40">
+                      <td colSpan={columns.length + (selection ? 1 : 0) + 1} className="px-4 py-3">
+                        {expand!.render(row)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -120,26 +153,39 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
               ))}
             </div>
           </div>
-        )) : sorted.map(row => (
-          <div key={rowKey(row)} onClick={() => onRowClick?.(row)}
-            className={cn('flex items-start justify-between gap-3 px-4', compact ? 'py-1.5' : 'py-3', onRowClick && 'cursor-pointer active:bg-surface-sunken', selection?.selected.has(rowKey(row)) && 'bg-brand-500/5')}>
-            {selection && (
-              <div className="shrink-0 pt-0.5" onClick={e => e.stopPropagation()}>
-                <input type="checkbox" checked={selection.selected.has(rowKey(row))} onChange={() => selection.onToggle(rowKey(row))}
-                  className="h-4 w-4 rounded accent-brand-500" aria-label="Select row" />
-              </div>
-            )}
-            <div className={cn('min-w-0 flex-1', compact ? 'space-y-0.5' : 'space-y-1.5')}>
-              {columns.filter(c => c.key !== '__actions' && c.key !== '__thumb').map(c => (
-                <div key={c.key} className="flex items-baseline gap-2 text-sm">
-                  {c.header && <span className="w-24 shrink-0 text-xs text-ink-faint">{c.header}</span>}
-                  <span className="min-w-0 flex-1 break-words text-ink">{cellValue(c, row)}</span>
+        )) : sorted.map(row => {
+          const key = rowKey(row)
+          const isOpen = expand && expanded.has(key)
+          return (
+            <div key={key}>
+              <div onClick={() => onRowClick?.(row)}
+                className={cn('flex items-start justify-between gap-3 px-4', compact ? 'py-1.5' : 'py-3', onRowClick && 'cursor-pointer active:bg-surface-sunken', selection?.selected.has(key) && 'bg-brand-500/5')}>
+                {expand && (
+                  <button type="button" onClick={e => { e.stopPropagation(); toggleExpand(key) }} aria-label={isOpen ? 'Collapse' : 'Expand'}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-surface-sunken hover:text-ink">
+                    <Icon name="chevron_right" className={cn('text-[18px] transition-transform', isOpen && 'rotate-90')} />
+                  </button>
+                )}
+                {selection && (
+                  <div className="shrink-0 pt-0.5" onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" checked={selection.selected.has(key)} onChange={() => selection.onToggle(key)}
+                      className="h-4 w-4 rounded accent-brand-500" aria-label="Select row" />
+                  </div>
+                )}
+                <div className={cn('min-w-0 flex-1', compact ? 'space-y-0.5' : 'space-y-1.5')}>
+                  {columns.filter(c => c.key !== '__actions' && c.key !== '__thumb').map(c => (
+                    <div key={c.key} className="flex items-baseline gap-2 text-sm">
+                      {c.header && <span className="w-24 shrink-0 text-xs text-ink-faint">{c.header}</span>}
+                      <span className="min-w-0 flex-1 break-words text-ink">{cellValue(c, row)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+                {actionsCol && <div className="shrink-0">{cellValue(actionsCol, row)}</div>}
+              </div>
+              {isOpen && <div className="border-t border-surface-line bg-surface-sunken/40 px-4 py-3">{expand!.render(row)}</div>}
             </div>
-            {actionsCol && <div className="shrink-0">{cellValue(actionsCol, row)}</div>}
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

@@ -12,8 +12,11 @@ export interface Column<T> {
 interface Props<T> {
   columns: Column<T>[]; rows: T[]; loading?: boolean
   rowKey: (row: T) => string; onRowClick?: (row: T) => void; emptyTitle?: string
+  // Fill the parent's height and scroll internally (with a sticky header),
+  // so the surrounding toolbar/header stay put instead of the whole page scrolling.
+  fill?: boolean
 }
-export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records' }: Props<T>) {
+export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records', fill }: Props<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [dir, setDir] = useState<1 | -1>(1)
 
@@ -34,14 +37,14 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
   const cellValue = (c: Column<T>, row: T) => (c.render ? c.render(row) : String(c.accessor?.(row) ?? '—'))
 
   return (
-    <>
+    <div className={cn(fill && 'flex min-h-0 flex-1 flex-col')}>
       {/* Desktop / tablet: classic table */}
-      <div className="hidden overflow-x-auto md:block">
+      <div className={cn('hidden md:block', fill ? 'min-h-0 flex-1 overflow-auto' : 'overflow-x-auto')}>
         <table className="w-full border-collapse text-sm">
-          <thead>
+          <thead className={cn(fill && 'sticky top-0 z-10')}>
             <tr className="border-b border-horizon-line bg-surface-sunken text-left">
               {columns.map(c => (
-                <th key={c.key} className={cn('px-4 py-2.5 font-semibold text-horizon-muted', c.className)}>
+                <th key={c.key} className={cn('bg-surface-sunken px-4 py-2.5 font-semibold text-horizon-muted', c.className)}>
                   <button className={cn('inline-flex items-center gap-1', c.sortable && 'hover:text-horizon-text')}
                     onClick={() => c.sortable && (sortKey === c.key ? setDir(d => (d === 1 ? -1 : 1)) : (setSortKey(c.key), setDir(1)))}>
                     {c.header}
@@ -67,7 +70,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
       </div>
 
       {/* Mobile: each row as a stacked card (avoids cramped horizontal scrolling) */}
-      <div className="divide-y divide-horizon-line md:hidden">
+      <div className={cn('divide-y divide-horizon-line md:hidden', fill && 'min-h-0 flex-1 overflow-auto')}>
         {sorted.map(row => (
           <div key={rowKey(row)} onClick={() => onRowClick?.(row)}
             className={cn('flex items-start justify-between gap-3 px-4 py-3', onRowClick && 'cursor-pointer active:bg-surface-sunken')}>
@@ -83,6 +86,6 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
           </div>
         ))}
       </div>
-    </>
+    </div>
   )
 }

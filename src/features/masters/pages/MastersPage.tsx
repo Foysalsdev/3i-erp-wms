@@ -12,7 +12,7 @@ export default function MastersPage() {
   const tabs = MASTER_ORDER.map(k => ({ key: k, label: MASTERS[k].singular }))
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader icon="inventory_2" title="Masters" subtitle="Central master data — list, card & profile views with attachments, notes & activity" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/masters/${k}`)} />
       <MasterList key={active} def={def} />

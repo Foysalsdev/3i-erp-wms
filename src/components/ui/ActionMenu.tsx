@@ -33,7 +33,13 @@ export function ActionMenu({ items }: { items: MenuItem[] }) {
 
   const toggle = () => {
     const r = btnRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: r.bottom + 4, left: r.right - 176 }) // 176 = w-44 menu width, right-aligned to button
+    if (r) {
+      // Flip the menu upward when there isn't room below (rows near the
+      // viewport bottom), so it's never clipped off-screen.
+      const h = items.length * 40 + 8 // ~40px per item + padding
+      const openUp = r.bottom + h > window.innerHeight - 8 && r.top - h > 8
+      setPos({ top: openUp ? r.top - h - 4 : r.bottom + 4, left: r.right - 176 }) // 176 = w-44, right-aligned
+    }
     setOpen(o => !o)
   }
 

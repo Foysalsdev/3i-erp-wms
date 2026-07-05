@@ -105,7 +105,7 @@ export function MasterList({ def }: { def: MasterDef }) {
   const columns = [...(thumbCol ? [thumbCol] : []), ...def.listColumns, actionCol]
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder={`Search ${def.title.toLowerCase()}…`} /></div>
         <div className="flex rounded-lg border border-surface-line p-0.5">
@@ -120,12 +120,12 @@ export function MasterList({ def }: { def: MasterDef }) {
       </div>
 
       {view === 'list' ? (
-        <Card className="overflow-hidden">
-          <DataTable columns={columns} rows={filtered} loading={loading}
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <DataTable columns={columns} rows={filtered} loading={loading} fill
             rowKey={(r: any) => r.id} onRowClick={r => setSelected({ row: r, tab: 'details' })} emptyTitle={`No ${def.title.toLowerCase()} yet`} />
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-h-0 flex-1 gap-3 overflow-auto sm:grid-cols-2 lg:grid-cols-3 content-start">
           {filtered.map((r: any) => {
             const img = def.imageField ? r[def.imageField] : null
             return (

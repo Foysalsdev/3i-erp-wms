@@ -4,6 +4,7 @@ import { useUI } from '@/store/ui'
 import { Icon } from '@/components/ui/Icon'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { DensityToggle } from '@/components/ui/DensityToggle'
 import { initials } from '@/lib/utils'
 import { GlobalSearch } from './GlobalSearch'
 import { NotificationBell } from './NotificationBell'
@@ -66,6 +67,10 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
                 <div className="flex items-center justify-between px-4 py-2.5">
                   <span className="text-[11px] font-semibold text-ink-soft">Appearance</span>
                   <ThemeToggle />
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-[11px] font-semibold text-ink-soft">Row density</span>
+                  <DensityToggle />
                 </div>
                 {/* Client switcher inside the menu — the only way to switch clients on mobile (the bar selector is hidden below sm). */}
                 <div className="px-4 py-2 sm:hidden">

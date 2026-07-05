@@ -3,8 +3,10 @@ import { create } from 'zustand'
 export interface Toast { id: number; type: 'success' | 'error' | 'info'; message: string }
 export type ThemeMode = 'light' | 'dark' | 'system'
 type Theme = 'light' | 'dark'
+export type Density = 'comfortable' | 'compact'
 
 const THEME_KEY = '3i_theme'
+const DENSITY_KEY = '3i_density'
 const media = window.matchMedia?.('(prefers-color-scheme: dark)')
 
 function resolveTheme(mode: ThemeMode): Theme {
@@ -17,6 +19,9 @@ function initialMode(): ThemeMode {
 function applyTheme(t: Theme) {
   document.documentElement.classList.toggle('dark', t === 'dark')
 }
+function initialDensity(): Density {
+  return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'
+}
 
 interface UIState {
   sidebarCollapsed: boolean
@@ -24,6 +29,8 @@ interface UIState {
   themeMode: ThemeMode
   theme: Theme
   setThemeMode: (mode: ThemeMode) => void
+  density: Density
+  setDensity: (d: Density) => void
   toasts: Toast[]
   notify: (type: Toast['type'], message: string) => void
   dismiss: (id: number) => void
@@ -45,6 +52,8 @@ export const useUI = create<UIState>((set, get) => ({
     applyTheme(resolved)
     return { themeMode: mode, theme: resolved }
   }),
+  density: initialDensity(),
+  setDensity: (d) => { localStorage.setItem(DENSITY_KEY, d); set({ density: d }) },
   toasts: [],
   notify: (type, message) => {
     const id = seq++

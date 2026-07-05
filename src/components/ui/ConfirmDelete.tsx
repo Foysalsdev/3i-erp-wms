@@ -8,11 +8,14 @@ import { Field, Input } from './Field'
 
 // Destructive-delete confirmation that requires the admin to re-enter their
 // password. The password is verified against Supabase Auth before onConfirm runs.
-export function ConfirmDelete({ open, onClose, name, onConfirm }: {
+// When onUndo is given, the success toast offers a few seconds to reverse it
+// (re-inserting the deleted row(s)) instead of the delete being final.
+export function ConfirmDelete({ open, onClose, name, onConfirm, onUndo }: {
   open: boolean
   onClose: () => void
   name?: string
   onConfirm: () => Promise<{ error?: any } | void>
+  onUndo?: () => Promise<void> | void
 }) {
   const email = useAuth(s => s.session?.user.email)
   const notify = useUI(s => s.notify)
@@ -43,7 +46,9 @@ export function ConfirmDelete({ open, onClose, name, onConfirm }: {
         notify('error', msg); return
       }
 
-      notify('success', name ? `${name} deleted` : 'Deleted')
+      notify('success', name ? `${name} deleted` : 'Deleted', onUndo
+        ? { action: { label: 'Undo', onClick: onUndo }, duration: 6000 }
+        : undefined)
       close()
     } catch (err: any) {
       notify('error', err?.message ?? 'Could not delete. Try again.')
@@ -56,7 +61,8 @@ export function ConfirmDelete({ open, onClose, name, onConfirm }: {
     <Modal open={open} onClose={close} title="Confirm delete">
       <form onSubmit={submit} className="space-y-4">
         <p className="text-sm text-ink-soft">
-          You are about to permanently delete {name ? <b className="text-ink">{name}</b> : 'this record'}. This action cannot be undone.
+          You are about to delete {name ? <b className="text-ink">{name}</b> : 'this record'}.{' '}
+          {onUndo ? "You'll get a short window to undo it right after." : 'This action cannot be undone.'}
         </p>
         <Field label="Re-enter your admin password to confirm">
           <Input type="password" value={pw} autoFocus autoComplete="current-password"

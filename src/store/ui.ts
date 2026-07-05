@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
-export interface Toast { id: number; type: 'success' | 'error' | 'info'; message: string }
+export interface ToastAction { label: string; onClick: () => void }
+export interface Toast { id: number; type: 'success' | 'error' | 'info'; message: string; action?: ToastAction }
 export type ThemeMode = 'light' | 'dark' | 'system'
 type Theme = 'light' | 'dark'
 export type Density = 'comfortable' | 'compact'
@@ -32,7 +33,7 @@ interface UIState {
   density: Density
   setDensity: (d: Density) => void
   toasts: Toast[]
-  notify: (type: Toast['type'], message: string) => void
+  notify: (type: Toast['type'], message: string, opts?: { action?: ToastAction; duration?: number }) => void
   dismiss: (id: number) => void
 }
 
@@ -55,10 +56,10 @@ export const useUI = create<UIState>((set, get) => ({
   density: initialDensity(),
   setDensity: (d) => { localStorage.setItem(DENSITY_KEY, d); set({ density: d }) },
   toasts: [],
-  notify: (type, message) => {
+  notify: (type, message, opts) => {
     const id = seq++
-    set(s => ({ toasts: [...s.toasts, { id, type, message }] }))
-    setTimeout(() => get().dismiss(id), 4000)
+    set(s => ({ toasts: [...s.toasts, { id, type, message, action: opts?.action }] }))
+    setTimeout(() => get().dismiss(id), opts?.duration ?? 4000)
   },
   dismiss: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) }))
 }))

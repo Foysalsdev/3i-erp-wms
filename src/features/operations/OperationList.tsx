@@ -217,11 +217,23 @@ export function OperationList({ def }: { def: OpDef }) {
           const res = await supabase.from(def.table as any).delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
-        }} />
+        }}
+        onUndo={deleting ? async () => {
+          const { __rel, ...clean } = deleting
+          const { error } = await supabase.from(def.table as any).insert(clean)
+          if (error) notify('error', `Could not undo: ${error.message}`)
+          else { notify('success', `${def.singular} restored`); refresh() }
+        } : undefined} />
 
       <ConfirmDelete open={bulkDeleting} onClose={() => setBulkDeleting(false)}
         name={`${selectedRows.length} ${def.singular.toLowerCase()}`}
-        onConfirm={bulkDelete} />
+        onConfirm={bulkDelete}
+        onUndo={selectedRows.length ? async () => {
+          const clean = selectedRows.map(({ __rel, ...r }: any) => r)
+          const { error } = await supabase.from(def.table as any).insert(clean)
+          if (error) notify('error', `Could not undo: ${error.message}`)
+          else { notify('success', `${selectedRows.length} ${def.singular.toLowerCase()} restored`); refresh() }
+        } : undefined} />
     </div>
   )
 }

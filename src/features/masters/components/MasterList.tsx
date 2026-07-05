@@ -200,11 +200,21 @@ export function MasterList({ def }: { def: MasterDef }) {
           const res = await supabase.from(def.table as any).delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
-        }} />
+        }}
+        onUndo={deleting ? async () => {
+          const { error } = await supabase.from(def.table as any).insert(deleting)
+          if (error) notify('error', `Could not undo: ${error.message}`)
+          else { notify('success', `${deleting[def.nameField]} restored`); refresh() }
+        } : undefined} />
 
       <ConfirmDelete open={bulkDeleting} onClose={() => setBulkDeleting(false)}
         name={`${selectedRows.length} ${def.title.toLowerCase()}`}
-        onConfirm={bulkDelete} />
+        onConfirm={bulkDelete}
+        onUndo={selectedRows.length ? async () => {
+          const { error } = await supabase.from(def.table as any).insert(selectedRows)
+          if (error) notify('error', `Could not undo: ${error.message}`)
+          else { notify('success', `${selectedRows.length} ${def.title.toLowerCase()} restored`); refresh() }
+        } : undefined} />
     </div>
   )
 }

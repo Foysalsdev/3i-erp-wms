@@ -15,7 +15,8 @@ import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { Tabs } from '@/components/ui/Tabs'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
-import { Field, Select, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { LineItems, lineUnitPrice, lineTotal, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
 import { SerialScan } from './SerialScan'
@@ -204,10 +205,10 @@ export function OutboundSalesOrders() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search SO…" /></div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="fiori-input w-auto py-2">
+        <SelectBox value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-auto py-2">
           <option value="all">All statuses</option>
           {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        </SelectBox>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Order</Button>}
       </div>
@@ -376,10 +377,10 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
             {selCust?.sap_customer_code && <p className="mt-1 text-[11px] text-ink-faint">SAP customer code: <span className="font-mono text-ink-soft">{selCust.sap_customer_code}</span></p>}
           </Field>
           <Field label="Warehouse">
-            <Select value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
+            <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
               <option value="">Select…</option>
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
-            </Select>
+            </SelectBox>
           </Field>
           <Field label="Order Ref">
             <div className="flex gap-2">
@@ -393,9 +394,9 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
           <Field label="Order Date" required><Input type="date" value={h.order_date ?? ''} onChange={e => set({ order_date: e.target.value })} /></Field>
           <Field label="Required Date"><Input type="date" value={h.required_date ?? ''} onChange={e => set({ required_date: e.target.value })} /></Field>
           <Field label="Status" required>
-            <Select value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
+            <SelectBox value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
               {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
-            </Select>
+            </SelectBox>
           </Field>
           <Field label="Owner (responsible)">
             <Combobox items={(users ?? []).map((u: any) => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />

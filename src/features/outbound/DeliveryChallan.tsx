@@ -16,7 +16,8 @@ import { DocVersions } from '@/components/shared/DocVersions'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
-import { Field, Select, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
@@ -182,10 +183,10 @@ export function DeliveryChallan() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search challan / invoice..." /></div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="fiori-input w-auto py-2">
+        <SelectBox value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-auto py-2">
           <option value="all">All statuses</option>
           {DC_STATUS.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-        </select>
+        </SelectBox>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Challan</Button>}
       </div>
@@ -436,10 +437,10 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                 placeholder="Search customer by code or name" />
             </Field>
             <Field label="Warehouse" required>
-              <Select value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
+              <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
                 <option value="">Select...</option>
                 {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
-              </Select>
+              </SelectBox>
             </Field>
             <Field label="SAP Invoice No" required>
               {h.sales_order_id && h.invoice_no ? (

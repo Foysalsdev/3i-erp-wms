@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { ClipboardEvent as RClip } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { Select } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber } from '@/lib/utils'
 import { CONDITION_LIST } from '@/lib/conditions'
 
@@ -175,8 +175,8 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
                   <td className="px-3 py-2 text-center text-xs text-ink-faint">{i + 1}</td>
                   <td className="px-3 py-2"><div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div><div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div></td>
                   <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.expected_qty ?? ''} onChange={e => setRow(i, { expected_qty: e.target.value })} className="fiori-input h-8 w-16 text-right" /></td>
-                  <td className="px-2 py-2"><Select value={r.stock_status ?? 'good'} onChange={e => setRow(i, { stock_status: e.target.value })} className="h-8 w-full text-xs">{CONDITION_LIST.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</Select></td>
-                  <td className="px-2 py-2"><Select value={r.location_id ?? ''} onChange={e => setRow(i, { location_id: e.target.value })} className="h-8 w-full text-xs"><option value="">Location</option>{(locations ?? []).map(l => <option key={l.id} value={l.id}>{l.location_code}</option>)}</Select></td>
+                  <td className="px-2 py-2"><SelectBox value={r.stock_status ?? 'good'} onChange={e => setRow(i, { stock_status: e.target.value })} className="h-8 w-full text-xs">{CONDITION_LIST.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</SelectBox></td>
+                  <td className="px-2 py-2"><SelectBox value={r.location_id ?? ''} onChange={e => setRow(i, { location_id: e.target.value })} className="h-8 w-full text-xs"><option value="">Location</option>{(locations ?? []).map(l => <option key={l.id} value={l.id}>{l.location_code}</option>)}</SelectBox></td>
                   <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-20 text-right" /></td>
                   <td className="px-2 py-2 text-center"><button type="button" onClick={() => removeRow(i)} className="rounded-md p-1.5 text-ink-faint hover:bg-bad/10 hover:text-bad" title="Remove"><Icon name="close" className="text-[16px]" /></button></td>
                 </tr> )})}

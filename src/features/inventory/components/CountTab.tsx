@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
-import { Field, Input, Textarea, Select } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/States'
@@ -245,9 +246,9 @@ function CountForm({ countType, title, singular, record, clientId, products, war
                           placeholder="—" onChange={(val: string) => updateLine(i, { location_id: val })} />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Select value={l.stock_status} disabled={readOnly} onChange={e => updateLine(i, { stock_status: e.target.value })}>
+                        <SelectBox value={l.stock_status} disabled={readOnly} onChange={e => updateLine(i, { stock_status: e.target.value })}>
                           {CONDITIONS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                        </Select>
+                        </SelectBox>
                       </td>
                       <td className="px-2 py-1.5 text-right text-ink-soft">{formatNumber(l.system_qty)}</td>
                       <td className="px-2 py-1.5"><Input type="number" step="any" min={0} className="text-right" disabled={readOnly} value={l.counted_qty ?? ''} onChange={e => updateLine(i, { counted_qty: e.target.value })} /></td>

@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
-import { Field, Input, Textarea, Select } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/States'
@@ -275,14 +276,14 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
                         placeholder="—" onChange={(v: string) => updateLine(i, { location_id: v })} />
                     </td>
                     <td className="px-2 py-1.5">
-                      <Select value={l.from_status} disabled={readOnly} onChange={e => updateLine(i, { from_status: e.target.value })}>
+                      <SelectBox value={l.from_status} disabled={readOnly} onChange={e => updateLine(i, { from_status: e.target.value })}>
                         {CONDITIONS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                      </Select>
+                      </SelectBox>
                     </td>
                     <td className="px-2 py-1.5">
-                      <Select value={l.to_status} disabled={readOnly} onChange={e => updateLine(i, { to_status: e.target.value })}>
+                      <SelectBox value={l.to_status} disabled={readOnly} onChange={e => updateLine(i, { to_status: e.target.value })}>
                         {toOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                      </Select>
+                      </SelectBox>
                     </td>
                     <td className="px-2 py-1.5"><Input type="number" min={0} className="text-right" disabled={readOnly} value={l.qty ?? ''} onChange={e => updateLine(i, { qty: e.target.value })} /></td>
                     {config.showCost && <td className="px-2 py-1.5"><Input type="number" min={0} className="text-right" disabled={readOnly} value={l.repair_cost ?? ''} onChange={e => updateLine(i, { repair_cost: e.target.value })} /></td>}

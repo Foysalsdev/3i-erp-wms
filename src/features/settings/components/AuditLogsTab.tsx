@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
-import { Select } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatDateTime } from '@/lib/utils'
 
@@ -54,16 +54,16 @@ export function AuditLogsTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-64"><SearchBar value={q} onChange={setQ} placeholder="Search table / record…" /></div>
-        <Select value={table} onChange={e => setTable(e.target.value)} className="w-auto">
+        <SelectBox value={table} onChange={e => setTable(e.target.value)} className="w-auto">
           <option value="">All tables</option>
           {tables.map(t => <option key={t} value={t}>{t}</option>)}
-        </Select>
-        <Select value={action} onChange={e => setAction(e.target.value)} className="w-auto">
+        </SelectBox>
+        <SelectBox value={action} onChange={e => setAction(e.target.value)} className="w-auto">
           <option value="">All actions</option>
           <option value="INSERT">Insert</option>
           <option value="UPDATE">Update</option>
           <option value="DELETE">Delete</option>
-        </Select>
+        </SelectBox>
         <span className="text-sm text-ink-soft">{rows.length} entries</span>
       </div>
 

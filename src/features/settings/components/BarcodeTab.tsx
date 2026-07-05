@@ -3,7 +3,8 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, Select } from '@/components/ui/Field'
+import { Field, Input } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { Spinner } from '@/components/ui/States'
 import {
   loadSettings, saveSettings, DEFAULT_BARCODE, type BarcodeSettings
@@ -46,9 +47,9 @@ export function BarcodeTab({ canEdit }: { canEdit: boolean }) {
       <p className="mb-4 text-sm text-ink-soft">Defaults applied when generating product barcode labels — the symbology, an optional prefix added to material codes, and the physical label size.</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Symbology">
-          <Select value={form.symbology} disabled={!canEdit} onChange={e => set({ symbology: e.target.value as BarcodeSettings['symbology'] })}>
+          <SelectBox value={form.symbology} disabled={!canEdit} onChange={e => set({ symbology: e.target.value as BarcodeSettings['symbology'] })}>
             {SYMBOLOGIES.map(s => <option key={s} value={s}>{s}</option>)}
-          </Select>
+          </SelectBox>
         </Field>
         <Field label="Code Prefix">
           <Input value={form.prefix} disabled={!canEdit} onChange={e => set({ prefix: e.target.value })} placeholder="e.g. WHP-" />

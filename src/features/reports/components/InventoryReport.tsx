@@ -4,7 +4,7 @@ import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Spinner } from '@/components/ui/States'
-import { Select } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber } from '@/lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
@@ -80,7 +80,7 @@ export function InventoryReport() {
   return (
     <div className="space-y-4">
       <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Inventory by Category-Model', cols, rows)} onPDF={() => downloadReportPDF('Inventory by Category & Model', 'Stock grouped by category and model', cols, rows)}>
-        <div className="w-48"><Select value={cat} onChange={e => setCat(e.target.value)}><option value="">All categories</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</Select></div>
+        <div className="w-48"><SelectBox value={cat} onChange={e => setCat(e.target.value)}><option value="">All categories</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</SelectBox></div>
       </ReportToolbar>
 
       {byCat.length > 0 && (

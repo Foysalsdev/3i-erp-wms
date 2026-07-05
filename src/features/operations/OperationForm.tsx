@@ -5,7 +5,8 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { OP_RELATIONS, type OpDef } from './registry'
-import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { Button } from '@/components/ui/Button'
 import { ImageUpload } from '@/features/masters/components/ImageUpload'
 
@@ -98,12 +99,16 @@ export function OperationForm({ def, record, onDone, onCancel }:
               error={errors[f.name] ? `${f.label} is required` : undefined}>
               {f.type === 'textarea' ? (
                 <Textarea {...register(f.name, { required: f.required })} placeholder={f.placeholder} />
-              ) : (f.type === 'select' || f.type === 'relation') ? (
-                <Select {...register(f.name, { required: f.required })}>
-                  <option value="">Select…</option>
-                  {opts.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                </Select>
-              ) : (
+              ) : (f.type === 'select' || f.type === 'relation') ? (() => {
+                register(f.name, { required: f.required })
+                return (
+                  <SelectBox value={String(watch(f.name) ?? '')}
+                    onChange={e => setValue(f.name, e.target.value, { shouldValidate: true })}>
+                    <option value="">Select…</option>
+                    {opts.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </SelectBox>
+                )
+              })() : (
                 <Input type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'} step="any"
                   {...register(f.name, { required: f.required })} placeholder={f.placeholder} />
               )}

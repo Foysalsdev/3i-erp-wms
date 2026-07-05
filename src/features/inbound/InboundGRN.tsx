@@ -11,7 +11,8 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Field, Select, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
@@ -258,10 +259,10 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
             <Combobox items={suppliers.map((s: any) => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))} value={h.supplier_id ?? ''} onChange={(id: string) => set({ supplier_id: id })} placeholder="Search supplier by code or name" />
           </Field>
           <Field label="Warehouse">
-            <Select value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
+            <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
               <option value="">Select…</option>
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
-            </Select>
+            </SelectBox>
           </Field>
           <Field label="SAP MIGO No" required><Input value={h.sap_grn_ref ?? ''} onChange={e => set({ sap_grn_ref: e.target.value })} placeholder="GRN identity — e.g. 500012345" /></Field>
           <Field label="SAP MIRO No"><Input value={h.sap_miro_ref ?? ''} onChange={e => set({ sap_miro_ref: e.target.value })} placeholder="Adding this marks the GRN Complete & billable" /></Field>

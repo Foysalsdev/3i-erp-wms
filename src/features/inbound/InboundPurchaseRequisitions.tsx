@@ -12,7 +12,8 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Field, Select, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
@@ -197,23 +198,23 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Requisition No: </span><span className="font-semibold">{record.pr_no}</span></div>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Source">
-            <Select value={h.supplier_id ?? ''} onChange={e => set({ supplier_id: e.target.value })}>
+            <SelectBox value={h.supplier_id ?? ''} onChange={e => set({ supplier_id: e.target.value })}>
               <option value="">Select…</option>
               {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.supplier_code} — {s.name}</option>)}
-            </Select>
+            </SelectBox>
           </Field>
           <Field label="Warehouse">
-            <Select value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
+            <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
               <option value="">Select…</option>
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
-            </Select>
+            </SelectBox>
           </Field>
           <Field label="Date" required><Input type="date" value={h.order_date ?? ''} onChange={e => set({ order_date: e.target.value })} /></Field>
           <Field label="Expected By"><Input type="date" value={h.expected_date ?? ''} onChange={e => set({ expected_date: e.target.value })} /></Field>
           <Field label="Status" required>
-            <Select value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
+            <SelectBox value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
               {PR_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
-            </Select>
+            </SelectBox>
           </Field>
           <Field label="Remarks" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
         </div>

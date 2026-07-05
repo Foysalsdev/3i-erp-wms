@@ -7,7 +7,8 @@ import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
-import { Field, Input, Select } from '@/components/ui/Field'
+import { Field, Input } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { Button } from '@/components/ui/Button'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Spinner } from '@/components/ui/States'
@@ -78,10 +79,10 @@ export function UserManagement() {
               <Field label="Designation"><Input value={editing.designation ?? ''} onChange={e => setEditing((x: any) => ({ ...x, designation: e.target.value }))} placeholder="e.g. Sales Officer" /></Field>
               <Field label="Division (salesman only)"><Input value={editing.division ?? ''} onChange={e => setEditing((x: any) => ({ ...x, division: e.target.value }))} placeholder="e.g. Dhaka" /></Field>
               <Field label="Role" className="sm:col-span-2">
-                <Select value={editing.role_id ?? ''} onChange={e => setEditing((x: any) => ({ ...x, role_id: e.target.value }))} disabled={editing.is_platform_admin}>
+                <SelectBox value={editing.role_id ?? ''} onChange={e => setEditing((x: any) => ({ ...x, role_id: e.target.value }))} disabled={editing.is_platform_admin}>
                   <option value="">— No role —</option>
                   {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </Select>
+                </SelectBox>
               </Field>
             </div>
             {editing.is_platform_admin && <p className="text-xs text-ink-faint">This user is a Platform Admin — role is fixed.</p>}
@@ -114,10 +115,10 @@ export function UserManagement() {
               <Field label="Designation"><Input value={adding.designation ?? ''} onChange={e => setAdding((x: any) => ({ ...x, designation: e.target.value }))} placeholder="e.g. Sales Officer" /></Field>
               <Field label="Division (salesman only)"><Input value={adding.division ?? ''} onChange={e => setAdding((x: any) => ({ ...x, division: e.target.value }))} placeholder="e.g. Dhaka" /></Field>
               <Field label="Role" className="sm:col-span-2">
-                <Select value={adding.role_id ?? ''} onChange={e => setAdding((x: any) => ({ ...x, role_id: e.target.value }))}>
+                <SelectBox value={adding.role_id ?? ''} onChange={e => setAdding((x: any) => ({ ...x, role_id: e.target.value }))}>
                   <option value="">— No role —</option>
                   {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </Select>
+                </SelectBox>
               </Field>
             </div>
             <p className="text-xs text-ink-faint">The user logs in with this email + temp password (you can ask them to change it later).</p>

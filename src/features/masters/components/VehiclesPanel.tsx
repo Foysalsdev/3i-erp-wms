@@ -3,7 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, Select } from '@/components/ui/Field'
+import { Field, Input } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/States'
@@ -53,7 +54,7 @@ export function VehiclesPanel({ vendorId }: { vendorId: string }) {
           {F('license_expiry', 'License Expiry', 'date')}
           {F('fitness_expiry', 'Fitness Expiry', 'date')}
           {F('insurance_expiry', 'Insurance Expiry', 'date')}
-          <Field label="Status"><Select value={form.status} onChange={e => setForm((f: any) => ({ ...f, status: e.target.value }))}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
+          <Field label="Status"><SelectBox value={form.status} onChange={e => setForm((f: any) => ({ ...f, status: e.target.value }))}><option value="active">active</option><option value="inactive">inactive</option></SelectBox></Field>
         </div>
         <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button icon="save" onClick={save}>Save</Button></div>
       </Modal>

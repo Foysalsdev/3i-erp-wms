@@ -6,6 +6,7 @@ import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/States'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
@@ -89,10 +90,10 @@ export function StockAgingReport() {
         onCSV={() => downloadCSV('Stock Aging', cols, rows)}
         onPDF={() => downloadReportPDF('Stock Aging Report', 'On-hand stock by age bucket', cols, rows)}>
         <div className="w-64"><SearchBar value={q} onChange={setQ} placeholder="Search code, product, warehouse…" /></div>
-        <select value={bucketFilter} onChange={e => setBucketFilter(e.target.value)} className="fiori-input w-auto py-2">
+        <SelectBox value={bucketFilter} onChange={e => setBucketFilter(e.target.value)} className="w-auto py-2">
           <option value="all">All age buckets</option>
           {BUCKETS.map(b => <option key={b} value={b}>{b} days</option>)}
-        </select>
+        </SelectBox>
       </ReportToolbar>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {summary.map(s => (

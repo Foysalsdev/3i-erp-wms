@@ -7,7 +7,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/States'
 import { Tabs } from '@/components/ui/Tabs'
-import { formatNumber, formatDateTime } from '@/lib/utils'
+import { formatNumber, formatDateTime, cn } from '@/lib/utils'
 import { MODULES } from '@/lib/constants'
 import { OPERATIONS } from '@/features/operations/registry'
 import { PendingMattersPanel } from '@/components/shared/PendingMattersPanel'
@@ -29,6 +29,36 @@ function Kpi({ icon, label, value, hint, hintTone = 'muted' }:
       <p className="mt-2.5 font-display text-[26px] font-bold leading-none text-ink">{value}</p>
       {hint && <p className={`mt-2 text-[11px] ${tone}`}>{hint}</p>}
     </Card>
+  )
+}
+
+// Executive dashboard sections, drag-reorderable — order persisted per browser.
+type WidgetId = 'overview' | 'charts' | 'movements'
+const DEFAULT_ORDER: WidgetId[] = ['overview', 'charts', 'movements']
+const ORDER_KEY = '3i_dashboard_order'
+function loadWidgetOrder(): WidgetId[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ORDER_KEY) ?? 'null')
+    return Array.isArray(saved) && saved.length === DEFAULT_ORDER.length && DEFAULT_ORDER.every(w => saved.includes(w)) ? saved : DEFAULT_ORDER
+  } catch {
+    return DEFAULT_ORDER
+  }
+}
+
+// Drag-and-drop reorder via native HTML5 DnD — no library needed for three blocks.
+function DraggableSection({ id, label, dragging, onDragStart, onDrop, children }: {
+  id: WidgetId; label: string; dragging: WidgetId | null
+  onDragStart: (id: WidgetId) => void; onDrop: (id: WidgetId) => void; children: React.ReactNode
+}) {
+  return (
+    <div onDragOver={e => e.preventDefault()} onDrop={() => onDrop(id)}
+      className={cn('rounded-2xl transition-opacity', dragging === id && 'opacity-40')}>
+      <div draggable onDragStart={() => onDragStart(id)}
+        className="mb-2 flex w-fit cursor-grab items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint active:cursor-grabbing">
+        <Icon name="drag_indicator" className="text-[16px]" /> {label}
+      </div>
+      {children}
+    </div>
   )
 }
 
@@ -63,6 +93,17 @@ function AdminDashboard() {
   const [ops, setOps] = useState<Record<string, number>>({})
   const [util, setUtil] = useState<{ used: number; capacity: number } | null>(null)
   const client = clients.find(c => c.id === currentClientId)
+  const [order, setOrder] = useState<WidgetId[]>(loadWidgetOrder)
+  const [dragging, setDragging] = useState<WidgetId | null>(null)
+  const dropOn = (target: WidgetId) => {
+    if (!dragging || dragging === target) return
+    const next = [...order]
+    next.splice(next.indexOf(dragging), 1)
+    next.splice(next.indexOf(target), 0, dragging)
+    setOrder(next)
+    localStorage.setItem(ORDER_KEY, JSON.stringify(next))
+    setDragging(null)
+  }
 
   useEffect(() => {
     if (!currentClientId) return
@@ -141,82 +182,92 @@ function AdminDashboard() {
 
       {active === 'operational' && <OperationalDashboard ops={ops} />}
 
-      {active === 'executive' && <>
-      {/* Executive overview — live stock, utilisation and pending workload */}
-      <div>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Executive overview</h2>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Kpi icon="stacks" label="Total Stock" value={formatNumber(kpi.onHand)} hint={`${kpi.skus} active SKUs`} />
-          <Kpi icon="donut_large" label="Warehouse Utilization"
-            value={util && util.capacity > 0 ? `${Math.round((util.used / util.capacity) * 100)}%` : '—'}
-            hint={util && util.capacity > 0 ? `${formatNumber(util.used)} / ${formatNumber(util.capacity)} capacity` : 'set location capacity'}
-            hintTone={util && util.capacity > 0 && util.used / util.capacity > 0.9 ? 'warn' : 'muted'} />
-          <Kpi icon="warning" label="Low-stock items" value={formatNumber(kpi.lowStock)} hint={kpi.lowStock ? 'needs reorder' : 'all above level'} hintTone={kpi.lowStock ? 'warn' : 'ok'} />
-          <Kpi icon="home_work" label="Warehouses" value={formatNumber(kpi.warehouses)} hint="operational" />
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <OpTile icon="inventory" label="Pending GRN" value={ops.grn ?? 0} to="/inbound/grn" alert={(ops.grn ?? 0) > 0} />
-          <OpTile icon="move_to_inbox" label="Pending Putaway" value={ops.putaway ?? 0} to="/inbound/putaway" alert={(ops.putaway ?? 0) > 0} />
-          <OpTile icon="shopping_cart_checkout" label="Pending Picking" value={ops.picking ?? 0} to="/outbound/picking" alert={(ops.picking ?? 0) > 0} />
-          <OpTile icon="local_shipping" label="Pending Dispatch" value={ops.dispatch ?? 0} to="/outbound/dispatch" alert={(ops.dispatch ?? 0) > 0} />
-          <OpTile icon="assignment" label="Open Transport Requests" value={ops['transport-request'] ?? 0} to="/transport/transport-request" alert={(ops['transport-request'] ?? 0) > 0} />
-          <OpTile icon="receipt_long" label="Pending Billing" value={ops['customer-billing'] ?? 0} to="/finance/customer-billing" alert={(ops['customer-billing'] ?? 0) > 0} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader title="Top products by on-hand quantity" />
-          <div className="h-72 p-4">
-            {topProducts.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topProducts} margin={{ left: -12 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128,128,128,0.16)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" interval={0} angle={-15} textAnchor="end" height={50} />
-                  <YAxis tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
-                  <Tooltip cursor={{ fill: 'rgba(242,169,0,0.07)' }} contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
-                  <Bar dataKey="qty" fill="#f2a900" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <p className="grid h-full place-items-center text-sm text-ink-soft">No stock data yet</p>}
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Stock by condition" />
-          <div className="h-72 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={byStatus} dataKey="value" nameKey="name" innerRadius={54} outerRadius={82} paddingAngle={2} cornerRadius={4}>
-                  {byStatus.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex justify-center gap-4 text-xs text-ink-soft">
-              {byStatus.map((s, i) => <span key={s.name} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: COLORS[i] }} />{s.name}</span>)}
+      {active === 'executive' && (() => {
+        const sections: Record<WidgetId, React.ReactNode> = {
+          overview: (
+            <div>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <Kpi icon="stacks" label="Total Stock" value={formatNumber(kpi.onHand)} hint={`${kpi.skus} active SKUs`} />
+                <Kpi icon="donut_large" label="Warehouse Utilization"
+                  value={util && util.capacity > 0 ? `${Math.round((util.used / util.capacity) * 100)}%` : '—'}
+                  hint={util && util.capacity > 0 ? `${formatNumber(util.used)} / ${formatNumber(util.capacity)} capacity` : 'set location capacity'}
+                  hintTone={util && util.capacity > 0 && util.used / util.capacity > 0.9 ? 'warn' : 'muted'} />
+                <Kpi icon="warning" label="Low-stock items" value={formatNumber(kpi.lowStock)} hint={kpi.lowStock ? 'needs reorder' : 'all above level'} hintTone={kpi.lowStock ? 'warn' : 'ok'} />
+                <Kpi icon="home_work" label="Warehouses" value={formatNumber(kpi.warehouses)} hint="operational" />
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <OpTile icon="inventory" label="Pending GRN" value={ops.grn ?? 0} to="/inbound/grn" alert={(ops.grn ?? 0) > 0} />
+                <OpTile icon="move_to_inbox" label="Pending Putaway" value={ops.putaway ?? 0} to="/inbound/putaway" alert={(ops.putaway ?? 0) > 0} />
+                <OpTile icon="shopping_cart_checkout" label="Pending Picking" value={ops.picking ?? 0} to="/outbound/picking" alert={(ops.picking ?? 0) > 0} />
+                <OpTile icon="local_shipping" label="Pending Dispatch" value={ops.dispatch ?? 0} to="/outbound/dispatch" alert={(ops.dispatch ?? 0) > 0} />
+                <OpTile icon="assignment" label="Open Transport Requests" value={ops['transport-request'] ?? 0} to="/transport/transport-request" alert={(ops['transport-request'] ?? 0) > 0} />
+                <OpTile icon="receipt_long" label="Pending Billing" value={ops['customer-billing'] ?? 0} to="/finance/customer-billing" alert={(ops['customer-billing'] ?? 0) > 0} />
+              </div>
             </div>
-          </div>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader title="Recent stock movements" subtitle="Latest ledger activity" />
-        <div className="divide-y divide-surface-line">
-          {recent.length ? recent.map((m, i) => (
-            <div key={i} className="flex items-center justify-between px-5 py-2.5 text-sm">
-              <span className="flex items-center gap-3">
-                <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${m.qty_in > 0 ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
-                  <Icon name={m.qty_in > 0 ? 'south_west' : 'north_east'} className="text-[16px]" />
-                </span>
-                <span className="font-semibold text-ink">{m.movement_type}</span>
-                {m.reference_no && <span className="text-ink-faint">· {m.reference_no}</span>}
-              </span>
-              <span className="text-ink-soft">{m.qty_in > 0 ? `+${formatNumber(m.qty_in)}` : `-${formatNumber(m.qty_out)}`} · {formatDateTime(m.created_at)}</span>
+          ),
+          charts: (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <Card className="lg:col-span-2">
+                <CardHeader title="Top products by on-hand quantity" />
+                <div className="h-72 p-4">
+                  {topProducts.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={topProducts} margin={{ left: -12 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128,128,128,0.16)" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" interval={0} angle={-15} textAnchor="end" height={50} />
+                        <YAxis tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
+                        <Tooltip cursor={{ fill: 'rgba(242,169,0,0.07)' }} contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
+                        <Bar dataKey="qty" fill="#f2a900" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <p className="grid h-full place-items-center text-sm text-ink-soft">No stock data yet</p>}
+                </div>
+              </Card>
+              <Card>
+                <CardHeader title="Stock by condition" />
+                <div className="h-72 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={byStatus} dataKey="value" nameKey="name" innerRadius={54} outerRadius={82} paddingAngle={2} cornerRadius={4}>
+                        {byStatus.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex justify-center gap-4 text-xs text-ink-soft">
+                    {byStatus.map((s, i) => <span key={s.name} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: COLORS[i] }} />{s.name}</span>)}
+                  </div>
+                </div>
+              </Card>
             </div>
-          )) : <p className="px-5 py-6 text-center text-sm text-ink-soft">No movements recorded yet</p>}
-        </div>
-      </Card>
-      </>}
+          ),
+          movements: (
+            <Card>
+              <CardHeader title="Recent stock movements" subtitle="Latest ledger activity" />
+              <div className="divide-y divide-surface-line">
+                {recent.length ? recent.map((m, i) => (
+                  <div key={i} className="flex items-center justify-between px-5 py-2.5 text-sm">
+                    <span className="flex items-center gap-3">
+                      <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${m.qty_in > 0 ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
+                        <Icon name={m.qty_in > 0 ? 'south_west' : 'north_east'} className="text-[16px]" />
+                      </span>
+                      <span className="font-semibold text-ink">{m.movement_type}</span>
+                      {m.reference_no && <span className="text-ink-faint">· {m.reference_no}</span>}
+                    </span>
+                    <span className="text-ink-soft">{m.qty_in > 0 ? `+${formatNumber(m.qty_in)}` : `-${formatNumber(m.qty_out)}`} · {formatDateTime(m.created_at)}</span>
+                  </div>
+                )) : <p className="px-5 py-6 text-center text-sm text-ink-soft">No movements recorded yet</p>}
+              </div>
+            </Card>
+          )
+        }
+        const labels: Record<WidgetId, string> = { overview: 'Executive overview', charts: 'Analytics', movements: 'Activity' }
+        return order.map(id => (
+          <DraggableSection key={id} id={id} label={labels[id]} dragging={dragging} onDragStart={setDragging} onDrop={dropOn}>
+            {sections[id]}
+          </DraggableSection>
+        ))
+      })()}
     </div>
   )
 }

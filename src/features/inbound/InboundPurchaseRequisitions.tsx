@@ -17,6 +17,7 @@ import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
+import { useAutoOpen } from '@/hooks/useAutoOpen'
 
 const PR_STATUS = ['draft', 'pending', 'approved', 'received', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
@@ -31,6 +32,7 @@ export function InboundPurchaseRequisitions() {
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  useAutoOpen(() => { setEditing(null); setModal(true) })
   const [viewing, setViewing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [suppliers, setSuppliers] = useState<any[]>([])

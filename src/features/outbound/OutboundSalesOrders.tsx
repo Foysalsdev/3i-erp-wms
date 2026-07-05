@@ -16,6 +16,7 @@ import { Tabs } from '@/components/ui/Tabs'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { SavedViewsBar } from '@/components/shared/SavedViewsBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
+import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { LineItems, lineUnitPrice, lineTotal, type LineRow } from '@/components/shared/LineItems'
@@ -105,6 +106,7 @@ export function OutboundSalesOrders() {
   const [overdueOnly, setOverdueOnly] = useState(false)
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  useAutoOpen(() => { setEditing(null); setModal(true) })
   const [scanning, setScanning] = useState<any>(null)
   const [invoicing, setInvoicing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)

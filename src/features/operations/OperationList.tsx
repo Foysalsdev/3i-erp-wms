@@ -16,6 +16,7 @@ import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { SavedViewsBar } from '@/components/shared/SavedViewsBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
+import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { formatDate } from '@/lib/utils'
 import { downloadCSV } from '@/lib/csv'
 import { TrailPanel } from '@/components/shared/TrailPanel'
@@ -46,6 +47,7 @@ export function OperationList({ def }: { def: OpDef }) {
   const [rel, setRel] = useState<Record<string, Record<string, string>>>({})
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  useAutoOpen(() => { setEditing(null); setModal(true) })
 
   // Print the document header via the matching PDF template (gate pass / generic).
   const printRow = async (row: any) => {

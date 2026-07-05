@@ -1,22 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Icon } from '@/components/ui/Icon'
+import { MODULES } from '@/lib/constants'
+import { MASTERS, MASTER_ORDER } from '@/features/masters/registry'
+import { OPERATIONS } from '@/features/operations/registry'
+import { cn } from '@/lib/utils'
 
 interface Hit { cat: string; icon: string; label: string; sub: string; path: string }
 
 // ---------------------------------------------------------------------------
-// Universal Search (WES principle #4 "Search First").
+// Universal Search + Command Palette (WES principle #4 "Search First").
 // One search retrieves the complete operational chain — a user can find a
 // transaction by Serial, PO, Invoice, Sales Order, Outbound Delivery,
 // Transfer Order, Billing Document, Delivery Challan, Gate Pass, CN/tracking
-// or Customer, and jump straight to the filtered record.
+// or Customer — AND jump straight to any module/tab, or land directly in a
+// "New X" create form (the target list picks up ?new=1 via useAutoOpen).
 // ---------------------------------------------------------------------------
 
 // Master records — navigate to the master list.
-const MASTERS = [
+const SEARCH_MASTERS = [
   { table: 'products', icon: 'inventory_2', cat: 'Product', label: 'name', sub: 'material_code', cols: 'id,name,material_code', search: ['name', 'material_code', 'barcode'], path: '/masters/products' },
   { table: 'customers', icon: 'badge', cat: 'Customer', label: 'name', sub: 'customer_code', cols: 'id,name,customer_code', search: ['name', 'customer_code'], path: '/masters/customers' },
   { table: 'suppliers', icon: 'local_shipping', cat: 'Supplier', label: 'name', sub: 'supplier_code', cols: 'id,name,supplier_code', search: ['name', 'supplier_code'], path: '/masters/suppliers' },
@@ -48,16 +53,78 @@ const TXNS = [
     sub: (r: any) => [r.status, r.reference_no].filter(Boolean).join(' · '), path: '/inventory/serials' }
 ] as const
 
+// Inbound/outbound doc types with a live "New X" create flow, generic via
+// OperationList — excludes registry entries (picking/dispatch/packing…) that
+// don't have an actual tab in MODULES yet.
+const INBOUND_OPS = ['putaway', 'purchase-return', 'supplier-invoice']
+const OUTBOUND_OPS = ['gate-pass', 'pod-upload']
+
 export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
   const clientId = useAuth(s => s.currentClientId)
+  const can = useAuth(s => s.can)
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
   const [loading, setLoading] = useState(false)
+  const [hi, setHi] = useState(0)
   const nav = useNavigate()
+
+  // "Go to <module> · <tab>" — every tab the user actually has access to.
+  const navCommands = useMemo(() => {
+    const out: Hit[] = []
+    MODULES.forEach(m => {
+      if (m.permission && !can(m.permission)) return
+      if (m.tabs?.length) {
+        m.tabs.forEach(t => out.push({ cat: 'Go to', icon: m.icon, label: `${m.label} · ${t.label}`, sub: 'Navigate', path: `${m.path}/${t.key}` }))
+      } else {
+        out.push({ cat: 'Go to', icon: m.icon, label: m.label, sub: 'Navigate', path: m.path })
+      }
+    })
+    return out
+  }, [can])
+
+  // "New <thing>" — lands straight in the create form (?new=1, see useAutoOpen).
+  const createCommands = useMemo(() => {
+    const out: Hit[] = []
+    if (can('masters.create')) {
+      MASTER_ORDER.forEach(k => {
+        const d = MASTERS[k]
+        if (d) out.push({ cat: 'Create', icon: d.icon, label: `New ${d.singular}`, sub: 'Masters', path: `/masters/${k}?new=1` })
+      })
+    }
+    if (can('outbound.create')) {
+      out.push({ cat: 'Create', icon: 'shopping_cart', label: 'New Sales Order', sub: 'Outbound', path: '/outbound/sales-order?new=1' })
+      out.push({ cat: 'Create', icon: 'receipt', label: 'New Delivery Challan', sub: 'Outbound', path: '/outbound/delivery-challan?new=1' })
+      OUTBOUND_OPS.forEach(k => { const d = OPERATIONS[k]; if (d) out.push({ cat: 'Create', icon: d.icon, label: `New ${d.singular}`, sub: 'Outbound', path: `/outbound/${k}?new=1` }) })
+    }
+    if (can('inbound.create')) {
+      out.push({ cat: 'Create', icon: 'inventory', label: 'New GRN', sub: 'Inbound', path: '/inbound/grn?new=1' })
+      out.push({ cat: 'Create', icon: 'assignment', label: 'New Inward Requisition', sub: 'Inbound', path: '/inbound/purchase-requisition?new=1' })
+      INBOUND_OPS.forEach(k => { const d = OPERATIONS[k]; if (d) out.push({ cat: 'Create', icon: d.icon, label: `New ${d.singular}`, sub: 'Inbound', path: `/inbound/${k}?new=1` }) })
+    }
+    if (can('transport.create')) {
+      Object.values(OPERATIONS).filter(d => d.module === 'transport').forEach(d => out.push({ cat: 'Create', icon: d.icon, label: `New ${d.singular}`, sub: 'Transport', path: `/transport/${d.key}?new=1` }))
+    }
+    if (can('finance.create')) {
+      Object.values(OPERATIONS).filter(d => d.module === 'finance').forEach(d => out.push({ cat: 'Create', icon: d.icon, label: `New ${d.singular}`, sub: 'Finance', path: `/finance/${d.key}?new=1` }))
+    }
+    return out
+  }, [can])
+
+  const staticCommands = useMemo(() => [...createCommands, ...navCommands], [createCommands, navCommands])
+
+  const matchedCommands = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return staticCommands.slice(0, 8)
+    return staticCommands.filter(c => c.label.toLowerCase().includes(term) || c.sub.toLowerCase().includes(term)).slice(0, 8)
+  }, [staticCommands, q])
+
+  const combined = [...matchedCommands, ...hits]
 
   useEffect(() => {
     if (!open) { setQ(''); setHits([]) }
   }, [open])
+
+  useEffect(() => { setHi(0) }, [q])
 
   useEffect(() => {
     const term = q.trim()
@@ -69,7 +136,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
       setLoading(true)
       const orFilter = (cols: readonly string[]) => cols.map(c => `${c}.ilike.%${safe}%`).join(',')
 
-      const masterHits = Promise.all(MASTERS.map(async s => {
+      const masterHits = Promise.all(SEARCH_MASTERS.map(async s => {
         const { data } = await supabase.from(s.table as any).select(s.cols)
           .eq('client_id', clientId).or(orFilter(s.search)).limit(5)
         return (data ?? []).map((r: any) => ({
@@ -118,6 +185,8 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
     return () => clearTimeout(t)
   }, [q, clientId])
 
+  const choose = (h: Hit) => { nav(h.path); onClose() }
+
   if (!open) return null
   // Portal to <body> so this overlay escapes the Topbar's stacking context and
   // always covers the full viewport.
@@ -127,20 +196,28 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
         <div className="flex items-center gap-2 border-b border-horizon-line px-4">
           <Icon name="search" className="text-ink-faint" />
           <input autoFocus value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Search SO, PO, invoice, challan, gate pass, CN, serial, customer…"
-            className="w-full py-3.5 text-sm outline-none" />
+            placeholder="Search or run a command — try “New GRN”, “Go to Masters”, SO, invoice, serial…"
+            className="w-full py-3.5 text-sm outline-none"
+            onKeyDown={e => {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setHi(i => Math.min(i + 1, combined.length - 1)) }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(i => Math.max(i - 1, 0)) }
+              else if (e.key === 'Enter') { e.preventDefault(); if (combined[hi]) choose(combined[hi]) }
+              else if (e.key === 'Escape') onClose()
+            }} />
           {loading && <Icon name="progress_activity" className="animate-spin text-brand-500" />}
         </div>
         <div className="max-h-[50vh] overflow-y-auto p-2">
-          {hits.length === 0 && q && !loading && <p className="px-3 py-6 text-center text-sm text-horizon-muted">No matches</p>}
-          {hits.map((h, i) => (
-            <button key={i} onClick={() => { nav(h.path); onClose() }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-surface-sunken">
+          {combined.length === 0 && q && !loading && <p className="px-3 py-6 text-center text-sm text-horizon-muted">No matches</p>}
+          {combined.map((h, i) => (
+            <button key={`${h.path}-${i}`} onMouseEnter={() => setHi(i)} onClick={() => choose(h)}
+              className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left', i === hi ? 'bg-surface-sunken' : 'hover:bg-surface-sunken')}>
               <Icon name={h.icon} className="text-[20px] text-brand-500" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{h.label}</p>
                 <p className="truncate text-xs text-horizon-muted">{h.sub}</p>
               </div>
+              {h.cat === 'Create' && <Icon name="add" className="shrink-0 text-[16px] text-ink-faint" />}
+              {h.cat === 'Go to' && <Icon name="arrow_forward" className="shrink-0 text-[16px] text-ink-faint" />}
             </button>
           ))}
         </div>

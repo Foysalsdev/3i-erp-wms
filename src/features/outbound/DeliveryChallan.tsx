@@ -16,6 +16,7 @@ import { DocVersions } from '@/components/shared/DocVersions'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { useUrlSearch } from '@/hooks/useUrlSearch'
+import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
@@ -39,6 +40,7 @@ export function DeliveryChallan() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  useAutoOpen(() => { setEditing(null); setModal(true) })
   const [overview, setOverview] = useState<any>(null)
   const [cnFor, setCnFor] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)

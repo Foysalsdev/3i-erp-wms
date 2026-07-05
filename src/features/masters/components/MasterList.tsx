@@ -17,6 +17,7 @@ import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { initials, cn } from '@/lib/utils'
 import { downloadCSV } from '@/lib/csv'
+import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { MasterForm } from './MasterForm'
 import { MasterProfile } from './MasterProfile'
 
@@ -37,6 +38,7 @@ export function MasterList({ def }: { def: MasterDef }) {
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
+  useAutoOpen(() => { setEditing(null); setModal(true) })
 
   const filtered = useMemo(() => {
     if (!q.trim()) return data

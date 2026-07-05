@@ -18,6 +18,7 @@ import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { Combobox } from '@/components/shared/Combobox'
 import { GrnSerialScan } from './GrnSerialScan'
 import { TrailPanel } from '@/components/shared/TrailPanel'
+import { useAutoOpen } from '@/hooks/useAutoOpen'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'approved' ? 'positive' : s === 'completed' ? 'info' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : 'critical'
@@ -44,6 +45,7 @@ export function InboundGRN() {
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  useAutoOpen(() => { setEditing(null); setModal(true) })
   const [viewing, setViewing] = useState<any>(null)
   const [scanning, setScanning] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)

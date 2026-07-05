@@ -78,7 +78,7 @@ export function InventoryReport() {
 
   if (loading) return <Spinner label="Loading…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Inventory by Category-Model', cols, rows)} onPDF={() => downloadReportPDF('Inventory by Category & Model', 'Stock grouped by category and model', cols, rows)}>
         <div className="w-48"><SelectBox value={cat} onChange={e => setCat(e.target.value)}><option value="">All categories</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</SelectBox></div>
       </ReportToolbar>
@@ -96,8 +96,8 @@ export function InventoryReport() {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={rows} rowKey={(r: any) => r.category + '||' + r.model} emptyTitle="No stock yet" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={tableCols} rows={rows} rowKey={(r: any) => r.category + '||' + r.model} emptyTitle="No stock yet" />
       </Card>
     </div>
   )

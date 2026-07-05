@@ -64,7 +64,7 @@ export function PendingMattersReport() {
   const overdue = matters.filter(m => m.overdue).length
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length}
         onCSV={() => downloadCSV('Pending Matters', cols, exportRows)}
         onPDF={() => downloadReportPDF('Pending Matters', `${matters.length} open · ${overdue} overdue`, cols, exportRows)}>
@@ -75,7 +75,7 @@ export function PendingMattersReport() {
         <Card className="p-2"><EmptyState icon="check_circle" title="Nothing pending"
           hint="Every tracked matter is clear across inbound, outbound and inventory." /></Card>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
           <div className="flex flex-wrap gap-1.5">
             <button type="button" onClick={() => setGroup(null)}
               className={'rounded-md px-2.5 py-1 text-xs font-semibold ' + (group === null ? 'bg-brand-500/15 text-brand-700' : 'bg-surface-sunken text-ink-soft hover:text-ink')}>
@@ -90,10 +90,10 @@ export function PendingMattersReport() {
             ))}
           </div>
 
-          <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-surface-sunken text-[11px] uppercase tracking-wide text-ink-faint">
+                <thead className="sticky top-0 z-10 bg-surface-sunken text-[11px] uppercase tracking-wide text-ink-faint">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold">Category</th>
                     <th className="px-3 py-2 text-left font-semibold">Document</th>
@@ -124,7 +124,7 @@ export function PendingMattersReport() {
               </table>
             </div>
           </Card>
-        </>
+        </div>
       )}
     </div>
   )

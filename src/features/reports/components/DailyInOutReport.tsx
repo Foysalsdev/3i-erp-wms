@@ -184,7 +184,7 @@ export function DailyInOutReport() {
   const num = 'text-right tabular-nums'
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <input type="month" value={ym} onChange={e => e.target.value && setYm(e.target.value)} className="fiori-input w-auto py-2" />
@@ -220,10 +220,10 @@ export function DailyInOutReport() {
         <Card className="p-2"><EmptyState icon="analytics" title="No stock activity for this month"
           hint="Inbound (GRN), outbound (delivery) and replacement postings will appear here automatically." /></Card>
       ) : flow === 'summary' ? (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full min-w-[860px] text-sm">
-              <thead className="sticky top-0 bg-surface-sunken">
+              <thead className="sticky top-0 z-10 bg-surface-sunken">
                 <tr>
                   <th className={th}>Code</th><th className={th}>SKU Description</th>
                   <th className={`${th} text-right`}>Opening</th><th className={`${th} text-right`}>Inbound</th>
@@ -270,10 +270,10 @@ export function DailyInOutReport() {
           </div>
         </Card>
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="text-sm">
-              <thead className="sticky top-0 bg-surface-sunken">
+              <thead className="sticky top-0 z-10 bg-surface-sunken">
                 <tr>
                   <th className={`${th} sticky left-0 z-10 bg-surface-sunken`}>Code</th>
                   <th className={th}>SKU Description</th>

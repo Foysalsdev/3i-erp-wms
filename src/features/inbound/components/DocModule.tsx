@@ -246,13 +246,13 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
 
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-ink-soft">{docs.length} {config.title.toLowerCase()}(s)</span>
         {canEdit && <Button icon="add" onClick={openNew}>New {config.singular}</Button>}
       </div>
-      <Card className="overflow-hidden">
-        {loading ? <Spinner /> : <DataTable columns={columns} rows={docs} rowKey={(r: any) => r.id} onRowClick={r => openDoc(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {loading ? <Spinner /> : <DataTable fill columns={columns} rows={docs} rowKey={(r: any) => r.id} onRowClick={r => openDoc(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />}
       </Card>
     </div>
   )

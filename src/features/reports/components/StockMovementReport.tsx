@@ -60,12 +60,12 @@ export function StockMovementReport() {
 
   if (loading) return <Spinner label="Loading…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Stock Movement', cols, rows)} onPDF={() => downloadReportPDF('Stock Movement (Ledger)', 'Every inventory in/out movement', cols, rows)}>
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search product / reference / type…" /></div>
       </ReportToolbar>
-      <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No stock movements yet" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={tableCols} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No stock movements yet" />
       </Card>
     </div>
   )

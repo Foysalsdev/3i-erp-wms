@@ -114,14 +114,14 @@ export function TransportReport() {
   const totalQty = rows.reduce((s: number, r: any) => s + r.total, 0)
   const totalCost = rows.reduce((s: number, r: any) => s + r.cost, 0)
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length}
         onCSV={() => downloadCSV('Outbound Transport Report', cols, rows)}
         onPDF={() => downloadReportPDF('Outbound Transport Report', `${rows.length} despatches · ${formatNumber(totalQty)} units · cost ${formatNumber(totalCost)}`, cols, rows)}>
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search challan / invoice / party…" /></div>
       </ReportToolbar>
-      <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={rows} rowKey={(r: any) => r.challan_no} emptyTitle="No despatches yet" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={tableCols} rows={rows} rowKey={(r: any) => r.challan_no} emptyTitle="No despatches yet" />
       </Card>
       <p className="text-xs text-ink-faint">One row per delivery challan. Category columns are discovered from the despatched products; transport vendor / vehicle come from the challan's transport details.</p>
     </div>

@@ -122,13 +122,13 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-ink-soft">{docs.length} {config.title.toLowerCase()}(s)</span>
         {canEdit && <Button icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {config.singular}</Button>}
       </div>
-      <Card className="overflow-hidden">
-        {loading ? <Spinner /> : <DataTable columns={columns} rows={docs} rowKey={(r: any) => r.id}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {loading ? <Spinner /> : <DataTable fill columns={columns} rows={docs} rowKey={(r: any) => r.id}
           onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />}
       </Card>
 

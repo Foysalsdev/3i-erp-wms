@@ -58,14 +58,14 @@ export function InboundReport() {
   if (loading) return <Spinner label="Loading…" />
   const totalQty = data.reduce((s, r) => s + r.total_qty, 0)
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={data.length} onCSV={() => downloadCSV('Inbound Report', cols, data)} onPDF={() => downloadReportPDF('Inbound (Goods Receipts) Report', `${data.length} receipts · ${formatNumber(totalQty)} units`, cols, data)} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard label="Receipts" value={formatNumber(data.length)} />
         <StatCard label="Total Units Received" value={formatNumber(totalQty)} />
         <StatCard label="Billable" value={formatNumber(data.filter(r => r.billable === 'Yes').length)} />
       </div>
-      <Card className="overflow-hidden"><DataTable columns={tableCols} rows={data} rowKey={(r: any) => r.grn_no + r.sap_miro} emptyTitle="No goods receipts" /></Card>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><DataTable fill columns={tableCols} rows={data} rowKey={(r: any) => r.grn_no + r.sap_miro} emptyTitle="No goods receipts" /></Card>
     </div>
   )
 }
@@ -97,14 +97,14 @@ export function AssetReport() {
   if (loading) return <Spinner label="Loading…" />
   const totalCost = data.reduce((s, r) => s + r.purchase_cost, 0)
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={data.length} onCSV={() => downloadCSV('Asset Register', cols, csv)} onPDF={() => downloadReportPDF('Asset Register Report', `${data.length} assets · value ${formatNumber(totalCost, 2)}`, cols, csv)} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard label="Assets" value={formatNumber(data.length)} />
         <StatCard label="Total Value" value={formatNumber(totalCost, 2)} />
         <StatCard label="Active" value={formatNumber(data.filter(r => r.status === 'active').length)} />
       </div>
-      <Card className="overflow-hidden"><DataTable columns={tableCols} rows={data} rowKey={(r: any) => r.asset_code} emptyTitle="No assets registered" /></Card>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><DataTable fill columns={tableCols} rows={data} rowKey={(r: any) => r.asset_code} emptyTitle="No assets registered" /></Card>
     </div>
   )
 }
@@ -140,14 +140,14 @@ export function FinanceReport() {
   const billed = data.reduce((s, r) => s + r.total, 0)
   const paid = data.filter(r => r.status === 'paid').reduce((s, r) => s + r.total, 0)
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={data.length} onCSV={() => downloadCSV('Finance Report', cols, csv)} onPDF={() => downloadReportPDF('Finance (Billing) Report', `Billed ${formatNumber(billed, 2)} · Paid ${formatNumber(paid, 2)}`, cols, csv)} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard label="Invoices" value={formatNumber(data.length)} />
         <StatCard label="Total Billed" value={formatNumber(billed, 2)} />
         <StatCard label="Outstanding" value={formatNumber(billed - paid, 2)} />
       </div>
-      <Card className="overflow-hidden"><DataTable columns={tableCols} rows={data} rowKey={(r: any) => r.invoice_no} emptyTitle="No invoices" /></Card>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><DataTable fill columns={tableCols} rows={data} rowKey={(r: any) => r.invoice_no} emptyTitle="No invoices" /></Card>
     </div>
   )
 }
@@ -175,14 +175,14 @@ export function HrReport() {
   if (loading) return <Spinner label="Loading…" />
   const byDept = data.reduce((m: Record<string, number>, r) => { m[r.department] = (m[r.department] ?? 0) + 1; return m }, {})
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={data.length} onCSV={() => downloadCSV('HR Report', cols, data)} onPDF={() => downloadReportPDF('HR (Employees) Report', `${data.length} employees`, cols, data)} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard label="Employees" value={formatNumber(data.length)} />
         <StatCard label="Active" value={formatNumber(data.filter(r => r.status === 'active').length)} />
         <StatCard label="Departments" value={formatNumber(Object.keys(byDept).length)} />
       </div>
-      <Card className="overflow-hidden"><DataTable columns={tableCols} rows={data} rowKey={(r: any) => r.employee_code} emptyTitle="No employees" /></Card>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><DataTable fill columns={tableCols} rows={data} rowKey={(r: any) => r.employee_code} emptyTitle="No employees" /></Card>
     </div>
   )
 }
@@ -260,7 +260,7 @@ export function DeliveryRegisterReport() {
   const transportCount = new Set(rows.filter(r => r.mode === 'Transport').map(r => r.challan_no)).size
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={filtered.length} onCSV={() => downloadCSV('Delivery Register', cols, filtered)} onPDF={() => downloadReportPDF('Delivery Register', `Which transport/courier carried what · ${challanCount} deliveries`, cols, filtered)}>
         <div className="flex rounded-lg border border-surface-line p-0.5 text-sm">
           <button onClick={() => setMode('all')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'all' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>All</button>
@@ -276,8 +276,8 @@ export function DeliveryRegisterReport() {
         <StatCard label="By Courier" value={formatNumber(courierCount)} />
       </div>
 
-      <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={filtered} rowKey={(r: any) => r.key} emptyTitle="No deliveries yet" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={tableCols} rows={filtered} rowKey={(r: any) => r.key} emptyTitle="No deliveries yet" />
       </Card>
     </div>
   )

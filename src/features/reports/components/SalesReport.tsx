@@ -82,7 +82,7 @@ export function SalesReport() {
 
   if (loading) return <Spinner label="Loading…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length} onCSV={() => downloadCSV(title, cols, exportRows)} onPDF={() => downloadReportPDF(title, 'Order / Invoiced / Delivered / Pending', cols, exportRows)}>
         <div className="flex rounded-lg border border-surface-line p-0.5 text-sm">
           <button onClick={() => setBy('customer')} className={'rounded-md px-3 py-1 font-medium ' + (by === 'customer' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>By Customer</button>
@@ -102,8 +102,8 @@ export function SalesReport() {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={rows} rowKey={(r: any) => r.group} emptyTitle="No sales orders yet" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={tableCols} rows={rows} rowKey={(r: any) => r.group} emptyTitle="No sales orders yet" />
       </Card>
     </div>
   )

@@ -85,7 +85,7 @@ export function StockAgingReport() {
 
   if (loading) return <Spinner label="Computing aging…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={filteredRows.length}
         onCSV={() => downloadCSV('Stock Aging', cols, rows)}
         onPDF={() => downloadReportPDF('Stock Aging Report', 'On-hand stock by age bucket', cols, rows)}>
@@ -103,8 +103,8 @@ export function StockAgingReport() {
           </Card>
         ))}
       </div>
-      <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={filteredRows} rowKey={(r: any) => `${r.code}|${r.warehouse}|${r.condition}|${r.age}`} emptyTitle="No stock to age" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={tableCols} rows={filteredRows} rowKey={(r: any) => `${r.code}|${r.warehouse}|${r.condition}|${r.age}`} emptyTitle="No stock to age" />
       </Card>
     </div>
   )

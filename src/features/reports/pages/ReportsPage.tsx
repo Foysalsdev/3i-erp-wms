@@ -39,7 +39,7 @@ export default function ReportsPage() {
   const label = tabs.find(t => t.key === active)?.label ?? 'Report'
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader icon="analytics" title="Reports & Analytics" subtitle="Sales, inventory, stock movement & dispatch — filter, view and export" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/reports/${k}`)} />
       {Report ? <Report /> : (

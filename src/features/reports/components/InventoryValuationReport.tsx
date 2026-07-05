@@ -83,7 +83,7 @@ export function InventoryValuationReport() {
 
   if (loading) return <Spinner label="Valuing inventory…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={filteredRows.length}
         onCSV={() => downloadCSV('Inventory Valuation', cols, csvRows)}
         onPDF={() => downloadReportPDF('Inventory Valuation Report', `Total value: ${formatNumber(totalValue, 2)}`, cols, csvRows)}>
@@ -94,8 +94,8 @@ export function InventoryValuationReport() {
         <p className="mt-1 text-2xl font-bold text-ink">{formatNumber(totalValue, 2)}</p>
         <p className="mt-1 text-xs text-ink-faint">Products without any recorded purchase price are valued at 0.</p>
       </Card>
-      <Card className="overflow-hidden">
-        <DataTable columns={tableCols} rows={filteredRows} rowKey={(r: any) => r.code} emptyTitle="No stock to value" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={tableCols} rows={filteredRows} rowKey={(r: any) => r.code} emptyTitle="No stock to value" />
       </Card>
     </div>
   )

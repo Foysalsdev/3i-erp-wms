@@ -39,7 +39,7 @@ export default function ReversePage() {
   const label = tabs.find(t => t.key === active)?.label ?? 'Reverse Logistics'
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader icon="undo" title="Reverse Logistics" subtitle="Sales return, exchange, replacement, refurbishment & inspection" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/reverse/${k}`)} />
       {DOC_KEYS.includes(active) && docConfig ? (

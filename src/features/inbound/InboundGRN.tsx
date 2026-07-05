@@ -141,15 +141,15 @@ export function InboundGRN() {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search GRN / SAP ref…" /></div>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New GRN</Button>}
       </div>
 
-      <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
           onRowClick={canEdit ? openEdit : openView} emptyTitle="No goods receipts yet" />
       </Card>
 

@@ -15,7 +15,7 @@ export default function InboundPage() {
   const active = tab && tabs.some(t => t.key === tab) ? tab : 'receive'
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader icon="login" title="Inbound Operations" subtitle="Receive, requisitions, goods receipt, putaway & returns" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/inbound/${k}`)} />
       {active === 'receive' && <ReceiveTab />}

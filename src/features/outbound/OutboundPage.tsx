@@ -21,7 +21,7 @@ export default function OutboundPage() {
   const active = (tab && tabs.some(t => t.key === tab)) ? tab : 'sales-order'
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {dispatchAccess
         ? <PageHeader icon="logout" title="Outbound Operations" subtitle="Sales orders, picking, dispatch & delivery" />
         : <PageHeader icon="shopping_cart" title="Orders" subtitle="Raise an order request — warehouse takes it from here" />}

@@ -95,14 +95,14 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder={`Search ${title.toLowerCase()}…`} /></div>
         <span className="text-sm text-ink-soft">{filteredDocs.length} {title.toLowerCase()}(s)</span>
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {singular}</Button>}
       </div>
-      <Card className="overflow-hidden">
-        {loading ? <Spinner /> : <DataTable columns={columns} rows={filteredDocs} rowKey={(r: any) => r.id}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {loading ? <Spinner /> : <DataTable fill columns={columns} rows={filteredDocs} rowKey={(r: any) => r.id}
           onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${title.toLowerCase()} yet`} />}
       </Card>
 

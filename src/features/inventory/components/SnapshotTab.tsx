@@ -53,10 +53,10 @@ export function SnapshotTab() {
 
   if (loading) return <Spinner label="Loading snapshots…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex justify-end"><Button icon="photo_camera" loading={busy} onClick={capture}>Capture Snapshot</Button></div>
-      <Card className="overflow-hidden">
-        {rows.length ? <DataTable columns={columns} rows={rows} rowKey={(r: any) => r.id} /> :
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {rows.length ? <DataTable fill columns={columns} rows={rows} rowKey={(r: any) => r.id} /> :
           <EmptyState icon="photo_camera" title="No snapshots yet" hint="Capture a point-in-time view of current stock for audit & reconciliation." />}
       </Card>
     </div>

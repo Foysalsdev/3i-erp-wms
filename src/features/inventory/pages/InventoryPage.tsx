@@ -24,7 +24,7 @@ export default function InventoryPage() {
   const label = tabs.find(t => t.key === active)?.label ?? 'Inventory'
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader icon="warehouse" title="Inventory Management" subtitle="Stock, movements, transfers, counts, holds & serials" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/inventory/${k}`)} />
       {active === 'stock' && <StockTab title="Stock Overview" />}

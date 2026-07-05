@@ -73,7 +73,7 @@ export function HoldTab() {
 
   if (loading) return <Spinner label="Loading stock…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search product…" /></div>
         <label className="flex items-center gap-2 text-sm text-ink-soft">
@@ -81,8 +81,8 @@ export function HoldTab() {
         </label>
         <span className="text-sm text-ink-soft">{filtered.length} records</span>
       </div>
-      <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={columns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
       </Card>
       {action && <HoldModal action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); load() }} />}
     </div>

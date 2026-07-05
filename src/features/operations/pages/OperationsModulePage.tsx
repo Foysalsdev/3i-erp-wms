@@ -20,7 +20,7 @@ export function OperationsModulePage({ moduleKey }: { moduleKey: string }) {
   const tabLabel = tabs.find(t => t.key === active)?.label ?? module.label
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader icon={module.icon} title={module.label} subtitle="Operational documents with status workflow" />
       {tabs.length > 0 && <Tabs tabs={tabs} active={active} onChange={k => nav(`${module.path}/${k}`)} />}
       {def && def.module === moduleKey ? (

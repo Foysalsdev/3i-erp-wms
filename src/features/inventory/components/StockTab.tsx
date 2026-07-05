@@ -91,7 +91,7 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
 
   if (loading) return <Spinner label="Loading stock…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search product…" /></div>
         <span className="text-sm text-horizon-muted">{filtered.length} records</span>
@@ -119,8 +119,8 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
           {rows.length === 0 && <span className="text-sm text-ink-faint">Non-saleable pool is empty — everything in the warehouse is fresh.</span>}
         </div>
       )}
-      <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={filtered} rowKey={(r: any) => r.id}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={columns} rows={filtered} rowKey={(r: any) => r.id}
           onRowClick={r => setTrail(r)} emptyTitle="No stock records" />
       </Card>
       <StockAdjustModal open={adjust} onClose={() => setAdjust(false)} onDone={() => { setAdjust(false); load() }} />

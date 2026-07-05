@@ -52,10 +52,10 @@ export function LedgerTab() {
   // the running balances and the who-did-what history intact.
   if (loading) return <Spinner label="Loading ledger…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search movements…" /></div>
-      <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={filtered} rowKey={(r: any) => String(r.id)} emptyTitle="No movements recorded" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={columns} rows={filtered} rowKey={(r: any) => String(r.id)} emptyTitle="No movements recorded" />
       </Card>
     </div>
   )

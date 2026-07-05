@@ -77,13 +77,13 @@ export function FifoTab() {
 
   if (loading) return <Spinner label="Computing FIFO order…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search product…" /></div>
         <span className="text-sm text-ink-soft">{rows.length} lots · oldest first</span>
       </div>
-      <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No stock to order" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={columns} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No stock to order" />
       </Card>
       <p className="text-xs text-ink-faint">Stock is ordered by its earliest recorded inbound movement. Consume the top rows first to follow FIFO.</p>
     </div>

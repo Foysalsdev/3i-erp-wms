@@ -64,10 +64,10 @@ export function SerialsTab() {
 
   if (loading) return <Spinner label="Loading serials…" />
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search serial / product…" /></div>
-      <Card className="overflow-hidden">
-        <DataTable columns={allColumns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No serial numbers tracked yet" />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={allColumns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No serial numbers tracked yet" />
       </Card>
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `serial · ${deleting.serial_no}` : undefined}

@@ -106,7 +106,7 @@ export function OperationList({ def }: { def: OpDef }) {
   const columns = [...opColumns(def), actionCol]
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder={`Search ${def.singular.toLowerCase()}…`} /></div>
         <SelectBox value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-auto py-2">
@@ -117,8 +117,8 @@ export function OperationList({ def }: { def: OpDef }) {
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {def.singular}</Button>}
       </div>
 
-      <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
           onRowClick={canEdit ? (r => { setEditing(r); setModal(true) }) : (r => setViewing(r))}
           emptyTitle={`No ${def.singular.toLowerCase()} records yet`} />
       </Card>

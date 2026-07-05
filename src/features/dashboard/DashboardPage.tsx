@@ -69,7 +69,7 @@ function OpTile({ icon, label, value, to, alert }:
     <Link to={to}
       className="group flex items-center justify-between rounded-card border border-surface-line bg-surface p-4 transition hover:border-brand-200 hover:shadow-card">
       <div className="flex items-center gap-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${alert ? 'bg-amber-50 text-amber-600' : 'bg-surface-sunken text-ink-soft'}`}>
+        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${alert ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400' : 'bg-surface-sunken text-ink-soft'}`}>
           <Icon name={icon} className="text-[18px]" />
         </span>
         <span className="text-sm font-medium text-ink-soft">{label}</span>
@@ -248,7 +248,7 @@ function AdminDashboard() {
                 {recent.length ? recent.map((m, i) => (
                   <div key={i} className="flex items-center justify-between px-5 py-2.5 text-sm">
                     <span className="flex items-center gap-3">
-                      <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${m.qty_in > 0 ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
+                      <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${m.qty_in > 0 ? 'bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400' : 'bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400'}`}>
                         <Icon name={m.qty_in > 0 ? 'south_west' : 'north_east'} className="text-[16px]" />
                       </span>
                       <span className="font-semibold text-ink">{m.movement_type}</span>

@@ -417,7 +417,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     <Modal open onClose={onClose} title={`${record ? 'Edit' : lockSo ? 'Plan Delivery' : 'New'} Delivery Challan${lockSo ? ' — ' + lockSo.so_no : ''}`} size="lg">
       <div className="space-y-4">
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Challan No: </span><span className="font-semibold">{record.challan_no}</span>{posted && <span className="ml-2"><Badge tone="positive">Issued - stock out</Badge></span>}</div>}
-        {posted && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">This challan is issued and stock is deducted. Editing lines will not change posted stock.</p>}
+        {posted && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">This challan is issued and stock is deducted. Editing lines will not change posted stock.</p>}
 
         {locked ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-surface-line bg-surface-sunken/40 p-3 text-sm sm:grid-cols-4">

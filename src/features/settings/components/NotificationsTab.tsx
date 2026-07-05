@@ -19,7 +19,7 @@ const ROWS: { key: keyof NotificationSettings; icon: string; label: string; hint
 function Toggle({ on, disabled, onChange }: { on: boolean; disabled?: boolean; onChange: () => void }) {
   return (
     <button type="button" disabled={disabled} onClick={onChange}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${on ? 'bg-brand-500' : 'bg-slate-300'} disabled:opacity-50`}>
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${on ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'} disabled:opacity-50`}>
       <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
     </button>
   )
@@ -58,7 +58,7 @@ export function NotificationsTab({ canEdit }: { canEdit: boolean }) {
       <ul className="divide-y divide-surface-line">
         {ROWS.map(r => (
           <li key={r.key} className="flex items-center gap-4 py-3.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Icon name={r.icon} className="text-[20px]" /></span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"><Icon name={r.icon} className="text-[20px]" /></span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-ink">{r.label}</p>
               <p className="text-xs text-ink-soft">{r.hint}</p>

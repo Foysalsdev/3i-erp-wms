@@ -24,7 +24,7 @@ export function ImageUpload({ value, onChange, label }: { value?: string; onChan
       {label && <label className="fiori-label">{label}</label>}
       <div className="flex items-center gap-3">
         <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-card border border-surface-line bg-surface-sunken">
-          {value ? <img src={value} alt="" className="h-full w-full object-cover" /> : <Icon name="image" className="text-slate-300 text-[24px]" />}
+          {value ? <img src={value} alt="" className="h-full w-full object-cover" /> : <Icon name="image" className="text-ink-faint text-[24px]" />}
         </div>
         <div className="flex-1 space-y-1">
           <button type="button" onClick={() => ref.current?.click()}

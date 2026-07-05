@@ -125,7 +125,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]" onClick={onClose}>
       <div className="w-full max-w-xl overflow-hidden rounded-card bg-surface shadow-fiori-lg" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-horizon-line px-4">
-          <Icon name="search" className="text-slate-400" />
+          <Icon name="search" className="text-ink-faint" />
           <input autoFocus value={q} onChange={e => setQ(e.target.value)}
             placeholder="Search SO, PO, invoice, challan, gate pass, CN, serial, customer…"
             className="w-full py-3.5 text-sm outline-none" />

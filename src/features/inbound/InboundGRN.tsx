@@ -253,7 +253,7 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
     <Modal open onClose={onClose} title={`${record ? 'Edit' : 'New'} GRN`} size="lg">
       <div className="space-y-4">
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">GRN No: </span><span className="font-semibold">{record.grn_no}</span>{approved && <span className="ml-2"><Badge tone="positive">Approved · in stock</Badge></span>}</div>}
-        {approved && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">This GRN is approved and posted to inventory. Editing lines will not change posted stock.</p>}
+        {approved && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">This GRN is approved and posted to inventory. Editing lines will not change posted stock.</p>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Supplier">
             <Combobox items={suppliers.map((s: any) => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))} value={h.supplier_id ?? ''} onChange={(id: string) => set({ supplier_id: id })} placeholder="Search supplier by code or name" />

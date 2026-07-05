@@ -2,7 +2,11 @@ import { useUI } from '@/store/ui'
 import { Icon } from './Icon'
 import { cn } from '@/lib/utils'
 const icon = { success: 'check_circle', error: 'error', info: 'info' }
-const tone = { success: 'border-green-200 text-green-700', error: 'border-red-200 text-red-700', info: 'border-blue-200 text-blue-700' }
+const tone = {
+  success: 'border-green-200 text-green-700 dark:border-green-500/30 dark:text-green-400',
+  error: 'border-red-200 text-red-700 dark:border-red-500/30 dark:text-red-400',
+  info: 'border-blue-200 text-blue-700 dark:border-blue-500/30 dark:text-blue-400'
+}
 export function Toaster() {
   const { toasts, dismiss } = useUI()
   return (
@@ -16,7 +20,7 @@ export function Toaster() {
               {t.action.label}
             </button>
           )}
-          <button onClick={() => dismiss(t.id)} className="text-slate-400 hover:text-slate-600"><Icon name="close" className="text-[18px]" /></button>
+          <button onClick={() => dismiss(t.id)} className="text-ink-faint hover:text-ink-soft"><Icon name="close" className="text-[18px]" /></button>
         </div>
       ))}
     </div>

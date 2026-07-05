@@ -81,7 +81,7 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
             <a key={a.id} href={a.drive_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2 text-sm hover:text-brand-600">
               <Icon name={a.source === 'google_drive' ? 'add_to_drive' : 'description'} className="text-brand-500" />
               <span className="flex-1 truncate">{a.file_name}</span>
-              <Icon name="open_in_new" className="text-[16px] text-slate-400" />
+              <Icon name="open_in_new" className="text-[16px] text-ink-faint" />
             </a>
           ))}
         </div>}

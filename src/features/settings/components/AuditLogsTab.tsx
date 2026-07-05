@@ -99,7 +99,7 @@ function AuditDetail({ row, who, onClose }: { row: any; who?: string; onClose: (
             </thead>
             <tbody className="divide-y divide-surface-line">
               {keys.map(k => (
-                <tr key={k} className={changed(k) ? 'bg-amber-50/60' : ''}>
+                <tr key={k} className={changed(k) ? 'bg-amber-50/60 dark:bg-amber-500/10' : ''}>
                   <td className="px-3 py-1.5 font-medium text-ink">{k}</td>
                   <td className="px-3 py-1.5 text-ink-soft">{row.action === 'INSERT' ? '—' : fmt(oldD[k])}</td>
                   <td className="px-3 py-1.5 text-ink-soft">{row.action === 'DELETE' ? '—' : fmt(newD[k])}</td>

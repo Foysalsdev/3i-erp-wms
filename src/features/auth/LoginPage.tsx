@@ -66,7 +66,7 @@ export default function LoginPage() {
             <Field label="Password" required>
               <Input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
             </Field>
-            {error && <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700 ring-1 ring-red-100"><Icon name="error" className="text-[16px]" />{error}</div>}
+            {error && <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700 ring-1 ring-red-100 dark:bg-red-500/15 dark:text-red-400 dark:ring-red-500/30"><Icon name="error" className="text-[16px]" />{error}</div>}
             <Button type="submit" loading={loading} className="w-full !py-2.5">Sign in</Button>
           </form>
         </div>

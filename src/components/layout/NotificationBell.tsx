@@ -181,7 +181,7 @@ export function NotificationBell() {
                       <li key={n.id}>
                         <button onClick={() => go(n.to)}
                           className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-surface-sunken">
-                          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
                             <Icon name={n.icon} className="text-[18px]" />
                           </span>
                           <span className="min-w-0 flex-1">

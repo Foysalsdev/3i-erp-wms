@@ -32,9 +32,9 @@ export function InventoryDashboardTab() {
 
   if (loading) return <Spinner />
   const cards = [
-    { label: 'Good Stock', val: agg.good, icon: 'check_circle', tone: 'bg-green-50 text-green-600' },
-    { label: 'Damaged', val: agg.damaged, icon: 'report', tone: 'bg-red-50 text-red-600' },
-    { label: 'Quarantine', val: agg.quarantine, icon: 'pause_circle', tone: 'bg-orange-50 text-orange-600' }
+    { label: 'Good Stock', val: agg.good, icon: 'check_circle', tone: 'bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400' },
+    { label: 'Damaged', val: agg.damaged, icon: 'report', tone: 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400' },
+    { label: 'Quarantine', val: agg.quarantine, icon: 'pause_circle', tone: 'bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400' }
   ]
   return (
     <div className="space-y-4">

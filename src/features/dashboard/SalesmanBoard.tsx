@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/States'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, type RepCol } from '@/features/reports/export'
+import { fetchStockAvailability } from '@/lib/stockAvailability'
 
 const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
 const today = () => new Date().toISOString().slice(0, 10)
@@ -57,7 +58,7 @@ export default function SalesmanBoard() {
   const [orders, setOrders] = useState<any[]>([])
   const [delivered, setDelivered] = useState<Record<string, number>>({})
   const [customers, setCustomers] = useState<Record<string, string>>({})
-  const [stockRaw, setStockRaw] = useState<any[]>([])
+  const [avail, setAvail] = useState<Record<string, number>>({})
   const [prodMap, setProdMap] = useState<Record<string, any>>({})
   const [q, setQ] = useState('')
   const [sq, setSq] = useState('')
@@ -70,15 +71,15 @@ export default function SalesmanBoard() {
       supabase.from('sales_orders').select('id,so_no,customer_id,order_date,total_qty,total_amount,status,billing_doc_no').eq('client_id', currentClientId).eq('created_by', uid).order('created_at', { ascending: false }),
       supabase.from('sales_order_items').select('so_id,delivered_qty').eq('client_id', currentClientId),
       supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId),
-      supabase.from('inventory_stock').select('product_id,quantity,reserved_qty,stock_status').eq('client_id', currentClientId).eq('stock_status', 'good'),
+      fetchStockAvailability(currentClientId),
       supabase.from('products').select('id,material_code,name,category,uom').eq('client_id', currentClientId)
-    ]).then(([o, it, c, st, pr]) => {
+    ]).then(([o, it, c, stockAvail, pr]) => {
       setOrders(o.data ?? [])
       const d: Record<string, number> = {}; (it.data ?? []).forEach((r: any) => { d[r.so_id] = (d[r.so_id] ?? 0) + n(r.delivered_qty) })
       setDelivered(d)
       const cm: Record<string, string> = {}; (c.data ?? []).forEach((r: any) => { cm[r.id] = `${r.customer_code} — ${r.name}` })
       setCustomers(cm)
-      setStockRaw(st.data ?? [])
+      setAvail(Object.fromEntries(Object.entries(stockAvail).map(([pid, a]) => [pid, a.saleable])))
       const pm: Record<string, any> = {}; (pr.data ?? []).forEach((r: any) => { pm[r.id] = r })
       setProdMap(pm); setLoading(false)
     })
@@ -101,17 +102,13 @@ export default function SalesmanBoard() {
   }, [orders, customers, q])
 
   const stockRows = useMemo(() => {
-    const agg: Record<string, any> = {}
-    for (const r of stockRaw) {
-      const p = prodMap[r.product_id]; if (!p) continue
-      const g = agg[r.product_id] ?? (agg[r.product_id] = { code: p.material_code, name: p.name, category: p.category || '—', uom: p.uom || '', available: 0 })
-      g.available += n(r.quantity) - n(r.reserved_qty)
-    }
     const t = sq.trim().toLowerCase()
-    return Object.values(agg).filter((g: any) => g.available !== 0)
-      .filter((g: any) => !t || g.code.toLowerCase().includes(t) || g.name.toLowerCase().includes(t) || g.category.toLowerCase().includes(t))
-      .sort((a: any, b: any) => b.available - a.available)
-  }, [stockRaw, prodMap, sq])
+    return Object.entries(avail)
+      .map(([pid, available]) => { const p = prodMap[pid]; return p ? { code: p.material_code, name: p.name, category: p.category || '—', uom: p.uom || '', available } : null })
+      .filter((g): g is { code: string; name: string; category: string; uom: string; available: number } => !!g && g.available !== 0)
+      .filter(g => !t || g.code.toLowerCase().includes(t) || g.name.toLowerCase().includes(t) || g.category.toLowerCase().includes(t))
+      .sort((a, b) => b.available - a.available)
+  }, [avail, prodMap, sq])
 
   const exportCols: RepCol[] = [
     { key: 'so_no', header: 'SO No' }, { key: 'customer', header: 'Customer' }, { key: 'date', header: 'Date' },

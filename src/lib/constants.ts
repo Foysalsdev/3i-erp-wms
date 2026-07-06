@@ -14,7 +14,8 @@ export const MODULES: NavModule[] = [
     { key: 'assets', label: 'Asset' }, { key: 'non-inventory', label: 'Non-Inventory' }
   ]},
   { key: 'inventory', label: 'Inventory Management', icon: 'warehouse', path: '/inventory', permission: 'inventory.view', tabs: [
-    { key: 'stock', label: 'Stock Overview' }, { key: 'non-saleable', label: 'Non-Saleable' },
+    { key: 'stock', label: 'Stock Overview' }, { key: 'availability', label: 'Stock Availability' },
+    { key: 'non-saleable', label: 'Non-Saleable' },
     { key: 'ledger', label: 'Inventory Ledger' },
     { key: 'transfer', label: 'Stock Transfer' }, { key: 'adjustment', label: 'Stock Adjustment' },
     { key: 'cycle-count', label: 'Cycle Count' }, { key: 'physical-verification', label: 'Physical Verification' },

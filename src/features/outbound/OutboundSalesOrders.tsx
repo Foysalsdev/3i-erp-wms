@@ -12,6 +12,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
+import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { Tabs } from '@/components/ui/Tabs'
 import { FilterPanel } from '@/components/ui/FilterPanel'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -25,6 +26,7 @@ import { Combobox } from '@/components/shared/Combobox'
 import { SerialScan } from './SerialScan'
 import { ChallanForm } from './DeliveryChallan'
 import { formatNumber, formatDate, formatDateTime, cn } from '@/lib/utils'
+import { fetchStockAvailability } from '@/lib/stockAvailability'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { DocVersions } from '@/components/shared/DocVersions'
@@ -101,6 +103,9 @@ export function OutboundSalesOrders() {
   const dispatchAccess = isPlatformAdmin || can('inventory.view')
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
+  // Gate for the approval step: a 'pending' order must clear this before the
+  // warehouse can pick it (see workflow.ts + SerialScan.tsx's block).
+  const canApprove = can('outbound.approve') || isPlatformAdmin
   const [q, setQ] = useUrlSearch()
   const [statusFilter, setStatusFilter] = useState('all')
   const [mineOnly, setMineOnly] = useState(false)
@@ -156,6 +161,36 @@ export function OutboundSalesOrders() {
     const { error } = await supabase.from('sales_orders').update({ status: 'closed' }).eq('id', r.id)
     if (error) notify('error', error.message)
     else { notify('success', `${r.so_no} closed`); refresh() }
+  }
+
+  // Approve a single pending order — the only route from 'pending' to
+  // 'approved' now that the status dropdown hides it from non-approvers.
+  const approveOrder = async (r: any) => {
+    const { error } = await supabase.from('sales_orders')
+      .update({ status: 'approved', approved_by: session?.user.id ?? null, approved_at: new Date().toISOString() })
+      .eq('id', r.id)
+    if (error) notify('error', error.message)
+    else { notify('success', `${r.so_no} approved — ready for picking`); refresh() }
+  }
+
+  // Bulk-approve every pending order in the current selection (the multi-order
+  // approval the sales workflow needs) — non-pending selections are skipped.
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const toggleOne = (id: string) => setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll = (ids: string[]) => setChecked(prev => {
+    const allIn = ids.every(id => prev.has(id))
+    const n = new Set(prev)
+    ids.forEach(id => allIn ? n.delete(id) : n.add(id))
+    return n
+  })
+  const bulkApprove = async () => {
+    const pendingIds = rows.filter((r: any) => checked.has(r.id) && r.status === 'pending').map((r: any) => r.id)
+    if (!pendingIds.length) { notify('info', 'No pending orders in the selection'); return }
+    const { error } = await supabase.from('sales_orders')
+      .update({ status: 'approved', approved_by: session?.user.id ?? null, approved_at: new Date().toISOString() })
+      .in('id', pendingIds)
+    if (error) notify('error', error.message)
+    else { notify('success', `${pendingIds.length} order(s) approved`); setChecked(new Set()); refresh() }
   }
 
   const openEdit = async (r: any) => {
@@ -240,13 +275,14 @@ export function OutboundSalesOrders() {
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => setOverview(r) },
+            ...(canApprove && r.status === 'pending' ? [{ icon: 'how_to_reg', label: 'Approve', onClick: () => approveOrder(r) }] : []),
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             { icon: 'print', label: 'Print', onClick: () => printSO(r) },
             { icon: 'mail', label: 'Mail', onClick: () => mailSO(r) },
-            ...(canEdit && dispatchAccess ? [{ icon: 'qr_code_scanner', label: 'Scan Serials', onClick: () => setScanning(r) }] : []),
+            ...(canEdit && dispatchAccess && !['draft', 'pending'].includes(r.status) ? [{ icon: 'qr_code_scanner', label: 'Scan Serials', onClick: () => setScanning(r) }] : []),
             { icon: 'download', label: 'Export Prework (Excel)', onClick: () => exportPrework(r) },
             ...(canEdit ? [{ icon: 'receipt_long', label: 'Enter Invoice (SAP)', onClick: () => setInvoicing(r) }] : []),
-            ...(canEdit && dispatchAccess ? [{ icon: 'local_shipping', label: 'Plan Delivery', onClick: () => setPlanning(r) }] : []),
+            ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled'].includes(r.status) ? [{ icon: 'local_shipping', label: 'Plan Delivery', onClick: () => setPlanning(r) }] : []),
             ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled', 'draft'].includes(r.status) ? [{ icon: 'block', label: 'Close remaining', onClick: () => closeRemaining(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
@@ -301,15 +337,22 @@ export function OutboundSalesOrders() {
           setCustomerFilter(s.customerFilter ?? ''); setDateFrom(s.dateFrom ?? ''); setDateTo(s.dateTo ?? '')
         }} />
 
+      {canApprove && (
+        <BulkActionBar count={rows.filter((r: any) => checked.has(r.id)).length} onClear={() => setChecked(new Set())} actions={[
+          { icon: 'how_to_reg', label: 'Approve', onClick: bulkApprove }
+        ]} />
+      )}
+
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
           emptyTitle="No sales orders yet"
+          selection={canApprove ? { selected: checked, onToggle: toggleOne, onToggleAll: toggleAll } : undefined}
           expand={{ render: (r: any) => <OrderLinesPreview so={r} products={products} onView={() => setOverview(r)} /> }} />
       </Card>
 
       {modal && (
         <SOForm record={editing} customers={customers} warehouses={warehouses} products={products} users={users}
-          clientId={currentClientId!} notify={notify}
+          clientId={currentClientId!} notify={notify} canApprove={canApprove}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
 
@@ -334,7 +377,7 @@ export function OutboundSalesOrders() {
       {overview && (
         <SOOverview so={overview} customerName={customerName(overview.customer_id)} products={products}
           customers={customers} vehicles={vehicles}
-          ownerName={userName(overview.assigned_to)}
+          ownerName={userName(overview.assigned_to)} approvedByName={userName(overview.approved_by)}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
           onScanned={refresh} onDownloadSO={() => printSO(overview)}
           onClose={() => setOverview(null)} />
@@ -367,12 +410,16 @@ export function OutboundSalesOrders() {
   )
 }
 
-function SOForm({ record, customers, warehouses, products, users, clientId, notify, onClose, onDone }: any) {
+function SOForm({ record, customers, warehouses, products, users, clientId, notify, canApprove, onClose, onDone }: any) {
   const [h, setH] = useState<any>(record ?? { order_date: today(), status: 'pending' })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [saving, setSaving] = useState(false)
   const readOnly = !!record?.__readOnly
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  // 'approved' is a gated status — only an approver can put an order into it
+  // (via the dedicated Approve action), so the dropdown hides it from anyone
+  // else, other than to show it read-only on an order that's already there.
+  const statusOptions = canApprove || record?.status === 'approved' ? SO_STATUS : SO_STATUS.filter(s => s !== 'approved')
   const [genning, setGenning] = useState(false)
   const genPO = async () => {
     setGenning(true)
@@ -386,13 +433,15 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
     } finally { setGenning(false) }
   }
 
-  // Saleable stock per product (good available = quantity - reserved), shown beside qty.
+  // Saleable stock per product — on-hand minus manual holds AND whatever's
+  // already committed to other open orders (not just this one), so Sales
+  // can't quote qty that's really already spoken for. See lib/stockAvailability.
   const [stockMap, setStockMap] = useState<Record<string, number>>({})
   useEffect(() => {
     if (!clientId) return
-    supabase.from('inventory_stock').select('product_id,quantity,reserved_qty').eq('client_id', clientId).eq('stock_status', 'good').then(({ data }) => {
+    fetchStockAvailability(clientId, record?.id).then(avail => {
       const m: Record<string, number> = {}
-      ;(data ?? []).forEach((r: any) => { m[r.product_id] = (m[r.product_id] ?? 0) + (Number(r.quantity) || 0) - (Number(r.reserved_qty) || 0) })
+      Object.entries(avail).forEach(([pid, a]) => { m[pid] = a.saleable })
       setStockMap(m)
     })
   }, [clientId])
@@ -484,8 +533,9 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
           <Field label="Required Date"><Input type="date" value={h.required_date ?? ''} onChange={e => set({ required_date: e.target.value })} /></Field>
           <Field label="Status" required>
             <SelectBox value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
-              {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+              {statusOptions.map((s: string) => <option key={s} value={s}>{s}</option>)}
             </SelectBox>
+            {!canApprove && h.status !== 'approved' && <p className="mt-1 text-[11px] text-ink-faint">Approval is a separate action — use "Approve" from the order list once submitted.</p>}
           </Field>
           <Field label="Owner (responsible)">
             <Combobox items={(users ?? []).map((u: any) => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />
@@ -557,7 +607,7 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
   )
 }
 
-function SOOverview({ so, customerName, products, customers, vehicles, ownerName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
+function SOOverview({ so, customerName, products, customers, vehicles, ownerName, approvedByName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
   const notify = useUI(s => s.notify)
   const [tab, setTab] = useState<'details' | 'scan'>('details')
   const [items, setItems] = useState<any[]>([])
@@ -616,6 +666,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
           <Stat label="Total Qty" value={formatNumber(so.total_qty)} />
           <Stat label="Total Amount" value={formatNumber(so.total_amount)} />
           <Stat label="Owner" value={ownerName || '— unassigned'} />
+          {so.approved_by && <Stat label="Approved By" value={`${approvedByName || '—'} · ${formatDateTime(so.approved_at)}`} />}
         </div>
 
         <Section title="Workflow">

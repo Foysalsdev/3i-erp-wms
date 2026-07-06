@@ -129,6 +129,7 @@ export type Database = {
           sap_so_no: string | null; outbound_delivery_no: string | null; transfer_order_no: string | null; billing_doc_no: string | null
           deposited_amount: number; deposited_date: string | null; payment_status: string; mail_ref: string | null
           assigned_to: string | null
+          approved_by: string | null; approved_at: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['sales_orders']['Row']> & { client_id: string; so_no: string }

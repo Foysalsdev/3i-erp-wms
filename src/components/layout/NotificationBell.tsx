@@ -84,11 +84,17 @@ export function NotificationBell() {
           .not('status', 'in', '(delivered,closed,cancelled)')
         const list = (orders ?? []) as any[]
         const overdue = list.filter(o => workflowState(o).overdue).length
-        const awaitingPick = list.filter(o => ['pending', 'approved'].includes(o.status)).length
+        const awaitingApproval = list.filter(o => o.status === 'pending').length
+        const awaitingPick = list.filter(o => o.status === 'approved').length
         if (prefs.overdueOrders && overdue > 0) items.push({
           id: 'so:overdue', icon: 'schedule',
           title: `${formatNumber(overdue)} overdue sales order${overdue > 1 ? 's' : ''}`,
           detail: 'Past expected completion', count: overdue, to: '/outbound/sales-order', tone: 'warn'
+        })
+        if (prefs.awaitingApproval && can('outbound.approve') && awaitingApproval > 0) items.push({
+          id: 'so:approve', icon: 'how_to_reg',
+          title: `${formatNumber(awaitingApproval)} order${awaitingApproval > 1 ? 's' : ''} awaiting approval`,
+          detail: 'Approve before the warehouse can pick', count: awaitingApproval, to: '/outbound/sales-order', tone: 'warn'
         })
         if (prefs.awaitingPick && awaitingPick > 0) items.push({
           id: 'so:pick', icon: 'shopping_cart_checkout',

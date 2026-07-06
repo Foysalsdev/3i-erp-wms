@@ -82,64 +82,19 @@ export function DeliveryChallan() {
       String(r.po_no ?? '').toLowerCase().includes(t))
   }, [data, q, statusFilter, customerFilter, dateFrom, dateTo])
 
-  // Issue the challan: deduct stock for every line, then auto-create a linked gate pass.
+  // Issue the challan: one atomic server-side function posts every line, bumps
+  // the sales-order fulfilment, tags serials delivered and creates the gate
+  // pass — all in one DB transaction. A multi-line challan where a later line
+  // is short on stock now rolls back completely instead of leaving earlier
+  // lines' stock already deducted while the challan itself stays unposted.
   const issue = async (c: any) => {
     if (c.posted_at) { notify('info', 'This challan is already issued & stock deducted'); return }
     if (!c.warehouse_id) { notify('error', 'Set a warehouse on the challan before issuing'); return }
     setBusy(c.id)
     try {
-      const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', c.id)
-      if (!items || items.length === 0) { notify('error', 'Add line items before issuing'); return }
-      const issuedSerials: string[] = []
-      for (const it of items as any[]) {
-        if (!it.product_id || !(Number(it.qty) > 0)) continue
-        const { error } = await (supabase as any).rpc('post_stock_movement', {
-          p_client: currentClientId, p_product: it.product_id, p_warehouse: c.warehouse_id,
-          p_location: it.location_id || null, p_stock_status: it.stock_status || 'good',
-          p_qty_in: 0, p_qty_out: Number(it.qty), p_movement_type: 'DELIVERY',
-          p_reference_type: 'delivery_challan', p_reference_id: c.id, p_reference_no: c.challan_no,
-          p_serial_no: it.serial_no || null, p_remarks: `Challan ${c.challan_no}${c.invoice_no ? ' - Invoice ' + c.invoice_no : ''}`
-        })
-        if (error) throw error
-        if (it.serial_no) issuedSerials.push(it.serial_no)
-      }
-      // Mark each shipped serial delivered, tagged to this challan (full traceability).
-      if (issuedSerials.length) {
-        await supabase.from('serial_numbers').update({ status: 'delivered', reference_no: c.challan_no })
-          .eq('client_id', currentClientId!).in('serial_no', issuedSerials)
-      }
-      // Auto gate pass for the same vehicle/driver.
-      const gp_no = await nextDocNumber(currentClientId!, 'GP')
-      if (gp_no) {
-        await supabase.from('gate_passes').insert({
-          client_id: currentClientId!, gate_pass_no: gp_no, challan_id: c.id, vehicle_id: c.vehicle_id || null,
-          driver_name: c.driver_name || null, transporter_id: c.transporter_id || null, gate_out_date: today(), status: 'issued',
-          purpose: `Delivery - Challan ${c.challan_no}${c.invoice_no ? ', Invoice ' + c.invoice_no : ''}`
-        } as any)
-      }
-      // Partial fulfilment: bump delivered_qty on the linked sales-order lines,
-      // then advance the order status (delivered when every line is complete).
-      if (c.sales_order_id) {
-        for (const it of items as any[]) {
-          if (it.so_item_id && Number(it.qty) > 0) {
-            const { data: soi } = await supabase.from('sales_order_items').select('delivered_qty').eq('id', it.so_item_id).single()
-            await supabase.from('sales_order_items').update({ delivered_qty: Number(soi?.delivered_qty || 0) + Number(it.qty) }).eq('id', it.so_item_id)
-          }
-        }
-        const { data: soLines } = await supabase.from('sales_order_items').select('qty,delivered_qty').eq('so_id', c.sales_order_id)
-        const allDone = (soLines ?? []).length > 0 && (soLines ?? []).every((l: any) => Number(l.delivered_qty) >= Number(l.qty))
-        await supabase.from('sales_orders').update({ status: allDone ? 'delivered' : 'dispatched' }).eq('id', c.sales_order_id)
-      }
-      // Dispatch time = the moment the challan is issued, unless the user
-      // already typed one (e.g. a planned/backdated despatch).
-      const now = new Date()
-      const dispatchStamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
-      const { error } = await supabase.from('delivery_challans').update({
-        posted_at: now.toISOString(), status: 'issued',
-        ...(c.dispatch_time ? {} : { dispatch_time: dispatchStamp })
-      } as any).eq('id', c.id)
+      const { data: gpNo, error } = await (supabase as any).rpc('post_delivery_challan', { p_challan_id: c.id })
       if (error) throw error
-      notify('success', `${c.challan_no} issued - stock deducted${gp_no ? ' & gate pass ' + gp_no + ' created' : ''}`)
+      notify('success', `${c.challan_no} issued - stock deducted${gpNo ? ' & gate pass ' + gpNo + ' created' : ''}`)
       refresh()
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not issue challan')
@@ -363,7 +318,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const [sos, setSos] = useState<any[]>([])
   useEffect(() => {
     if (!clientId || locked) return
-    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
+    // Delivered orders have nothing left to plan (see loadFromSO below), so
+    // they're excluded here the same as closed/cancelled ones.
+    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(delivered,closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
   }, [clientId, locked])
   const selectSO = async (soId: string) => {
     const so = sos.find((x: any) => x.id === soId)

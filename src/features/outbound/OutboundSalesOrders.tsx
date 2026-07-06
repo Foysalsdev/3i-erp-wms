@@ -12,7 +12,6 @@ import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
-import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { Tabs } from '@/components/ui/Tabs'
 import { FilterPanel } from '@/components/ui/FilterPanel'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -28,16 +27,16 @@ import { ChallanForm } from './DeliveryChallan'
 import { formatNumber, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { fetchStockAvailability } from '@/lib/stockAvailability'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
-import { TimelinePanel } from '@/features/masters/components/Panels'
+import { TimelinePanel, NotesPanel } from '@/features/masters/components/Panels'
 import { DocVersions } from '@/components/shared/DocVersions'
 import { WorkflowPanel } from './WorkflowPanel'
 import { workflowState } from './workflow'
 import { OrderTimeline } from './OrderTimeline'
 import { downloadChallanPdfFor } from './challanPdf'
 
-const SO_STATUS = ['draft', 'pending', 'approved', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
+const SO_STATUS = ['draft', 'pending', 'approved', 'rejected', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
-const tone = (s: string) => ['delivered', 'closed'].includes(s) ? 'positive' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : ['dispatched', 'packed', 'picking'].includes(s) ? 'info' : 'critical'
+const tone = (s: string) => ['delivered', 'closed'].includes(s) ? 'positive' : ['cancelled', 'rejected'].includes(s) ? 'negative' : s === 'draft' ? 'neutral' : ['dispatched', 'packed', 'picking'].includes(s) ? 'info' : 'critical'
 
 // Compact "what's next & who owns it" cell for the order list (WES #6).
 function NextActionCell({ order, ownerName }: { order: any; ownerName?: string | null }) {
@@ -58,7 +57,7 @@ function NextActionCell({ order, ownerName }: { order: any; ownerName?: string |
 // Row-expand preview (DataTable's `expand`): a quick look at what's in the
 // order — ordered/delivered/pending per line — without opening the full
 // overview modal. Lines are fetched lazily, only when a row is expanded.
-function OrderLinesPreview({ so, products, onView }: { so: any; products: any[]; onView: () => void }) {
+export function OrderLinesPreview({ so, products, onView }: { so: any; products: any[]; onView: () => void }) {
   const [items, setItems] = useState<any[] | null>(null)
   useEffect(() => {
     let active = true
@@ -163,34 +162,24 @@ export function OutboundSalesOrders() {
     else { notify('success', `${r.so_no} closed`); refresh() }
   }
 
-  // Approve a single pending order — the only route from 'pending' to
-  // 'approved' now that the status dropdown hides it from non-approvers.
-  const approveOrder = async (r: any) => {
+  // Undo an approval/rejection decision — admin-only escape hatch for a
+  // mistaken Approve/Reject click (see SalesOrderApprovals.tsx for the actual
+  // Approve/Reject actions, which live in the dedicated Pending Approval tab).
+  // Scoped to the order still sitting exactly at 'approved' — once picking has
+  // started, unwinding back to 'pending' is no longer safe/meaningful.
+  const undoApproval = async (r: any) => {
+    if (!window.confirm(`Undo the approval on ${r.so_no}? It will go back to Pending Approval.`)) return
     const { error } = await supabase.from('sales_orders')
-      .update({ status: 'approved', approved_by: session?.user.id ?? null, approved_at: new Date().toISOString() })
-      .eq('id', r.id)
+      .update({ status: 'pending', approved_by: null, approved_at: null }).eq('id', r.id)
     if (error) notify('error', error.message)
-    else { notify('success', `${r.so_no} approved — ready for picking`); refresh() }
+    else { notify('success', `${r.so_no} approval undone`); refresh() }
   }
-
-  // Bulk-approve every pending order in the current selection (the multi-order
-  // approval the sales workflow needs) — non-pending selections are skipped.
-  const [checked, setChecked] = useState<Set<string>>(new Set())
-  const toggleOne = (id: string) => setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const toggleAll = (ids: string[]) => setChecked(prev => {
-    const allIn = ids.every(id => prev.has(id))
-    const n = new Set(prev)
-    ids.forEach(id => allIn ? n.delete(id) : n.add(id))
-    return n
-  })
-  const bulkApprove = async () => {
-    const pendingIds = rows.filter((r: any) => checked.has(r.id) && r.status === 'pending').map((r: any) => r.id)
-    if (!pendingIds.length) { notify('info', 'No pending orders in the selection'); return }
+  const undoRejection = async (r: any) => {
+    if (!window.confirm(`Undo the rejection on ${r.so_no}? It will go back to Pending Approval.`)) return
     const { error } = await supabase.from('sales_orders')
-      .update({ status: 'approved', approved_by: session?.user.id ?? null, approved_at: new Date().toISOString() })
-      .in('id', pendingIds)
+      .update({ status: 'pending', rejected_by: null, rejected_at: null, rejection_reason: null }).eq('id', r.id)
     if (error) notify('error', error.message)
-    else { notify('success', `${pendingIds.length} order(s) approved`); setChecked(new Set()); refresh() }
+    else { notify('success', `${r.so_no} rejection undone`); refresh() }
   }
 
   const openEdit = async (r: any) => {
@@ -275,7 +264,6 @@ export function OutboundSalesOrders() {
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => setOverview(r) },
-            ...(canApprove && r.status === 'pending' ? [{ icon: 'how_to_reg', label: 'Approve', onClick: () => approveOrder(r) }] : []),
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             { icon: 'print', label: 'Print', onClick: () => printSO(r) },
             { icon: 'mail', label: 'Mail', onClick: () => mailSO(r) },
@@ -284,6 +272,8 @@ export function OutboundSalesOrders() {
             ...(canEdit ? [{ icon: 'receipt_long', label: 'Enter Invoice (SAP)', onClick: () => setInvoicing(r) }] : []),
             ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled'].includes(r.status) ? [{ icon: 'local_shipping', label: 'Plan Delivery', onClick: () => setPlanning(r) }] : []),
             ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled', 'draft'].includes(r.status) ? [{ icon: 'block', label: 'Close remaining', onClick: () => closeRemaining(r) }] : []),
+            ...(isPlatformAdmin && r.status === 'approved' ? [{ icon: 'undo', label: 'Undo Approval', onClick: () => undoApproval(r) }] : []),
+            ...(isPlatformAdmin && r.status === 'rejected' ? [{ icon: 'undo', label: 'Undo Rejection', onClick: () => undoRejection(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
         </div>
@@ -337,16 +327,9 @@ export function OutboundSalesOrders() {
           setCustomerFilter(s.customerFilter ?? ''); setDateFrom(s.dateFrom ?? ''); setDateTo(s.dateTo ?? '')
         }} />
 
-      {canApprove && (
-        <BulkActionBar count={rows.filter((r: any) => checked.has(r.id)).length} onClear={() => setChecked(new Set())} actions={[
-          { icon: 'how_to_reg', label: 'Approve', onClick: bulkApprove }
-        ]} />
-      )}
-
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
           emptyTitle="No sales orders yet"
-          selection={canApprove ? { selected: checked, onToggle: toggleOne, onToggleAll: toggleAll } : undefined}
           expand={{ render: (r: any) => <OrderLinesPreview so={r} products={products} onView={() => setOverview(r)} /> }} />
       </Card>
 
@@ -377,7 +360,7 @@ export function OutboundSalesOrders() {
       {overview && (
         <SOOverview so={overview} customerName={customerName(overview.customer_id)} products={products}
           customers={customers} vehicles={vehicles}
-          ownerName={userName(overview.assigned_to)} approvedByName={userName(overview.approved_by)}
+          ownerName={userName(overview.assigned_to)} approvedByName={userName(overview.approved_by)} rejectedByName={userName(overview.rejected_by)}
           canEdit={canEdit} onEdit={() => { const r = overview; setOverview(null); openEdit(r) }}
           onScanned={refresh} onDownloadSO={() => printSO(overview)}
           onClose={() => setOverview(null)} />
@@ -416,10 +399,13 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
   const [saving, setSaving] = useState(false)
   const readOnly = !!record?.__readOnly
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
-  // 'approved' is a gated status — only an approver can put an order into it
-  // (via the dedicated Approve action), so the dropdown hides it from anyone
-  // else, other than to show it read-only on an order that's already there.
-  const statusOptions = canApprove || record?.status === 'approved' ? SO_STATUS : SO_STATUS.filter(s => s !== 'approved')
+  // 'approved'/'rejected' are decision outcomes, not manual choices — they're
+  // only reachable through the Approve/Reject actions on the Pending Approval
+  // tab (which always records who/when/why), so the dropdown hides them here
+  // except to show read-only on an order that's already at that status.
+  const statusOptions = SO_STATUS.filter(s =>
+    (s !== 'approved' || canApprove || record?.status === 'approved') &&
+    (s !== 'rejected' || record?.status === 'rejected'))
   const [genning, setGenning] = useState(false)
   const genPO = async () => {
     setGenning(true)
@@ -462,6 +448,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
         reference_no: h.reference_no || null, order_date: h.order_date || today(), required_date: h.required_date || null,
         total_qty: totalQty, total_amount: totalAmount, status, remarks: h.remarks || null,
         mail_ref: h.mail_ref || null, assigned_to: h.assigned_to || null,
+        payment_status: h.payment_status || 'unpaid', deposited_amount: Number(h.deposited_amount) || 0, deposited_date: h.deposited_date || null,
         sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
         transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null
       }
@@ -535,7 +522,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
             <SelectBox value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
               {statusOptions.map((s: string) => <option key={s} value={s}>{s}</option>)}
             </SelectBox>
-            {!canApprove && h.status !== 'approved' && <p className="mt-1 text-[11px] text-ink-faint">Approval is a separate action — use "Approve" from the order list once submitted.</p>}
+            {!['approved', 'rejected'].includes(h.status) && <p className="mt-1 text-[11px] text-ink-faint">Approve/Reject are separate actions on the Pending Approval tab, not a status choice here.</p>}
           </Field>
           <Field label="Owner (responsible)">
             <Combobox items={(users ?? []).map((u: any) => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />
@@ -543,6 +530,17 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
           <Field label="Mail Ref / Link" className="sm:col-span-2">
             <Input value={h.mail_ref ?? ''} onChange={e => set({ mail_ref: e.target.value })} placeholder="Mail subject or link (the mail thread holds the full record — no file upload needed)" />
           </Field>
+
+          <div className="sm:col-span-2 mt-1 border-t border-surface-line pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Payment</p></div>
+          <Field label="Payment Status">
+            <SelectBox value={h.payment_status ?? 'unpaid'} onChange={e => set({ payment_status: e.target.value })}>
+              <option value="unpaid">Unpaid</option>
+              <option value="partial">Partial</option>
+              <option value="paid">Paid</option>
+            </SelectBox>
+          </Field>
+          <Field label="Deposited Amount"><Input type="number" min={0} step="any" value={h.deposited_amount ?? ''} onChange={e => set({ deposited_amount: e.target.value })} placeholder="How much has the customer paid/deposited" /></Field>
+          <Field label="Deposited Date"><Input type="date" value={h.deposited_date ?? ''} onChange={e => set({ deposited_date: e.target.value })} /></Field>
 
           <div className="sm:col-span-2 mt-1 border-t border-surface-line pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">SAP References (enter once when invoiced)</p></div>
           <Field label="SAP Sales Order No"><Input value={h.sap_so_no ?? ''} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006426" /></Field>
@@ -607,9 +605,9 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
   )
 }
 
-function SOOverview({ so, customerName, products, customers, vehicles, ownerName, approvedByName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
+function SOOverview({ so, customerName, products, customers, vehicles, ownerName, approvedByName, rejectedByName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
   const notify = useUI(s => s.notify)
-  const [tab, setTab] = useState<'details' | 'scan'>('details')
+  const [tab, setTab] = useState<'details' | 'scan' | 'notes'>('details')
   const [items, setItems] = useState<any[]>([])
   const [deliveries, setDeliveries] = useState<any[]>([])
 
@@ -652,7 +650,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
   return (
     <Modal open onClose={onClose} title={`Order — ${so.so_no}`} size="xl">
       <div className="space-y-5">
-        <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }]} active={tab} onChange={(k: any) => setTab(k)} />
+        <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }, { key: 'notes', label: 'Notes' }]} active={tab} onChange={(k: any) => setTab(k)} />
 
         {tab === 'details' && <>
         <div className="flex justify-end">
@@ -666,8 +664,16 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
           <Stat label="Total Qty" value={formatNumber(so.total_qty)} />
           <Stat label="Total Amount" value={formatNumber(so.total_amount)} />
           <Stat label="Owner" value={ownerName || '— unassigned'} />
+          <Stat label="Payment" value={`${so.payment_status ?? 'unpaid'}${Number(so.deposited_amount) > 0 ? ` · ${formatNumber(so.deposited_amount)} deposited` : ''}${so.deposited_date ? ` (${formatDate(so.deposited_date)})` : ''}`} />
           {so.approved_by && <Stat label="Approved By" value={`${approvedByName || '—'} · ${formatDateTime(so.approved_at)}`} />}
+          {so.rejected_by && <Stat label="Rejected By" value={`${rejectedByName || '—'} · ${formatDateTime(so.rejected_at)}`} />}
         </div>
+        {so.status === 'rejected' && so.rejection_reason && (
+          <div className="rounded-xl border border-bad/30 bg-bad/5 p-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-bad">Rejection Reason</p>
+            <p className="mt-0.5 text-sm text-ink">{so.rejection_reason}</p>
+          </div>
+        )}
 
         <Section title="Workflow">
           <WorkflowPanel order={so} responsibleName={ownerName} />
@@ -753,6 +759,8 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
         </>}
 
         {tab === 'scan' && <SerialScan lockSoId={so.id} onDone={onScanned} />}
+
+        {tab === 'notes' && <NotesPanel entityType="sales_orders" entityId={so.id} />}
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>

@@ -1,0 +1,5 @@
+# SPA fallback: this is a client-side-routed React app, so any path not
+# matching a real static file (e.g. /dashboard, /inventory/stock) must still
+# serve index.html and let react-router take over — otherwise Cloudflare
+# Pages 404s on direct navigation, bookmarks, or a browser refresh.
+/*  /index.html  200

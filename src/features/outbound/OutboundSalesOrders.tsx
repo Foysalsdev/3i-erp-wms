@@ -26,6 +26,7 @@ import { Combobox } from '@/components/shared/Combobox'
 import { SerialScan } from './SerialScan'
 import { ChallanForm } from './DeliveryChallan'
 import { formatNumber, formatDate, formatDateTime, cn } from '@/lib/utils'
+import { fetchStockAvailability } from '@/lib/stockAvailability'
 import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel } from '@/features/masters/components/Panels'
 import { DocVersions } from '@/components/shared/DocVersions'
@@ -432,13 +433,15 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
     } finally { setGenning(false) }
   }
 
-  // Saleable stock per product (good available = quantity - reserved), shown beside qty.
+  // Saleable stock per product — on-hand minus manual holds AND whatever's
+  // already committed to other open orders (not just this one), so Sales
+  // can't quote qty that's really already spoken for. See lib/stockAvailability.
   const [stockMap, setStockMap] = useState<Record<string, number>>({})
   useEffect(() => {
     if (!clientId) return
-    supabase.from('inventory_stock').select('product_id,quantity,reserved_qty').eq('client_id', clientId).eq('stock_status', 'good').then(({ data }) => {
+    fetchStockAvailability(clientId, record?.id).then(avail => {
       const m: Record<string, number> = {}
-      ;(data ?? []).forEach((r: any) => { m[r.product_id] = (m[r.product_id] ?? 0) + (Number(r.quantity) || 0) - (Number(r.reserved_qty) || 0) })
+      Object.entries(avail).forEach(([pid, a]) => { m[pid] = a.saleable })
       setStockMap(m)
     })
   }, [clientId])

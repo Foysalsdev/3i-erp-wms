@@ -45,7 +45,9 @@ h1,h2,h3,h4 { @apply font-sans font-semibold tracking-tight; }
            disabled:bg-surface-sunken disabled:text-ink-faint;
   }
   .fiori-label { @apply mb-1.5 block text-xs font-semibold text-ink-soft; }
-  .fiori-card { @apply rounded-xl bg-surface ring-1 ring-surface-line shadow-soft; }
+  /* shadow-card (not shadow-soft) gives every card real, if quiet, depth —
+     shadow-soft was so faint the whole app read as flat paper. */
+  .fiori-card { @apply rounded-xl bg-surface ring-1 ring-surface-line shadow-card transition-shadow duration-200; }
 }
 
 /* Minimal number fields: no up/down spinners */

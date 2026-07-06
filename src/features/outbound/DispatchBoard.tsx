@@ -88,7 +88,7 @@ export function DispatchBoard() {
                   return (
                     <button key={o.id} type="button"
                       onClick={() => nav(`/outbound/sales-order?q=${encodeURIComponent(o.so_no)}`)}
-                      className={'rounded-lg border bg-surface p-2.5 text-left transition-colors hover:border-brand-400 ' +
+                      className={'rounded-lg border bg-surface p-2.5 text-left transition hover:border-brand-400 hover:shadow-card ' +
                         (wf.overdue && !done ? 'border-bad/40' : 'border-surface-line')}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate font-mono text-xs font-semibold text-ink">{o.so_no}</span>

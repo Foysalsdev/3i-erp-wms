@@ -109,7 +109,7 @@ export function ReceiveTab() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {pendingGrns.map((g: any) => (
               <button key={g.id} type="button" onClick={() => canEdit && setWizard({ grn: g })}
-                className="rounded-xl border border-surface-line bg-surface p-4 text-left transition-colors hover:border-brand-400">
+                className="rounded-xl border border-surface-line bg-surface p-4 text-left transition hover:border-brand-400 hover:shadow-card">
                 <div className="flex items-center justify-between gap-2">
                   <p className="min-w-0 truncate font-mono text-sm font-semibold text-ink">{g.grn_no}</p>
                   <span className="shrink-0 text-xs text-ink-faint">{formatDate(g.receipt_date)}</span>
@@ -132,7 +132,7 @@ export function ReceiveTab() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {expectedPrs.map((p: any) => (
               <button key={p.id} type="button" onClick={() => canEdit && setWizard({ pr: p })}
-                className="rounded-xl border border-dashed border-surface-line bg-surface p-4 text-left transition-colors hover:border-brand-400">
+                className="rounded-xl border border-dashed border-surface-line bg-surface p-4 text-left transition hover:border-brand-400 hover:shadow-card">
                 <div className="flex items-center justify-between gap-2">
                   <p className="min-w-0 truncate font-mono text-sm font-semibold text-ink">{p.pr_no}</p>
                   <Badge tone={p.status === 'approved' ? 'info' : 'neutral'}>{p.status}</Badge>

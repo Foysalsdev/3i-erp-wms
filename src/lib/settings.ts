@@ -23,10 +23,11 @@ export interface CompanySettings {
 }
 
 export interface NotificationSettings {
-  pendingDocs: boolean   // "N pending GRNs / pick lists / …"
-  overdueOrders: boolean // sales orders past their expected completion
-  awaitingPick: boolean  // orders ready to pick & scan
-  lowStock: boolean      // items at/below restock level
+  pendingDocs: boolean      // "N pending GRNs / pick lists / …"
+  overdueOrders: boolean    // sales orders past their expected completion
+  awaitingApproval: boolean // orders pending approval before picking can start
+  awaitingPick: boolean     // approved orders ready to pick & scan
+  lowStock: boolean         // items at/below restock level
 }
 
 export interface WorkflowStageSetting { key: string; slaDays: number }
@@ -55,13 +56,14 @@ export const DEFAULT_COMPANY: CompanySettings = {
 }
 
 export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
-  pendingDocs: true, overdueOrders: true, awaitingPick: true, lowStock: true
+  pendingDocs: true, overdueOrders: true, awaitingApproval: true, awaitingPick: true, lowStock: true
 }
 
 // Mirrors OUTBOUND_STAGES in features/outbound/workflow.ts.
 export const DEFAULT_WORKFLOW: WorkflowSettings = {
   stages: [
     { key: 'order', slaDays: 1 },
+    { key: 'approved', slaDays: 1 },
     { key: 'picked', slaDays: 1 },
     { key: 'invoiced', slaDays: 1 },
     { key: 'dispatched', slaDays: 2 },

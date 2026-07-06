@@ -109,7 +109,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
     }
     if (hist.length) setHistory(hist)
     const newTotal = lines.reduce((s, l, i) => s + (i === idx ? entries.length : l.serials.length), 0)
-    if (newTotal > 0 && ['draft', 'pending', 'approved'].includes(soRow.status)) {
+    if (newTotal > 0 && soRow.status === 'approved') {
       await supabase.from('sales_orders').update({ status: 'picking' }).eq('id', soRow.id)
     }
     notify('success', `${line.code}: ${entries.length}/${line.ordered} serial(s) saved`)
@@ -119,6 +119,20 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
   }
 
   if (loading) return <p className="py-6 text-center text-sm text-ink-faint">Loading…</p>
+
+  // The order must clear approval before the warehouse commits stock/labour to
+  // it — picking is blocked here too, not just via the "Approve" action menu,
+  // since this stage can also be opened directly from the order's Scan tab.
+  const needsApproval = soRow && ['draft', 'pending'].includes(soRow.status)
+  if (needsApproval) {
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center dark:border-amber-500/30 dark:bg-amber-500/10">
+        <Icon name="lock_clock" className="text-[28px] text-amber-600 dark:text-amber-400" />
+        <p className="text-sm font-semibold text-ink">Order not yet approved</p>
+        <p className="text-xs text-ink-soft">This order must be approved before the warehouse can pick & scan items.</p>
+      </div>
+    )
+  }
 
   if (activeIdx !== null) {
     return (

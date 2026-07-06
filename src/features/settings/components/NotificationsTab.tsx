@@ -12,6 +12,7 @@ import {
 const ROWS: { key: keyof NotificationSettings; icon: string; label: string; hint: string }[] = [
   { key: 'pendingDocs', icon: 'pending_actions', label: 'Pending documents', hint: 'Open GRNs, pick lists, transport requests and other documents awaiting action.' },
   { key: 'overdueOrders', icon: 'schedule', label: 'Overdue sales orders', hint: 'Sales orders past their expected completion date.' },
+  { key: 'awaitingApproval', icon: 'how_to_reg', label: 'Orders awaiting approval', hint: 'New sales orders that must be approved before the warehouse can pick them.' },
   { key: 'awaitingPick', icon: 'shopping_cart_checkout', label: 'Orders awaiting pick & scan', hint: 'Approved orders that are ready to be picked.' },
   { key: 'lowStock', icon: 'warning', label: 'Low-stock alerts', hint: 'Products at or below their restock level.' }
 ]

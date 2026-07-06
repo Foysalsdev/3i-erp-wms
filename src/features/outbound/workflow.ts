@@ -13,7 +13,9 @@ export interface WfStage {
 }
 
 export const OUTBOUND_STAGES: WfStage[] = [
-  { key: 'order', label: 'Order', icon: 'shopping_cart', statuses: ['draft', 'pending', 'approved'],
+  { key: 'order', label: 'Order', icon: 'shopping_cart', statuses: ['draft', 'pending'],
+    action: 'Approve the order before the warehouse can pick it', role: 'Warehouse Manager', slaDays: 1 },
+  { key: 'approved', label: 'Approved', icon: 'verified', statuses: ['approved'],
     action: 'Pick & scan the ordered items', role: 'Warehouse Picker', slaDays: 1 },
   { key: 'picked', label: 'Picked', icon: 'shopping_cart_checkout', statuses: ['picking', 'packed'],
     action: 'Enter SAP invoice & issue the delivery challan', role: 'Warehouse / Billing', slaDays: 1 },

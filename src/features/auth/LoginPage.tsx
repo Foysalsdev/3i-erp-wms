@@ -31,9 +31,10 @@ export default function LoginPage() {
       {/* Brand panel — soft, neutral, airy */}
       <div className="relative hidden flex-col justify-between border-r border-surface-line bg-surface p-14 lg:flex">
         <span className="absolute inset-x-0 top-0 h-1 bg-brand-500" />
-        <div className="flex items-center gap-2.5">
-          <img src="/favicon.svg" alt="Whirlpool" className="h-10 w-10 shrink-0 rounded-xl ring-1 ring-surface-line" />
-          <div><p className="font-display text-base font-bold text-ink">Whirlpool WH</p><p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-ink-faint">ERP · WMS Platform</p></div>
+        <div className="flex items-center gap-3">
+          <img src="/whirlpool-logo.svg" alt="Whirlpool" className="h-6 w-auto shrink-0 dark:brightness-0 dark:invert" />
+          <div className="h-7 w-px bg-surface-line" />
+          <div><p className="font-display text-base font-bold leading-tight text-ink">Whirlpool WH</p><p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-ink-faint">ERP · WMS Platform</p></div>
         </div>
         <div>
           <h1 className="font-display text-3xl font-extrabold leading-tight text-ink">Whirlpool WH<br/>ERP &amp; WMS.</h1>
@@ -53,8 +54,9 @@ export default function LoginPage() {
       {/* Form */}
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm animate-fade-up">
-          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <img src="/favicon.svg" alt="Whirlpool" className="h-9 w-9 shrink-0 rounded-xl ring-1 ring-surface-line" />
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <img src="/whirlpool-logo.svg" alt="Whirlpool" className="h-5 w-auto shrink-0 dark:brightness-0 dark:invert" />
+            <div className="h-6 w-px bg-surface-line" />
             <p className="font-display text-base font-bold text-ink">Whirlpool WH</p>
           </div>
           <h2 className="font-display text-2xl font-bold text-ink">Sign in</h2>

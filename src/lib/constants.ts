@@ -75,10 +75,11 @@ export const MODULES: NavModule[] = [
     { key: 'builder', label: 'Custom Report Builder' }
   ]},
   { key: 'settings', label: 'Settings', icon: 'settings', path: '/settings', permission: 'settings.view', tabs: [
-    { key: 'company', label: 'Company Settings' }, { key: 'workflow', label: 'Workflow Settings' },
+    { key: 'company', label: 'Company Settings' }, { key: 'numbering', label: 'Document Numbering' },
+    { key: 'workflow', label: 'Workflow Settings' },
     { key: 'notifications', label: 'Notification Settings' }, { key: 'barcode', label: 'Barcode Settings' },
     { key: 'print-template', label: 'Print Template Settings' }, { key: 'email-templates', label: 'Email Templates' },
-    { key: 'audit', label: 'Audit Logs' }
+    { key: 'data', label: 'Data & Export' }, { key: 'audit', label: 'Audit Logs' }
   ]}
 ]
 

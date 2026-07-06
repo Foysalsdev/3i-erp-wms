@@ -281,7 +281,7 @@ export function OutboundSalesOrders() {
             ...(canEdit && dispatchAccess && !['draft', 'pending'].includes(r.status) ? [{ icon: 'qr_code_scanner', label: 'Scan Serials', onClick: () => setScanning(r) }] : []),
             { icon: 'download', label: 'Export Prework (Excel)', onClick: () => exportPrework(r) },
             ...(canEdit ? [{ icon: 'receipt_long', label: 'Enter Invoice (SAP)', onClick: () => setInvoicing(r) }] : []),
-            ...(canEdit && dispatchAccess ? [{ icon: 'local_shipping', label: 'Plan Delivery', onClick: () => setPlanning(r) }] : []),
+            ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled'].includes(r.status) ? [{ icon: 'local_shipping', label: 'Plan Delivery', onClick: () => setPlanning(r) }] : []),
             ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled', 'draft'].includes(r.status) ? [{ icon: 'block', label: 'Close remaining', onClick: () => closeRemaining(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />

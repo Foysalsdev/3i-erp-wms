@@ -363,7 +363,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const [sos, setSos] = useState<any[]>([])
   useEffect(() => {
     if (!clientId || locked) return
-    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
+    // Delivered orders have nothing left to plan (see loadFromSO below), so
+    // they're excluded here the same as closed/cancelled ones.
+    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(delivered,closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
   }, [clientId, locked])
   const selectSO = async (soId: string) => {
     const so = sos.find((x: any) => x.id === soId)

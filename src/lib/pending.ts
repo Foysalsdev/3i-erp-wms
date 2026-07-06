@@ -41,7 +41,7 @@ export const PENDING_RULES: PendingRule[] = [
     key: 'so-approve', icon: 'how_to_reg', label: 'Orders to approve', owner: 'Warehouse Manager', perms: ['outbound.approve'], slaDays: 1,
     fetch: c => openSo(c, ['pending']),
     docNo: r => r.so_no, matter: () => 'Approve the order before the warehouse can pick it',
-    route: r => `/outbound/sales-order?q=${encodeURIComponent(r.so_no)}`, ageFrom: r => r.order_date
+    route: () => '/outbound/approvals', ageFrom: r => r.order_date
   },
   {
     key: 'so-scan', icon: 'qr_code_scanner', label: 'Orders to pick', owner: 'Warehouse Picker', perms: ['outbound.edit', 'outbound.create'], slaDays: 1,

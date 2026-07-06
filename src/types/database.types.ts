@@ -130,6 +130,7 @@ export type Database = {
           deposited_amount: number; deposited_date: string | null; payment_status: string; mail_ref: string | null
           assigned_to: string | null
           approved_by: string | null; approved_at: string | null
+          rejected_by: string | null; rejected_at: string | null; rejection_reason: string | null
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['sales_orders']['Row']> & { client_id: string; so_no: string }

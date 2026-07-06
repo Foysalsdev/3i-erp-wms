@@ -94,7 +94,7 @@ export function NotificationBell() {
         if (prefs.awaitingApproval && can('outbound.approve') && awaitingApproval > 0) items.push({
           id: 'so:approve', icon: 'how_to_reg',
           title: `${formatNumber(awaitingApproval)} order${awaitingApproval > 1 ? 's' : ''} awaiting approval`,
-          detail: 'Approve before the warehouse can pick', count: awaitingApproval, to: '/outbound/sales-order', tone: 'warn'
+          detail: 'Approve before the warehouse can pick', count: awaitingApproval, to: '/outbound/approvals', tone: 'warn'
         })
         if (prefs.awaitingPick && awaitingPick > 0) items.push({
           id: 'so:pick', icon: 'shopping_cart_checkout',

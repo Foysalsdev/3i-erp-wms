@@ -26,6 +26,7 @@ import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
 import { downloadChallanPdfFor } from './challanPdf'
+import { VehicleLoadingScan } from './VehicleLoadingScan'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
@@ -48,6 +49,7 @@ export function DeliveryChallan() {
   useAutoOpen(() => { setEditing(null); setModal(true) })
   const [overview, setOverview] = useState<any>(null)
   const [cnFor, setCnFor] = useState<any>(null)
+  const [loadingScan, setLoadingScan] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [customers, setCustomers] = useState<any[]>([])
@@ -137,6 +139,9 @@ export function DeliveryChallan() {
             // later without reopening the whole edit form.
             ...(canEdit && r.delivery_method === 'courier' ? [{ icon: 'qr_code', label: r.courier_tracking_no ? 'Update CN / Tracking' : 'Add CN / Tracking', onClick: () => setCnFor(r) }] : []),
             ...(canPost && !r.posted_at ? [{ icon: 'check_circle', label: busy === r.id ? 'Issuing...' : 'Issue & Deduct Stock + Gate Pass', onClick: () => issue(r) }] : []),
+            // Second scan of the workflow: verify what's physically loaded on
+            // the vehicle against what was reserved during picking.
+            ...(canPost && r.posted_at && r.sales_order_id ? [{ icon: 'qr_code_scanner', label: 'Load & Scan Vehicle', onClick: () => setLoadingScan(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
         </div>
@@ -202,6 +207,11 @@ export function DeliveryChallan() {
       {cnFor && (
         <CnModal challan={cnFor} notify={notify}
           onClose={() => setCnFor(null)} onDone={() => { setCnFor(null); refresh() }} />
+      )}
+
+      {loadingScan && (
+        <VehicleLoadingScan challan={loadingScan} vehicles={vehicles}
+          onClose={() => setLoadingScan(null)} onDone={() => { setLoadingScan(null); refresh() }} />
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}

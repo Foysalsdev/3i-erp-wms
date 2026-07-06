@@ -244,7 +244,13 @@ export const OPERATIONS: Record<string, OpDef> = {
       { name: 'gate_out_date', label: 'Gate Out Date', type: 'date', required: true },
       { name: 'purpose', label: 'Purpose', type: 'text', span2: true },
       { name: 'status', label: 'Status', type: 'select', options: ['pending', 'issued', 'exited', 'cancelled'], required: true },
-      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
+      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true },
+      // Filled by the vehicle-loading scan (see DeliveryChallan.tsx's "Load &
+      // Scan Vehicle" action) — not meant to be hand-typed, but left editable
+      // here like every other field in case of a correction.
+      { name: 'gate_in_time', label: 'Gate In Time (loading started)', type: 'text' },
+      { name: 'gate_out_time', label: 'Gate Out Time (loading finished)', type: 'text' },
+      { name: 'loaded_serial_count', label: 'Serials Loaded', type: 'number' }
     ],
     listColumns: []
   },

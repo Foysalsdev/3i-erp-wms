@@ -183,7 +183,8 @@ export type Database = {
       gate_passes: {
         Row: {
           id: string; client_id: string; gate_pass_no: string; dispatch_id: string | null; challan_id: string | null; vehicle_id: string | null
-          driver_name: string | null; gate_out_date: string; gate_out_time: string | null; transporter_id: string | null; purpose: string | null
+          driver_name: string | null; gate_out_date: string; gate_in_time: string | null; gate_out_time: string | null; transporter_id: string | null; purpose: string | null
+          loaded_serial_count: number
           status: string; remarks: string | null; created_by: string | null; created_at: string; updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['gate_passes']['Row']> & { client_id: string; gate_pass_no: string }
@@ -379,7 +380,7 @@ export type Database = {
           client_id: string; created_at: string; id: string; location_id: string | null; product_id: string
           reference_no: string | null; serial_no: string; status: string; updated_at: string
           warehouse_id: string | null; warranty_end: string | null; warranty_start: string | null
-          so_item_id: string | null
+          so_item_id: string | null; gate_pass_id: string | null
         }
         Insert: Partial<Database['public']['Tables']['serial_numbers']['Row']> & { client_id: string; product_id: string; serial_no: string }
         Update: Partial<Database['public']['Tables']['serial_numbers']['Row']>

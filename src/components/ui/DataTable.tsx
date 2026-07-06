@@ -2,6 +2,7 @@ import { Fragment, useState, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/utils'
 import { Icon } from './Icon'
+import { SelectBox } from './SelectBox'
 import { EmptyState } from './States'
 import { useUI } from '@/store/ui'
 
@@ -18,8 +19,11 @@ export interface Column<T> {
   key: string; header: string; className?: string
   render?: (row: T) => React.ReactNode
   accessor?: (row: T) => string | number | null | undefined
+  // Any column with an accessor sorts by default — set sortable: false to
+  // opt a specific one out (e.g. a computed column that shouldn't be sorted).
   sortable?: boolean
 }
+const isSortable = (c: Column<any>) => !!c.accessor && c.sortable !== false
 interface Selection {
   selected: Set<string>
   onToggle: (key: string) => void
@@ -77,6 +81,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
   if (!loading && !rows.length) return <EmptyState title={emptyTitle} icon={emptyIcon} hint={emptyHint} />
 
   const actionsCol = columns.find(c => c.key === '__actions')
+  const sortableColumns = columns.filter(isSortable)
   const cellValue = (c: Column<T>, row: T) => (c.render ? c.render(row) : String(c.accessor?.(row) ?? '—'))
   const skeletonCell = (c: Column<T>, i: number) => c.key === '__thumb'
     ? <div className="h-9 w-9 animate-pulse rounded-lg bg-surface-sunken" />
@@ -103,10 +108,12 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
             )}
             {columns.map(c => (
               <div key={c.key} className={cn('bg-surface-sunken px-4 font-semibold text-horizon-muted', compact ? 'py-1' : 'py-2.5', c.className)}>
-                <button className={cn('inline-flex items-center gap-1', c.sortable && 'hover:text-horizon-text')}
-                  onClick={() => c.sortable && (sortKey === c.key ? setDir(d => (d === 1 ? -1 : 1)) : (setSortKey(c.key), setDir(1)))}>
+                <button className={cn('group inline-flex items-center gap-1', isSortable(c) && 'hover:text-horizon-text')}
+                  onClick={() => isSortable(c) && (sortKey === c.key ? setDir(d => (d === 1 ? -1 : 1)) : (setSortKey(c.key), setDir(1)))}>
                   {c.header}
-                  {c.sortable && sortKey === c.key && <Icon name={dir === 1 ? 'arrow_upward' : 'arrow_downward'} className="text-[14px]" />}
+                  {isSortable(c) && (sortKey === c.key
+                    ? <Icon name={dir === 1 ? 'arrow_upward' : 'arrow_downward'} className="text-[14px]" />
+                    : <Icon name="unfold_more" className="text-[14px] opacity-40 transition-opacity group-hover:opacity-100" />)}
                 </button>
               </div>
             ))}
@@ -154,10 +161,12 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
               )}
               {columns.map(c => (
                 <th key={c.key} className={cn('bg-surface-sunken px-4 font-semibold text-horizon-muted', compact ? 'py-1' : 'py-2.5', c.className)}>
-                  <button className={cn('inline-flex items-center gap-1', c.sortable && 'hover:text-horizon-text')}
-                    onClick={() => c.sortable && (sortKey === c.key ? setDir(d => (d === 1 ? -1 : 1)) : (setSortKey(c.key), setDir(1)))}>
+                  <button className={cn('group inline-flex items-center gap-1', isSortable(c) && 'hover:text-horizon-text')}
+                    onClick={() => isSortable(c) && (sortKey === c.key ? setDir(d => (d === 1 ? -1 : 1)) : (setSortKey(c.key), setDir(1)))}>
                     {c.header}
-                    {c.sortable && sortKey === c.key && <Icon name={dir === 1 ? 'arrow_upward' : 'arrow_downward'} className="text-[14px]" />}
+                    {isSortable(c) && (sortKey === c.key
+                      ? <Icon name={dir === 1 ? 'arrow_upward' : 'arrow_downward'} className="text-[14px]" />
+                      : <Icon name="unfold_more" className="text-[14px] opacity-40 transition-opacity group-hover:opacity-100" />)}
                   </button>
                 </th>
               ))}
@@ -215,7 +224,23 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
       )}
 
       {/* Mobile: each row as a stacked card (avoids cramped horizontal scrolling) */}
-      <div className={cn('divide-y divide-horizon-line md:hidden', fill && 'min-h-0 flex-1 overflow-auto')}>
+      <div className={cn('md:hidden', fill && 'flex min-h-0 flex-1 flex-col')}>
+        {sortableColumns.length > 0 && !loading && sorted.length > 0 && (
+          <div className="flex items-center gap-2 border-b border-horizon-line bg-surface-sunken px-4 py-2">
+            <Icon name="sort" className="shrink-0 text-[16px] text-ink-faint" />
+            <SelectBox value={sortKey ?? ''} onChange={e => { setSortKey(e.target.value || null); setDir(1) }}
+              className="h-8 flex-1 py-1 text-xs" placeholder="Sort by…">
+              {sortableColumns.map(c => <option key={c.key} value={c.key}>{c.header}</option>)}
+            </SelectBox>
+            {sortKey && (
+              <button type="button" onClick={() => setDir(d => d === 1 ? -1 : 1)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-line text-ink-soft">
+                <Icon name={dir === 1 ? 'arrow_upward' : 'arrow_downward'} className="text-[16px]" />
+              </button>
+            )}
+          </div>
+        )}
+        <div className={cn('divide-y divide-horizon-line', fill && 'min-h-0 flex-1 overflow-auto')}>
         {loading ? Array.from({ length: SKELETON_ROWS }, (_, i) => (
           <div key={`sk-${i}`} className={cn('flex items-start gap-3 px-4', compact ? 'py-1.5' : 'py-3')}>
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -257,6 +282,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 // Sidebar = 12 main modules; each fans out into tabs/business functions.
-export interface NavTab { key: string; label: string }
+export interface NavTab { key: string; label: string; group?: string }
 export interface NavModule {
   key: string; label: string; icon: string; path: string
   permission?: string; tabs?: NavTab[]
@@ -14,15 +14,21 @@ export const MODULES: NavModule[] = [
     { key: 'assets', label: 'Asset' }, { key: 'non-inventory', label: 'Non-Inventory' }
   ]},
   { key: 'inventory', label: 'Inventory Management', icon: 'warehouse', path: '/inventory', permission: 'inventory.view', tabs: [
-    { key: 'stock', label: 'Stock Overview' }, { key: 'availability', label: 'Stock Availability' },
-    { key: 'non-saleable', label: 'Non-Saleable' },
-    { key: 'ledger', label: 'Inventory Ledger' },
-    { key: 'transfer', label: 'Stock Transfer' }, { key: 'adjustment', label: 'Stock Adjustment' },
-    { key: 'cycle-count', label: 'Cycle Count' }, { key: 'physical-verification', label: 'Physical Verification' },
-    { key: 'damaged', label: 'Damaged Stock' }, { key: 'quarantine', label: 'Quarantine Stock' },
-    { key: 'hold', label: 'Hold Stock' }, { key: 'serials', label: 'Serial Tracking' },
-    { key: 'snapshot', label: 'Snapshots' },
-    { key: 'batch', label: 'Lot / Batch Tracking' }, { key: 'fifo', label: 'FIFO' }, { key: 'fefo', label: 'FEFO' }
+    { key: 'stock', label: 'Stock Overview', group: 'Overview' },
+    { key: 'availability', label: 'Stock Availability', group: 'Overview' },
+    { key: 'non-saleable', label: 'Non-Saleable', group: 'Overview' },
+    { key: 'ledger', label: 'Inventory Ledger', group: 'Movements' },
+    { key: 'transfer', label: 'Stock Transfer', group: 'Movements' },
+    { key: 'adjustment', label: 'Stock Adjustment', group: 'Movements' },
+    { key: 'cycle-count', label: 'Cycle Count', group: 'Counts & Holds' },
+    { key: 'physical-verification', label: 'Physical Verification', group: 'Counts & Holds' },
+    { key: 'damaged', label: 'Damaged Stock', group: 'Counts & Holds' },
+    { key: 'quarantine', label: 'Quarantine Stock', group: 'Counts & Holds' },
+    { key: 'hold', label: 'Hold Stock', group: 'Counts & Holds' },
+    { key: 'serials', label: 'Serial Tracking', group: 'Tracking' },
+    { key: 'snapshot', label: 'Snapshots', group: 'Tracking' },
+    { key: 'batch', label: 'Lot / Batch Tracking', group: 'Tracking' },
+    { key: 'fifo', label: 'FIFO', group: 'Tracking' }, { key: 'fefo', label: 'FEFO', group: 'Tracking' }
   ]},
   { key: 'inbound', label: 'Inbound Operations', icon: 'login', path: '/inbound', permission: 'inbound.view', tabs: [
     { key: 'receive', label: 'Receive' },
@@ -65,15 +71,15 @@ export const MODULES: NavModule[] = [
     { key: 'roles', label: 'Role Management' }
   ]},
   { key: 'reports', label: 'Reports & Analytics', icon: 'analytics', path: '/reports', permission: 'reports.view', tabs: [
-    { key: 'pending', label: 'Pending Matters' },
-    { key: 'daily-inout', label: 'Daily Inbound & Outbound' },
-    { key: 'inventory', label: 'Inventory Reports' }, { key: 'stock-aging', label: 'Stock Aging' },
-    { key: 'stock-movement', label: 'Stock Movement' }, { key: 'inventory-valuation', label: 'Inventory Valuation' },
-    { key: 'inbound', label: 'Inbound Reports' }, { key: 'outbound', label: 'Outbound Reports' },
-    { key: 'outbound-deliveries', label: 'Delivery Register' },
-    { key: 'transport', label: 'Transport Reports' }, { key: 'asset', label: 'Asset Reports' },
-    { key: 'finance', label: 'Finance Reports' }, { key: 'hr', label: 'HR Reports' },
-    { key: 'builder', label: 'Custom Report Builder' }
+    { key: 'pending', label: 'Pending Matters', group: 'Operations' },
+    { key: 'daily-inout', label: 'Daily Inbound & Outbound', group: 'Operations' },
+    { key: 'inventory', label: 'Inventory Reports', group: 'Inventory' }, { key: 'stock-aging', label: 'Stock Aging', group: 'Inventory' },
+    { key: 'stock-movement', label: 'Stock Movement', group: 'Inventory' }, { key: 'inventory-valuation', label: 'Inventory Valuation', group: 'Inventory' },
+    { key: 'inbound', label: 'Inbound Reports', group: 'Inbound / Outbound' }, { key: 'outbound', label: 'Outbound Reports', group: 'Inbound / Outbound' },
+    { key: 'outbound-deliveries', label: 'Delivery Register', group: 'Inbound / Outbound' },
+    { key: 'transport', label: 'Transport Reports', group: 'Other Modules' }, { key: 'asset', label: 'Asset Reports', group: 'Other Modules' },
+    { key: 'finance', label: 'Finance Reports', group: 'Other Modules' }, { key: 'hr', label: 'HR Reports', group: 'Other Modules' },
+    { key: 'builder', label: 'Custom Report Builder', group: 'Custom' }
   ]},
   { key: 'settings', label: 'Settings', icon: 'settings', path: '/settings', permission: 'settings.view', tabs: [
     { key: 'company', label: 'Company Settings' }, { key: 'numbering', label: 'Document Numbering' },

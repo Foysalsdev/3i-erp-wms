@@ -4,18 +4,10 @@ import { downloadBlob, amountInWords } from '@/lib/utils'
 import { pdfLayout, PdfHeader, PdfFooter } from './pdfLayout'
 
 // Finance-specific pieces on top of the shared pdfLayout.tsx letterhead/table
-// styles: a wrap-by-three meta strip, a summation box, and a signature row.
+// styles — the ERP document language every finance PDF shares: a bordered
+// metadata header grid, a bordered totals box, a running-balance ledger and
+// a signature row.
 const s = StyleSheet.create({
-  cols: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  col: { width: '33%' },
-  k: { fontSize: 8, color: '#1f3a93', fontWeight: 'bold' },
-  v: { fontSize: 9, marginTop: 1 },
-  sumWrap: { marginTop: 8, alignItems: 'flex-end' },
-  sumBox: { width: '46%' },
-  sumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  sumLabel: { fontSize: 9 },
-  sumValue: { fontSize: 9 },
-  sumTotalRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.7, borderTopColor: '#333', paddingTop: 3, marginTop: 2 },
   inWords: { marginTop: 10, fontSize: 9 },
   inWordsLabel: { fontWeight: 'bold' },
   inWordsValue: { fontStyle: 'italic' },
@@ -37,7 +29,21 @@ const s = StyleSheet.create({
   rowStripe: { backgroundColor: '#fafafa' },
   rowTotal: { backgroundColor: '#f2f2f0' },
   rowClose: { backgroundColor: '#eceff3' },
-  bold: { fontWeight: 'bold' }
+  bold: { fontWeight: 'bold' },
+  // Bordered document-header metadata grid (SAP/ERP style) — replaces the
+  // loose text columns; each field is a labelled cell in a boxed strip.
+  infoGrid: { borderWidth: 0.7, borderColor: '#333', marginBottom: 12 },
+  infoRow: { flexDirection: 'row' },
+  infoCell: { flex: 1, padding: 6, borderRightWidth: 0.5, borderRightColor: '#999' },
+  infoCellWide: { padding: 6, borderTopWidth: 0.5, borderTopColor: '#999' },
+  infoCap: { fontSize: 7, color: '#555', marginBottom: 3 },
+  infoVal: { fontSize: 9, fontWeight: 'bold' },
+  // Bordered totals block, right-aligned, with an emphasised final row.
+  totalsWrap: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
+  totalsBox: { width: '52%', borderWidth: 0.7, borderColor: '#333' },
+  totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3, paddingHorizontal: 7 },
+  totalsRowLast: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, paddingHorizontal: 7, backgroundColor: '#eceff3', borderTopWidth: 0.7, borderTopColor: '#333' },
+  totalsTxt: { fontSize: 9 }
 })
 
 // Ledger column widths — kept in one place so header and body rows can never drift.
@@ -50,18 +56,48 @@ const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionD
 // but submitted TO 3i Logistics, so that needs to say so explicitly.
 export const SUBMITTED_TO = '3i Logistics Pvt Limited'
 
-export interface DocMeta { label: string; value: string }
+export interface DocMeta { label: string; value: string; wide?: boolean }
 
-// Three per row (matches the Delivery Challan's PO#/Invoice#/Dispatch-time
-// strip), wrapping onto further rows of three if there are more fields.
-function MetaCols({ meta }: { meta: DocMeta[] }) {
-  const rows: DocMeta[][] = []
-  for (let i = 0; i < meta.length; i += 3) rows.push(meta.slice(i, i + 3))
-  return <>{rows.map((row, i) => (
-    <View key={i} style={s.cols}>
-      {row.map(m => <View key={m.label} style={s.col}><Text style={s.k}>{m.label}</Text><Text style={s.v}>{m.value || '-'}</Text></View>)}
+// Bordered document-header grid: short fields sit as labelled cells in one
+// boxed row; any `wide` field (a long note) gets its own full-width row below.
+// This is the structured header an ERP document leads with — not loose text.
+function InfoGrid({ items }: { items: DocMeta[] }) {
+  const cells = items.filter(m => !m.wide)
+  const wides = items.filter(m => m.wide)
+  return (
+    <View style={s.infoGrid}>
+      <View style={s.infoRow}>
+        {cells.map((m, i) => (
+          <View key={i} style={[s.infoCell, i === cells.length - 1 ? { borderRightWidth: 0 } : {}]}>
+            <Text style={s.infoCap}>{m.label.toUpperCase()}</Text>
+            <Text style={s.infoVal}>{m.value || '-'}</Text>
+          </View>
+        ))}
+      </View>
+      {wides.map((m, i) => (
+        <View key={i} style={s.infoCellWide}>
+          <Text style={s.infoCap}>{m.label.toUpperCase()}</Text>
+          <Text style={s.infoVal}>{m.value || '-'}</Text>
+        </View>
+      ))}
     </View>
-  ))}<View style={pdfLayout.hr} /></>
+  )
+}
+
+interface TotalRow { label: string; value: string; strong?: boolean }
+function TotalsBox({ rows }: { rows: TotalRow[] }) {
+  return (
+    <View style={s.totalsWrap}>
+      <View style={s.totalsBox}>
+        {rows.map((r, i) => (
+          <View key={i} style={r.strong ? s.totalsRowLast : s.totalsRow}>
+            <Text style={[s.totalsTxt, r.strong ? s.bold : {}]}>{r.label}</Text>
+            <Text style={[s.totalsTxt, r.strong ? s.bold : {}]}>{r.value}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  )
 }
 
 interface SignBlock { label: string; name?: string }
@@ -79,18 +115,6 @@ function SignRow({ blocks }: { blocks: SignBlock[] }) {
   ))}</View>
 }
 
-function Summation({ total, deduction, net }: { total: number; deduction: number; net: number }) {
-  return (
-    <View style={s.sumWrap}>
-      <View style={s.sumBox}>
-        <View style={s.sumRow}><Text style={s.sumLabel}>Total Payable</Text><Text style={s.sumValue}>{money(total)}</Text></View>
-        <View style={s.sumRow}><Text style={s.sumLabel}>Less: Advance / Deduction</Text><Text style={s.sumValue}>{money(deduction)}</Text></View>
-        <View style={s.sumTotalRow}><Text style={[s.sumLabel, { fontWeight: 'bold' }]}>Net Amount Paid</Text><Text style={[s.sumValue, { fontWeight: 'bold' }]}>{money(net)}</Text></View>
-      </View>
-    </View>
-  )
-}
-
 function Footer({ docNo }: { docNo: string }) {
   const company = getCompanyInfo()
   return <PdfFooter render={({ pageNumber, totalPages }) => `${company.footer || company.name}  ·  ${docNo}  ·  Page ${pageNumber}/${totalPages}`} />
@@ -106,17 +130,17 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
     <Document>
       <Page size="A4" style={pdfLayout.page}>
         <PdfHeader title="Operating Cost Requisition" docNo={docNo} />
-        <MetaCols meta={meta} />
+        <InfoGrid items={meta} />
         <View style={pdfLayout.tHead}>
           <Text style={[pdfLayout.th, { width: '6%' }]}>#</Text>
           <Text style={[pdfLayout.th, { width: '34%' }]}>Purpose</Text>
           <Text style={[pdfLayout.th, { width: '12%' }]}>Unit</Text>
           <Text style={[pdfLayout.th, { width: '10%', textAlign: 'right' }]}>Qty</Text>
           <Text style={[pdfLayout.th, { width: '20%' }]}>Note</Text>
-          <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right' }]}>Amount</Text>
+          <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>Amount (BDT)</Text>
         </View>
         {lines.map((l, i) => (
-          <View key={i} style={pdfLayout.tr}>
+          <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
             <Text style={[pdfLayout.td, { width: '6%' }]}>{i + 1}</Text>
             <Text style={[pdfLayout.td, { width: '34%' }]}>{l.purpose}</Text>
             <Text style={[pdfLayout.td, { width: '12%' }]}>{l.unit || '-'}</Text>
@@ -125,7 +149,7 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
             <Text style={[pdfLayout.td, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>{money(l.amount)}</Text>
           </View>
         ))}
-        <Summation total={grandTotal} deduction={0} net={grandTotal} />
+        <TotalsBox rows={[{ label: 'Grand Total (BDT)', value: money(grandTotal), strong: true }]} />
         <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(grandTotal)}</Text></Text></View>
         <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Seal' }, { label: 'Approved By' }]} />
         <Footer docNo={docNo} />
@@ -175,23 +199,24 @@ function BillVoucherDoc(o: BillVoucherOpts) {
     <Document>
       <Page size="A4" style={pdfLayout.page}>
         <PdfHeader title={o.title} docNo={o.billRef} />
-        <MetaCols meta={[
-          { label: 'Submitted To', value: SUBMITTED_TO },
+        <InfoGrid items={[
+          { label: 'Voucher No', value: o.billRef },
+          { label: 'Date', value: o.date },
           ...(o.payee ? [{ label: 'Paid To', value: o.payee }] : []),
-          { label: 'Date', value: o.date }
+          { label: 'Submitted To', value: SUBMITTED_TO },
+          ...(o.purpose ? [{ label: 'Purpose', value: o.purpose, wide: true }] : [])
         ]} />
-        {o.purpose && <Text style={{ fontSize: 9, marginBottom: 10 }}><Text style={{ fontWeight: 'bold' }}>Purpose: </Text>{o.purpose}</Text>}
         <View style={pdfLayout.tHead}>
           <Text style={[pdfLayout.th, { width: '6%' }]}>SL No.</Text>
           <Text style={[pdfLayout.th, { width: wPart }]}>Particulars</Text>
           {hasUnit && <Text style={[pdfLayout.th, { width: '14%' }]}>Unit</Text>}
           {hasQty && <Text style={[pdfLayout.th, { width: '10%', textAlign: 'right' }]}>Qty</Text>}
           {hasRemarks && <Text style={[pdfLayout.th, { width: '18%' }]}>Remarks</Text>}
-          <Text style={[pdfLayout.th, { width: '16%', textAlign: 'right' }]}>Total Payable</Text>
+          <Text style={[pdfLayout.th, { width: '16%', textAlign: 'right', borderRightWidth: o.showLineSignature ? 0.5 : 0 }]}>Amount (BDT)</Text>
           {o.showLineSignature && <Text style={[pdfLayout.th, { width: '16%', borderRightWidth: 0 }]}>Signature</Text>}
         </View>
         {o.lines.map((l, i) => (
-          <View key={i} style={pdfLayout.tr}>
+          <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
             <Text style={[pdfLayout.td, { width: '6%' }]}>{i + 1}</Text>
             <Text style={[pdfLayout.td, { width: wPart }]}>{l.particulars}</Text>
             {hasUnit && <Text style={[pdfLayout.td, { width: '14%' }]}>{l.unit || '-'}</Text>}
@@ -201,7 +226,11 @@ function BillVoucherDoc(o: BillVoucherOpts) {
             {o.showLineSignature && <Text style={[pdfLayout.td, { width: '16%', borderRightWidth: 0 }]}></Text>}
           </View>
         ))}
-        <Summation total={total} deduction={o.lessDeduction} net={net} />
+        <TotalsBox rows={[
+          { label: 'Total Payable', value: money(total) },
+          { label: 'Less: Advance / Deduction', value: money(o.lessDeduction) },
+          { label: 'Net Amount Paid (BDT)', value: money(net), strong: true }
+        ]} />
         <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(net)}</Text></Text></View>
         <SignRow blocks={signBlocks} />
         <Footer docNo={o.billRef} />

@@ -14,7 +14,7 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { formatNumber, formatDate } from '@/lib/utils'
-import { downloadRequisitionPDF, type ReqLine } from '@/pdf/FinancePDF'
+import { downloadRequisitionPDF, SUBMITTED_TO, type ReqLine } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
 
@@ -52,6 +52,7 @@ export function Requisitions() {
       await downloadRequisitionPDF({
         client: clientName, docNo: r.req_no,
         meta: [
+          { label: 'Submitted To', value: SUBMITTED_TO },
           { label: 'Project', value: clientName || 'Whirlpool' },
           { label: 'Requisition No', value: r.req_no },
           { label: 'Date', value: formatDate(r.req_date) },

@@ -44,6 +44,11 @@ const s = StyleSheet.create({
 
 const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+// This warehouse is funded by and reports to 3i Logistics — every one of
+// these documents is prepared here (on this Settings → Company letterhead)
+// but submitted TO 3i Logistics, so that needs to say so explicitly.
+export const SUBMITTED_TO = '3i Logistics Pvt Limited'
+
 function Header({ title, docNo }: { title: string; docNo: string }) {
   const company = getCompanyInfo()
   const companyLines = (company.address || '').split('\n').filter(Boolean)
@@ -175,7 +180,7 @@ function BillVoucherDoc(o: BillVoucherOpts) {
     <Document>
       <Page size="A4" style={s.page}>
         <Header title={o.title} docNo={o.billRef} />
-        <MetaCols meta={[{ label: 'Project', value: o.project }, { label: 'Bill Reference No', value: o.billRef }, { label: 'Date', value: o.date }]} />
+        <MetaCols meta={[{ label: 'Submitted To', value: SUBMITTED_TO }, { label: 'Project', value: o.project }, { label: 'Bill Reference No', value: o.billRef }, { label: 'Date', value: o.date }]} />
         <View style={s.tHead}>
           <Text style={[s.th, { width: '6%' }]}>SL No.</Text>
           <Text style={[s.th, { width: wPart }]}>Particulars</Text>
@@ -234,6 +239,7 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
       <Page size="A4" style={s.page}>
         <Header title="Monthly Adjustment" docNo={o.period} />
         <MetaCols meta={[
+          { label: 'Submitted To', value: SUBMITTED_TO },
           { label: 'Project', value: o.client },
           { label: 'Period', value: o.period },
           { label: 'Total Received', value: `BDT ${money(o.totalReceived)}` },

@@ -22,8 +22,26 @@ const s = StyleSheet.create({
   signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 50 },
   signName: { fontSize: 9, fontWeight: 'bold', marginBottom: 3 },
   signBlock: { borderTopWidth: 0.7, borderColor: '#333', paddingTop: 4, textAlign: 'center', fontSize: 8, color: '#444' },
-  sectionLabel: { fontSize: 9, fontWeight: 'bold', marginTop: 10, marginBottom: 4 }
+  sectionLabel: { fontSize: 9, fontWeight: 'bold', marginTop: 10, marginBottom: 4 },
+  // Statement-of-account (ledger / cash-book) pieces — an account-summary
+  // strip and a running-balance ledger, the two things that make a document
+  // read as a finance statement rather than a generic goods table.
+  stmtMeta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, fontSize: 9 },
+  stmtMetaK: { fontWeight: 'bold' },
+  sumGrid: { flexDirection: 'row', borderWidth: 0.7, borderColor: '#333', marginBottom: 12 },
+  sumCell: { flex: 1, padding: 6, borderRightWidth: 0.5, borderRightColor: '#999' },
+  sumCellLast: { flex: 1, padding: 6, backgroundColor: '#eceff3' },
+  sumCap: { fontSize: 7, color: '#555', marginBottom: 3 },
+  sumAmt: { fontSize: 10, fontWeight: 'bold' },
+  rowOpen: { backgroundColor: '#f7f7f5' },
+  rowStripe: { backgroundColor: '#fafafa' },
+  rowTotal: { backgroundColor: '#f2f2f0' },
+  rowClose: { backgroundColor: '#eceff3' },
+  bold: { fontWeight: 'bold' }
 })
+
+// Ledger column widths — kept in one place so header and body rows can never drift.
+const LW = { date: '11%', part: '38%', ref: '15%', dr: '12%', cr: '12%', bal: '12%' }
 
 const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -198,112 +216,126 @@ export async function downloadBillVoucherPDF(opts: BillVoucherOpts) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Monthly Adjustment — fund receipts + full expense list + category
-//    subtotals, submitted to Head Office to settle the month.
+// 3. Monthly Statement of Account — a running-balance cash book. Opening
+//    Balance (b/d) → every receipt (Dr) and payment (Cr) in date order, each
+//    updating a running Balance column → Closing Balance (c/d). This is the
+//    format an accounts department (Zoho Books / SAP FI statement of account)
+//    actually reads: the balance column is the point, not a list of tables.
 // ---------------------------------------------------------------------------
-export interface AdjustmentReceipt { date: string; amount: number }
-export interface AdjustmentExpense { date: string; category: string; payee?: string; description?: string; amount: number }
 export interface AdjustmentCategoryTotal { category: string; amount: number }
-export interface AdjustmentBalanceAdjustment { date: string; amount: number; remarks?: string }
+// One posted line of the cash book. receipt/payment are mutually exclusive;
+// balance is the running total AFTER this line is applied.
+export interface LedgerRow { date: string; particulars: string; ref?: string; receipt?: number; payment?: number; balance: number }
 
 export interface AdjustmentOpts {
   period: string
-  receipts: AdjustmentReceipt[]
-  expenses: AdjustmentExpense[]
-  categoryTotals: AdjustmentCategoryTotal[]
-  balanceAdjustments: AdjustmentBalanceAdjustment[]
   openingBalance: number
-  totalReceived: number
-  totalExpense: number
   closingBalance: number
+  ledger: LedgerRow[]
+  categoryTotals: AdjustmentCategoryTotal[]
 }
 
+function SumCell({ cap, amount, last }: { cap: string; amount: number; last?: boolean }) {
+  return (
+    <View style={last ? s.sumCellLast : s.sumCell}>
+      <Text style={s.sumCap}>{cap}</Text>
+      <Text style={s.sumAmt}>BDT {money(amount)}</Text>
+    </View>
+  )
+}
+
+const LedgerHead = () => (
+  <View style={pdfLayout.tHead}>
+    <Text style={[pdfLayout.th, { width: LW.date }]}>Date</Text>
+    <Text style={[pdfLayout.th, { width: LW.part }]}>Particulars</Text>
+    <Text style={[pdfLayout.th, { width: LW.ref }]}>Voucher / Ref</Text>
+    <Text style={[pdfLayout.th, { width: LW.dr, textAlign: 'right' }]}>Receipt (Dr)</Text>
+    <Text style={[pdfLayout.th, { width: LW.cr, textAlign: 'right' }]}>Payment (Cr)</Text>
+    <Text style={[pdfLayout.th, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>Balance</Text>
+  </View>
+)
+
 function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
+  const totalReceipt = o.ledger.reduce((sum, r) => sum + (r.receipt || 0), 0)
+  const totalPayment = o.ledger.reduce((sum, r) => sum + (r.payment || 0), 0)
   return (
     <Document>
       <Page size="A4" style={pdfLayout.page}>
-        <PdfHeader title="Monthly Adjustment" docNo={o.period} />
-        <MetaCols meta={[
-          { label: 'Submitted To', value: SUBMITTED_TO },
-          { label: 'Period', value: o.period },
-          { label: 'Balance B/D', value: `BDT ${money(o.openingBalance)}` },
-          { label: 'Fund Received', value: `BDT ${money(o.totalReceived)}` },
-          { label: 'Expense', value: `BDT ${money(o.totalExpense)}` },
-          { label: 'Balance C/D', value: `BDT ${money(o.closingBalance)}` }
-        ]} />
+        <PdfHeader title="Statement of Account" docNo={o.period} />
 
-        <Text style={s.sectionLabel}>Fund Received</Text>
-        <View style={pdfLayout.tHead}>
-          <Text style={[pdfLayout.th, { width: '70%' }]}>Date</Text>
-          <Text style={[pdfLayout.th, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
+        <View style={s.stmtMeta}>
+          <Text><Text style={s.stmtMetaK}>Submitted To: </Text>{SUBMITTED_TO}</Text>
+          <Text><Text style={s.stmtMetaK}>Statement Period: </Text>{o.period}</Text>
         </View>
-        {o.receipts.length === 0 ? (
-          <View style={pdfLayout.tr}><Text style={[pdfLayout.td, { width: '100%', color: '#9a9a9f', borderRightWidth: 0 }]}>No fund received this period</Text></View>
-        ) : o.receipts.map((r, i) => (
-          <View key={i} style={pdfLayout.tr}>
-            <Text style={[pdfLayout.td, { width: '70%' }]}>{r.date}</Text>
-            <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{money(r.amount)}</Text>
+
+        {/* Account summary — the four figures an accounts reviewer checks first. */}
+        <View style={s.sumGrid}>
+          <SumCell cap="Opening Balance (B/D)" amount={o.openingBalance} />
+          <SumCell cap="Total Receipts" amount={totalReceipt} />
+          <SumCell cap="Total Payments" amount={totalPayment} />
+          <SumCell cap="Closing Balance (C/D)" amount={o.closingBalance} last />
+        </View>
+
+        <LedgerHead />
+        {/* Opening balance b/d — the ledger's first line, carried from last month. */}
+        <View style={[pdfLayout.tr, s.rowOpen]}>
+          <Text style={[pdfLayout.td, { width: LW.date }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.part }]}>Opening Balance b/d</Text>
+          <Text style={[pdfLayout.td, { width: LW.ref }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.dr }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.cr }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>{money(o.openingBalance)}</Text>
+        </View>
+        {o.ledger.length === 0 ? (
+          <View style={pdfLayout.tr}><Text style={[pdfLayout.td, { width: '100%', color: '#9a9a9f', borderRightWidth: 0 }]}>No transactions this period</Text></View>
+        ) : o.ledger.map((r, i) => (
+          <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
+            <Text style={[pdfLayout.td, { width: LW.date }]}>{r.date}</Text>
+            <Text style={[pdfLayout.td, { width: LW.part }]}>{r.particulars}</Text>
+            <Text style={[pdfLayout.td, { width: LW.ref }]}>{r.ref || '-'}</Text>
+            <Text style={[pdfLayout.td, { width: LW.dr, textAlign: 'right' }]}>{r.receipt ? money(r.receipt) : ''}</Text>
+            <Text style={[pdfLayout.td, { width: LW.cr, textAlign: 'right' }]}>{r.payment ? money(r.payment) : ''}</Text>
+            <Text style={[pdfLayout.td, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>{money(r.balance)}</Text>
           </View>
         ))}
+        {/* Column totals, then the closing balance carried down. */}
+        <View style={[pdfLayout.tr, s.rowTotal]}>
+          <Text style={[pdfLayout.td, { width: LW.date }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.part }]}>Total for the period</Text>
+          <Text style={[pdfLayout.td, { width: LW.ref }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.dr, textAlign: 'right' }]}>{money(totalReceipt)}</Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.cr, textAlign: 'right' }]}>{money(totalPayment)}</Text>
+          <Text style={[pdfLayout.td, { width: LW.bal, borderRightWidth: 0 }]}></Text>
+        </View>
+        <View style={[pdfLayout.tr, s.rowClose]}>
+          <Text style={[pdfLayout.td, { width: LW.date }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.part }]}>Closing Balance c/d</Text>
+          <Text style={[pdfLayout.td, { width: LW.ref }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.dr }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.cr }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>{money(o.closingBalance)}</Text>
+        </View>
 
-        {o.balanceAdjustments.length > 0 && (
+        <View style={s.inWords}><Text><Text style={s.inWordsLabel}>Closing Balance in Words: </Text><Text style={s.inWordsValue}>{amountInWords(o.closingBalance)}</Text></Text></View>
+
+        {o.categoryTotals.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>Balance Adjustments</Text>
+            <Text style={s.sectionLabel}>Expense Breakdown by Category</Text>
             <View style={pdfLayout.tHead}>
-              <Text style={[pdfLayout.th, { width: '20%' }]}>Date</Text>
-              <Text style={[pdfLayout.th, { width: '50%' }]}>Note</Text>
+              <Text style={[pdfLayout.th, { width: '70%' }]}>Category</Text>
               <Text style={[pdfLayout.th, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
             </View>
-            {o.balanceAdjustments.map((a, i) => (
-              <View key={i} style={pdfLayout.tr}>
-                <Text style={[pdfLayout.td, { width: '20%' }]}>{a.date}</Text>
-                <Text style={[pdfLayout.td, { width: '50%' }]}>{a.remarks || '-'}</Text>
-                <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{a.amount > 0 ? '+' : ''}{money(a.amount)}</Text>
+            {o.categoryTotals.map((c, i) => (
+              <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
+                <Text style={[pdfLayout.td, { width: '70%' }]}>{c.category}</Text>
+                <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{money(c.amount)}</Text>
               </View>
             ))}
           </>
         )}
 
-        <Text style={s.sectionLabel}>Expense Details</Text>
-        <View style={pdfLayout.tHead}>
-          <Text style={[pdfLayout.th, { width: '14%' }]}>Date</Text>
-          <Text style={[pdfLayout.th, { width: '20%' }]}>Category</Text>
-          <Text style={[pdfLayout.th, { width: '18%' }]}>Payee</Text>
-          <Text style={[pdfLayout.th, { width: '30%' }]}>Description</Text>
-          <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
-        </View>
-        {o.expenses.map((e, i) => (
-          <View key={i} style={pdfLayout.tr}>
-            <Text style={[pdfLayout.td, { width: '14%' }]}>{e.date}</Text>
-            <Text style={[pdfLayout.td, { width: '20%' }]}>{e.category}</Text>
-            <Text style={[pdfLayout.td, { width: '18%' }]}>{e.payee || '-'}</Text>
-            <Text style={[pdfLayout.td, { width: '30%' }]}>{e.description || '-'}</Text>
-            <Text style={[pdfLayout.td, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>{money(e.amount)}</Text>
-          </View>
-        ))}
-
-        <Text style={s.sectionLabel}>Category Summary</Text>
-        <View style={pdfLayout.tHead}>
-          <Text style={[pdfLayout.th, { width: '70%' }]}>Category</Text>
-          <Text style={[pdfLayout.th, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
-        </View>
-        {o.categoryTotals.map((c, i) => (
-          <View key={i} style={pdfLayout.tr}>
-            <Text style={[pdfLayout.td, { width: '70%' }]}>{c.category}</Text>
-            <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{money(c.amount)}</Text>
-          </View>
-        ))}
-
-        <View style={s.sumWrap}>
-          <View style={s.sumBox}>
-            <View style={s.sumTotalRow}>
-              <Text style={[s.sumLabel, { fontWeight: 'bold' }]}>Balance Carried Down (C/D)</Text>
-              <Text style={[s.sumValue, { fontWeight: 'bold' }]}>BDT {money(o.closingBalance)}</Text>
-            </View>
-          </View>
-        </View>
         <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Reviewed By' }, { label: 'Head Office Approval' }]} />
-        <Footer docNo={`Monthly Adjustment · ${o.period}`} />
+        <Footer docNo={`Statement of Account · ${o.period}`} />
       </Page>
     </Document>
   )
@@ -311,5 +343,5 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
 
 export async function downloadMonthlyAdjustmentPDF(opts: AdjustmentOpts) {
   const blob = await pdf(<MonthlyAdjustmentDoc {...opts} />).toBlob()
-  downloadBlob(blob, `Monthly_Adjustment_${opts.period.replace(/[^\w]+/g, '_')}.pdf`)
+  downloadBlob(blob, `Statement_of_Account_${opts.period.replace(/[^\w]+/g, '_')}.pdf`)
 }

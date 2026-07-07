@@ -1,146 +1,199 @@
-import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
-import { getCompanyInfo } from '@/lib/settings'
-import { downloadBlob } from '@/lib/utils'
+import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
+import { downloadBlob, amountInWords } from '@/lib/utils'
 
-// Petty-cash style documents for the Finance module (Requisition, Payment
-// Receipt, Monthly Adjustment). Same look-and-feel as DocumentPDF.tsx
-// (boxed meta header, ruled title, signature block) but each has its own
-// column layout, so they live in their own file rather than overloading the
-// generic DocLine shape used by every other module's documents.
+// Finance documents (Requisition, Bill/Voucher, Monthly Adjustment) are all
+// internal 3i Logistics paperwork raised by this warehouse and sent up to
+// 3i Logistics Head Office — they carry 3i's own letterhead, not the
+// Whirlpool company branding used on inventory documents (GRN/PO/Challan),
+// so this file has its own fixed letterhead rather than reading Settings →
+// Company. Layout mirrors 3i's existing Excel bill/voucher forms: centered
+// letterhead, a solid title banner, a plain meta block, a bordered table,
+// a boxed summation, "In Words", and a signature row with as many blocks
+// as the document needs.
+const NAVY = '#1F4E79'
+const LIGHT_GREEN = '#E2EFDA'
+const BORDER = '#333333'
+
 const s = StyleSheet.create({
-  page: { padding: 30, fontSize: 9, fontFamily: 'Helvetica', color: '#212326' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  sub: { fontSize: 8, color: '#63666c', marginTop: 2 },
-  titleBar: { alignItems: 'flex-end' },
-  docTitle: { fontSize: 15, fontWeight: 'bold', textAlign: 'right', letterSpacing: 0.5, textTransform: 'uppercase' },
-  docNo: { fontSize: 10, color: '#63666c', textAlign: 'right', marginTop: 3, fontFamily: 'Helvetica-Bold' },
-  rule: { borderBottomWidth: 2, borderBottomColor: '#f2a900', marginBottom: 14 },
-  metaBox: { flexDirection: 'row', justifyContent: 'space-between', borderWidth: 0.7, borderColor: '#d8d8d4', backgroundColor: '#fafaf8', borderRadius: 2, padding: 10, marginBottom: 14, fontSize: 9 },
-  metaCol: { width: '48%' },
-  metaRow: { flexDirection: 'row', marginBottom: 3 },
-  metaLabel: { width: 90, color: '#63666c' },
-  metaValue: { flex: 1, fontFamily: 'Helvetica-Bold' },
-  sectionLabel: { fontSize: 8.5, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.4, color: '#63666c', marginBottom: 5, marginTop: 12 },
-  th: { flexDirection: 'row', backgroundColor: '#eeb111', borderWidth: 0.7, borderColor: '#212326', borderBottomWidth: 0, paddingVertical: 5, fontFamily: 'Helvetica-Bold' },
-  tr: { flexDirection: 'row', borderWidth: 0.7, borderTopWidth: 0, borderColor: '#212326', paddingVertical: 5 },
-  total: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 },
-  totalBox: { minWidth: '30%', flexDirection: 'row', justifyContent: 'space-between', gap: 16, borderTopWidth: 1, borderColor: '#f2a900', paddingTop: 5, fontWeight: 'bold' },
-  signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 46 },
-  signBlock: { width: '30%', borderTopWidth: 0.7, borderColor: '#212326', paddingTop: 4, textAlign: 'center', fontSize: 8, color: '#63666c' },
-  footer: { position: 'absolute', bottom: 20, left: 30, right: 30, fontSize: 7, color: '#9a9a9f', textAlign: 'center', borderTopWidth: 0.5, borderColor: '#ececec', paddingTop: 6 }
+  page: { padding: 32, fontSize: 9, fontFamily: 'Helvetica', color: '#212326' },
+  letterhead: { alignItems: 'center', marginBottom: 10 },
+  logoBadge: { width: 40, height: 40, borderRadius: 8, backgroundColor: '#F2A900', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  logoBadgeText: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 15 },
+  companyName: { fontSize: 14, fontFamily: 'Helvetica-Bold', color: NAVY },
+  companyAddress: { fontSize: 8, color: '#63666c', marginTop: 2, textAlign: 'center' },
+  banner: { backgroundColor: NAVY, paddingVertical: 7, marginTop: 10, marginBottom: 12 },
+  bannerText: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 12, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 },
+  metaBox: { marginBottom: 12 },
+  metaRow: { flexDirection: 'row', marginBottom: 2 },
+  metaLabel: { fontFamily: 'Helvetica-Bold', fontSize: 9 },
+  metaValue: { fontSize: 9, marginLeft: 3 },
+  th: { flexDirection: 'row', backgroundColor: NAVY, borderWidth: 0.7, borderColor: BORDER, borderBottomWidth: 0, paddingVertical: 5 },
+  thText: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 8.5, paddingHorizontal: 4 },
+  tr: { flexDirection: 'row', borderWidth: 0.7, borderTopWidth: 0, borderColor: BORDER, paddingVertical: 5, minHeight: 20 },
+  tdText: { fontSize: 9, paddingHorizontal: 4 },
+  sumWrap: { marginTop: 10, width: '46%' },
+  sumHeader: { flexDirection: 'row', backgroundColor: NAVY },
+  sumHeaderText: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 8.5, paddingHorizontal: 6, paddingVertical: 4 },
+  sumRow: { flexDirection: 'row', borderWidth: 0.7, borderTopWidth: 0, borderColor: BORDER },
+  sumLabel: { flex: 1, fontSize: 9, paddingHorizontal: 6, paddingVertical: 4, fontFamily: 'Helvetica-Bold' },
+  sumValue: { fontSize: 9, paddingHorizontal: 6, paddingVertical: 4, textAlign: 'right', minWidth: 70 },
+  inWords: { marginTop: 10, fontSize: 9 },
+  inWordsLabel: { fontFamily: 'Helvetica-Bold' },
+  inWordsValue: { fontStyle: 'italic' },
+  signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 44 },
+  signBlock: { borderTopWidth: 0.7, borderColor: BORDER, paddingTop: 4, textAlign: 'center', fontSize: 8, color: '#63666c' },
+  footer: { position: 'absolute', bottom: 18, left: 32, right: 32, fontSize: 7, color: '#9a9a9f', textAlign: 'center', borderTopWidth: 0.5, borderColor: '#ececec', paddingTop: 6 }
 })
 
-export interface DocMeta { label: string; value: string }
+const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-function Header({ client, title, docNo }: { client: string; title: string; docNo: string }) {
-  const company = getCompanyInfo()
+function Letterhead({ title }: { title: string }) {
   return (
     <>
-      <View style={s.header}>
-        <View><Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 118, height: 39, marginBottom: 3 }} /><Text style={s.sub}>{company.name} · {client}</Text></View>
-        <View style={s.titleBar}><Text style={s.docTitle}>{title}</Text><Text style={s.docNo}>{docNo}</Text></View>
+      <View style={s.letterhead}>
+        <View style={s.logoBadge}><Text style={s.logoBadgeText}>3i</Text></View>
+        <Text style={s.companyName}>3i LOGISTICS Pvt Limited</Text>
+        <Text style={s.companyAddress}>House:1/B (5th floor), Road-08, Gulshan-01, Dhaka</Text>
       </View>
-      <View style={s.rule} />
+      <View style={s.banner}><Text style={s.bannerText}>{title}</Text></View>
     </>
   )
 }
 
+export interface DocMeta { label: string; value: string }
+
 function MetaBox({ meta }: { meta: DocMeta[] }) {
-  const half = Math.ceil(meta.length / 2)
-  const Col = ({ items }: { items: DocMeta[] }) => (
-    <View style={s.metaCol}>
-      {items.map((m, i) => <View key={i} style={s.metaRow}><Text style={s.metaLabel}>{m.label}</Text><Text style={s.metaValue}>{m.value || '—'}</Text></View>)}
+  return <View style={s.metaBox}>{meta.map((m, i) => (
+    <View key={i} style={s.metaRow}><Text style={s.metaLabel}>{m.label}:</Text><Text style={s.metaValue}>{m.value || '—'}</Text></View>
+  ))}</View>
+}
+
+function SignRow({ labels }: { labels: string[] }) {
+  const width = `${Math.floor(92 / Math.max(labels.length, 1))}%`
+  return <View style={s.signRow}>{labels.map(l => <View key={l} style={[s.signBlock, { width }]}><Text>{l}</Text></View>)}</View>
+}
+
+function Summation({ total, deduction, net }: { total: number; deduction: number; net: number }) {
+  return (
+    <View style={s.sumWrap}>
+      <View style={s.sumHeader}><Text style={[s.sumHeaderText, { flex: 1 }]}>SUMMATION</Text><Text style={[s.sumHeaderText, { minWidth: 70, textAlign: 'right' }]}>AMOUNT (BDT)</Text></View>
+      <View style={s.sumRow}><Text style={s.sumLabel}>Total Payable</Text><Text style={s.sumValue}>{money(total)}</Text></View>
+      <View style={s.sumRow}><Text style={[s.sumLabel, { fontFamily: 'Helvetica' }]}>Less: Advance / Deduction</Text><Text style={s.sumValue}>{money(deduction)}</Text></View>
+      <View style={[s.sumRow, { backgroundColor: LIGHT_GREEN }]}><Text style={s.sumLabel}>Net Amount Paid</Text><Text style={[s.sumValue, { fontFamily: 'Helvetica-Bold' }]}>{money(net)}</Text></View>
     </View>
   )
-  return <View style={s.metaBox}><Col items={meta.slice(0, half)} /><Col items={meta.slice(half)} /></View>
 }
 
-function SignRow({ labels }: { labels: [string, string, string] }) {
-  return <View style={s.signRow}>{labels.map(l => <View key={l} style={s.signBlock}><Text>{l}</Text></View>)}</View>
+function Footer({ docNo }: { docNo: string }) {
+  return <Text style={s.footer} render={({ pageNumber, totalPages }) => `3i LOGISTICS Pvt Limited  ·  ${docNo}  ·  Page ${pageNumber}/${totalPages}`} fixed />
 }
-
-function Footer({ company, docNo }: { company: string; docNo: string }) {
-  return <Text style={s.footer} render={({ pageNumber, totalPages }) => `${company}  ·  ${docNo}  ·  Page ${pageNumber}/${totalPages}`} fixed />
-}
-
-const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 // ---------------------------------------------------------------------------
 // 1. Operating Cost Requisition — Purpose / Unit / Qty / Remarks / Amount.
 // ---------------------------------------------------------------------------
 export interface ReqLine { purpose: string; unit?: string; qty?: number; remarks?: string; amount: number }
 
-function RequisitionDoc({ client, docNo, meta, lines, grandTotal }:
-  { client: string; docNo: string; meta: DocMeta[]; lines: ReqLine[]; grandTotal: number }) {
-  const company = getCompanyInfo()
+function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; meta: DocMeta[]; lines: ReqLine[]; grandTotal: number }) {
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        <Header client={client} title="Operating Cost Requisition" docNo={docNo} />
+        <Letterhead title="Operating Cost Requisition" />
         <MetaBox meta={meta} />
         <View style={s.th}>
-          <Text style={{ width: '6%', paddingHorizontal: 4 }}>#</Text>
-          <Text style={{ width: '34%', paddingHorizontal: 4 }}>Purpose</Text>
-          <Text style={{ width: '12%', paddingHorizontal: 4 }}>Unit</Text>
-          <Text style={{ width: '10%', paddingHorizontal: 4, textAlign: 'right' }}>Qty</Text>
-          <Text style={{ width: '20%', paddingHorizontal: 4 }}>Remarks</Text>
-          <Text style={{ width: '18%', paddingHorizontal: 4, textAlign: 'right' }}>Amount (BDT)</Text>
+          <Text style={[s.thText, { width: '6%' }]}>#</Text>
+          <Text style={[s.thText, { width: '34%' }]}>Purpose</Text>
+          <Text style={[s.thText, { width: '12%' }]}>Unit</Text>
+          <Text style={[s.thText, { width: '10%', textAlign: 'right' }]}>Qty</Text>
+          <Text style={[s.thText, { width: '20%' }]}>Remarks</Text>
+          <Text style={[s.thText, { width: '18%', textAlign: 'right' }]}>Amount</Text>
         </View>
         {lines.map((l, i) => (
           <View key={i} style={s.tr}>
-            <Text style={{ width: '6%', paddingHorizontal: 4 }}>{i + 1}</Text>
-            <Text style={{ width: '34%', paddingHorizontal: 4 }}>{l.purpose}</Text>
-            <Text style={{ width: '12%', paddingHorizontal: 4 }}>{l.unit || '—'}</Text>
-            <Text style={{ width: '10%', paddingHorizontal: 4, textAlign: 'right' }}>{l.qty ? l.qty.toLocaleString() : '—'}</Text>
-            <Text style={{ width: '20%', paddingHorizontal: 4 }}>{l.remarks || '—'}</Text>
-            <Text style={{ width: '18%', paddingHorizontal: 4, textAlign: 'right' }}>{money(l.amount)}</Text>
+            <Text style={[s.tdText, { width: '6%' }]}>{i + 1}</Text>
+            <Text style={[s.tdText, { width: '34%' }]}>{l.purpose}</Text>
+            <Text style={[s.tdText, { width: '12%' }]}>{l.unit || '—'}</Text>
+            <Text style={[s.tdText, { width: '10%', textAlign: 'right' }]}>{l.qty ? l.qty.toLocaleString() : '—'}</Text>
+            <Text style={[s.tdText, { width: '20%' }]}>{l.remarks || '—'}</Text>
+            <Text style={[s.tdText, { width: '18%', textAlign: 'right' }]}>{money(l.amount)}</Text>
           </View>
         ))}
-        <View style={s.total}><View style={s.totalBox}><Text>Grand Total</Text><Text>{money(grandTotal)}</Text></View></View>
+        <Summation total={grandTotal} deduction={0} net={grandTotal} />
+        <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(grandTotal)}</Text></Text></View>
         <SignRow labels={['Prepared By', 'Seal', 'Approved By']} />
-        <Footer company={company.name} docNo={docNo} />
+        <Footer docNo={docNo} />
       </Page>
     </Document>
   )
 }
 
 export async function downloadRequisitionPDF(opts: { client: string; docNo: string; meta: DocMeta[]; lines: ReqLine[]; grandTotal: number }) {
-  const blob = await pdf(<RequisitionDoc {...opts} />).toBlob()
+  const blob = await pdf(<RequisitionDoc docNo={opts.docNo} meta={opts.meta} lines={opts.lines} grandTotal={opts.grandTotal} />).toBlob()
   downloadBlob(blob, `${opts.docNo.replace(/[^\w]+/g, '_')}.pdf`)
 }
 
 // ---------------------------------------------------------------------------
-// 2. Payment Receipt — a single acknowledgement slip for one expense payment.
+// 2. Bill / Voucher — dynamic title (the expense's category, e.g. "Dinner
+//    Bill" / "Labour Bill" / "Accommodation House Rent"), Particulars /
+//    Unit / Qty / Rate / Remarks / Amount lines, summation, in-words, and a
+//    configurable signature row (blank per-line signature column optional).
 // ---------------------------------------------------------------------------
-export interface ReceiptOpts { client: string; date: string; payee: string; purpose: string; amount: number; billRefs?: string }
+export interface BillLine { particulars: string; unit?: string; qty?: number; rate?: number; remarks?: string; amount: number }
+export interface BillVoucherOpts {
+  title: string
+  billRef: string
+  date: string
+  project: string
+  lines: BillLine[]
+  lessDeduction: number
+  signLabels: string[]
+  showLineSignature?: boolean
+}
 
-function PaymentReceiptDoc({ client, date, payee, purpose, amount, billRefs }: ReceiptOpts) {
-  const company = getCompanyInfo()
-  const meta: DocMeta[] = [
-    { label: 'Date', value: date },
-    { label: 'Received By', value: payee },
-    { label: 'Purpose', value: purpose },
-    { label: 'Bill Ref(s)', value: billRefs || '—' }
-  ]
+function BillVoucherDoc(o: BillVoucherOpts) {
+  const total = o.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0)
+  const net = total - (Number(o.lessDeduction) || 0)
+  const hasUnit = o.lines.some(l => l.unit)
+  const hasQty = o.lines.some(l => l.qty)
+  const hasRemarks = o.lines.some(l => l.remarks)
+  const cols = 2 + (hasUnit ? 1 : 0) + (hasQty ? 1 : 0) + (hasRemarks ? 1 : 0) + (o.showLineSignature ? 1 : 0)
+  const wPart = `${Math.max(100 - (cols - 1) * 14 - 6, 26)}%`
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        <Header client={client} title="Payment Receipt" docNo="" />
-        <MetaBox meta={meta} />
-        <View style={s.total}><View style={s.totalBox}><Text>Amount Paid (BDT)</Text><Text>{money(amount)}</Text></View></View>
-        <Text style={{ marginTop: 18, fontSize: 9.5, lineHeight: 1.5 }}>
-          Received an amount of BDT {money(amount)} from {company.name} ({client}) towards the purpose stated above.
-        </Text>
-        <SignRow labels={['Paid By', 'Witness', 'Received By (Sign)']} />
-        <Footer company={company.name} docNo="Payment Receipt" />
+        <Letterhead title={o.title} />
+        <MetaBox meta={[{ label: 'Project', value: o.project }, { label: 'Bill Reference No', value: o.billRef }, { label: 'Date', value: o.date }]} />
+        <View style={s.th}>
+          <Text style={[s.thText, { width: '6%' }]}>SL No.</Text>
+          <Text style={[s.thText, { width: wPart }]}>Particulars</Text>
+          {hasUnit && <Text style={[s.thText, { width: '14%' }]}>Unit</Text>}
+          {hasQty && <Text style={[s.thText, { width: '10%', textAlign: 'right' }]}>Qty</Text>}
+          {hasRemarks && <Text style={[s.thText, { width: '18%' }]}>Remarks</Text>}
+          <Text style={[s.thText, { width: '16%', textAlign: 'right' }]}>Total Payable</Text>
+          {o.showLineSignature && <Text style={[s.thText, { width: '16%' }]}>Signature</Text>}
+        </View>
+        {o.lines.map((l, i) => (
+          <View key={i} style={s.tr}>
+            <Text style={[s.tdText, { width: '6%' }]}>{i + 1}</Text>
+            <Text style={[s.tdText, { width: wPart }]}>{l.particulars}</Text>
+            {hasUnit && <Text style={[s.tdText, { width: '14%' }]}>{l.unit || '—'}</Text>}
+            {hasQty && <Text style={[s.tdText, { width: '10%', textAlign: 'right' }]}>{l.qty ? l.qty.toLocaleString() : '—'}</Text>}
+            {hasRemarks && <Text style={[s.tdText, { width: '18%' }]}>{l.remarks || '—'}</Text>}
+            <Text style={[s.tdText, { width: '16%', textAlign: 'right' }]}>{money(l.amount)}</Text>
+            {o.showLineSignature && <Text style={[s.tdText, { width: '16%' }]}></Text>}
+          </View>
+        ))}
+        <Summation total={total} deduction={o.lessDeduction} net={net} />
+        <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(net)}</Text></Text></View>
+        <SignRow labels={o.signLabels} />
+        <Footer docNo={o.billRef} />
       </Page>
     </Document>
   )
 }
 
-export async function downloadPaymentReceiptPDF(opts: ReceiptOpts) {
-  const blob = await pdf(<PaymentReceiptDoc {...opts} />).toBlob()
-  downloadBlob(blob, `Payment_Receipt_${opts.payee.replace(/[^\w]+/g, '_')}_${opts.date}.pdf`)
+export async function downloadBillVoucherPDF(opts: BillVoucherOpts) {
+  const blob = await pdf(<BillVoucherDoc {...opts} />).toBlob()
+  downloadBlob(blob, `${(opts.billRef || opts.title).replace(/[^\w]+/g, '_')}.pdf`)
 }
 
 // ---------------------------------------------------------------------------
@@ -162,65 +215,68 @@ export interface AdjustmentOpts {
 }
 
 function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
-  const company = getCompanyInfo()
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        <Header client={o.client} title="Monthly Adjustment" docNo={o.period} />
+        <Letterhead title="Monthly Adjustment" />
         <MetaBox meta={[
+          { label: 'Project', value: o.client },
           { label: 'Period', value: o.period },
           { label: 'Total Received', value: `BDT ${money(o.totalReceived)}` },
           { label: 'Total Expense', value: `BDT ${money(o.totalExpense)}` },
           { label: 'Closing Balance', value: `BDT ${money(o.closingBalance)}` }
         ]} />
 
-        <Text style={s.sectionLabel}>Fund Received</Text>
+        <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>Fund Received</Text>
         <View style={s.th}>
-          <Text style={{ width: '70%', paddingHorizontal: 4 }}>Date</Text>
-          <Text style={{ width: '30%', paddingHorizontal: 4, textAlign: 'right' }}>Amount (BDT)</Text>
+          <Text style={[s.thText, { width: '70%' }]}>Date</Text>
+          <Text style={[s.thText, { width: '30%', textAlign: 'right' }]}>Amount</Text>
         </View>
         {o.receipts.length === 0 ? (
-          <View style={s.tr}><Text style={{ width: '100%', paddingHorizontal: 4, color: '#9a9a9f' }}>No fund received this period</Text></View>
+          <View style={s.tr}><Text style={[s.tdText, { width: '100%', color: '#9a9a9f' }]}>No fund received this period</Text></View>
         ) : o.receipts.map((r, i) => (
           <View key={i} style={s.tr}>
-            <Text style={{ width: '70%', paddingHorizontal: 4 }}>{r.date}</Text>
-            <Text style={{ width: '30%', paddingHorizontal: 4, textAlign: 'right' }}>{money(r.amount)}</Text>
+            <Text style={[s.tdText, { width: '70%' }]}>{r.date}</Text>
+            <Text style={[s.tdText, { width: '30%', textAlign: 'right' }]}>{money(r.amount)}</Text>
           </View>
         ))}
 
-        <Text style={s.sectionLabel}>Expense Details</Text>
+        <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', marginTop: 12, marginBottom: 4 }}>Expense Details</Text>
         <View style={s.th}>
-          <Text style={{ width: '14%', paddingHorizontal: 4 }}>Date</Text>
-          <Text style={{ width: '20%', paddingHorizontal: 4 }}>Category</Text>
-          <Text style={{ width: '18%', paddingHorizontal: 4 }}>Payee</Text>
-          <Text style={{ width: '30%', paddingHorizontal: 4 }}>Description</Text>
-          <Text style={{ width: '18%', paddingHorizontal: 4, textAlign: 'right' }}>Amount (BDT)</Text>
+          <Text style={[s.thText, { width: '14%' }]}>Date</Text>
+          <Text style={[s.thText, { width: '20%' }]}>Category</Text>
+          <Text style={[s.thText, { width: '18%' }]}>Payee</Text>
+          <Text style={[s.thText, { width: '30%' }]}>Description</Text>
+          <Text style={[s.thText, { width: '18%', textAlign: 'right' }]}>Amount</Text>
         </View>
         {o.expenses.map((e, i) => (
           <View key={i} style={s.tr}>
-            <Text style={{ width: '14%', paddingHorizontal: 4 }}>{e.date}</Text>
-            <Text style={{ width: '20%', paddingHorizontal: 4 }}>{e.category}</Text>
-            <Text style={{ width: '18%', paddingHorizontal: 4 }}>{e.payee || '—'}</Text>
-            <Text style={{ width: '30%', paddingHorizontal: 4 }}>{e.description || '—'}</Text>
-            <Text style={{ width: '18%', paddingHorizontal: 4, textAlign: 'right' }}>{money(e.amount)}</Text>
+            <Text style={[s.tdText, { width: '14%' }]}>{e.date}</Text>
+            <Text style={[s.tdText, { width: '20%' }]}>{e.category}</Text>
+            <Text style={[s.tdText, { width: '18%' }]}>{e.payee || '—'}</Text>
+            <Text style={[s.tdText, { width: '30%' }]}>{e.description || '—'}</Text>
+            <Text style={[s.tdText, { width: '18%', textAlign: 'right' }]}>{money(e.amount)}</Text>
           </View>
         ))}
 
-        <Text style={s.sectionLabel}>Category Summary</Text>
+        <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', marginTop: 12, marginBottom: 4 }}>Category Summary</Text>
         <View style={s.th}>
-          <Text style={{ width: '70%', paddingHorizontal: 4 }}>Category</Text>
-          <Text style={{ width: '30%', paddingHorizontal: 4, textAlign: 'right' }}>Amount (BDT)</Text>
+          <Text style={[s.thText, { width: '70%' }]}>Category</Text>
+          <Text style={[s.thText, { width: '30%', textAlign: 'right' }]}>Amount</Text>
         </View>
         {o.categoryTotals.map((c, i) => (
           <View key={i} style={s.tr}>
-            <Text style={{ width: '70%', paddingHorizontal: 4 }}>{c.category}</Text>
-            <Text style={{ width: '30%', paddingHorizontal: 4, textAlign: 'right' }}>{money(c.amount)}</Text>
+            <Text style={[s.tdText, { width: '70%' }]}>{c.category}</Text>
+            <Text style={[s.tdText, { width: '30%', textAlign: 'right' }]}>{money(c.amount)}</Text>
           </View>
         ))}
-        <View style={s.total}><View style={s.totalBox}><Text>Total Expense</Text><Text>{money(o.totalExpense)}</Text></View></View>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <Summation total={o.totalExpense} deduction={0} net={o.totalExpense} />
+        </View>
 
         <SignRow labels={['Prepared By', 'Reviewed By', 'Head Office Approval']} />
-        <Footer company={company.name} docNo={`Monthly Adjustment · ${o.period}`} />
+        <Footer docNo={`Monthly Adjustment · ${o.period}`} />
       </Page>
     </Document>
   )

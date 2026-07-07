@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
-import { nextDocNumber } from '@/hooks/useDocNumber'
+import { nextChallanNumber } from '@/hooks/useDocNumber'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
@@ -393,7 +393,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         const { error } = await supabase.from('delivery_challans').update(header as any).eq('id', record.id)
         if (error) throw error
       } else {
-        const challan_no = await nextDocNumber(clientId, 'DC')
+        const challan_no = await nextChallanNumber(clientId, invoice)
         if (!challan_no) throw new Error('Could not generate challan number')
         const { data, error } = await supabase.from('delivery_challans').insert({ ...header, challan_no } as any).select('id').single()
         if (error) throw error

@@ -63,7 +63,7 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
               { label: 'Delivery Mode', value: isCourier ? 'Courier' : 'Transport' }
             ]} />
             <View style={{ marginTop: 8 }}>
-              <Barcode value={challan.challan_no} width={150} height={34} />
+              <Barcode value={challan.challan_no} width={180} height={36} />
             </View>
           </View>
         </View>

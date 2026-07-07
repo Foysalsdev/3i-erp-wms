@@ -27,8 +27,7 @@ const signLabelList = (s: string) => (s || DEFAULT_SIGN_LABELS).split(',').map(x
 export function Expenses() {
   const { data, loading, refresh } = useCollection('finance_expenses', { order: 'expense_date' })
   const { data: categories, refresh: refreshCategories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
-  const { currentClientId, can, isPlatformAdmin, clients } = useAuth()
-  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const { currentClientId, can, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
   const canEdit = can('finance.create') || can('finance.edit')
   const [q, setQ] = useState('')
@@ -66,7 +65,6 @@ export function Expenses() {
         title: catName(r.category_id) === '—' ? 'Expense Voucher' : catName(r.category_id),
         billRef: r.bill_ref || r.id.slice(0, 8).toUpperCase(),
         date: formatDate(r.expense_date),
-        project: r.project || clientName,
         lines: bills.map((b: any) => ({
           particulars: b.bill_ref || '—', unit: b.unit || undefined,
           qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined,
@@ -123,7 +121,7 @@ export function Expenses() {
       </Card>
 
       {modal && (
-        <ExpenseForm record={editing} clientId={currentClientId!} clientName={clientName} catItems={catItems} createCategory={createCategory} notify={notify}
+        <ExpenseForm record={editing} clientId={currentClientId!} catItems={catItems} createCategory={createCategory} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
 
@@ -144,9 +142,9 @@ export function Expenses() {
   )
 }
 
-function ExpenseForm({ record, clientId, clientName, catItems, createCategory, notify, onClose, onDone }: any) {
+function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClose, onDone }: any) {
   const [rememberedSignLabels, rememberSignLabels] = useRememberedField('sign_labels', DEFAULT_SIGN_LABELS)
-  const [h, setH] = useState<any>(record ?? { expense_date: today(), project: clientName, sign_labels: rememberedSignLabels, less_deduction: 0 })
+  const [h, setH] = useState<any>(record ?? { expense_date: today(), sign_labels: rememberedSignLabels, less_deduction: 0 })
   const [bills, setBills] = useState<any[]>(record?.__bills?.length ? record.__bills : [blankBill()])
   const [saving, setSaving] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
@@ -175,7 +173,7 @@ function ExpenseForm({ record, clientId, clientName, catItems, createCategory, n
       const header = {
         client_id: clientId, expense_date: h.expense_date || today(), category_id: h.category_id || null,
         payee_name: h.payee_name || null, description: h.description || null, amount: total,
-        project: h.project || null, bill_ref: h.bill_ref || null, less_deduction: Number(h.less_deduction) || 0,
+        bill_ref: h.bill_ref || null, less_deduction: Number(h.less_deduction) || 0,
         sign_labels: h.sign_labels || null, show_line_signature: !!h.show_line_signature
       }
       let expId = record?.id
@@ -219,7 +217,6 @@ function ExpenseForm({ record, clientId, clientName, catItems, createCategory, n
         <div className="rounded-xl border border-surface-line p-3">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Bill / Voucher print details</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Project"><Input value={h.project ?? ''} onChange={e => set({ project: e.target.value })} /></Field>
             <Field label="Bill Reference No"><Input value={h.bill_ref ?? ''} onChange={e => set({ bill_ref: e.target.value })} placeholder="e.g. WBL/30JUN/D-001" /></Field>
             <Field label="Less: Advance / Deduction (BDT)"><Input type="number" value={h.less_deduction ?? 0} onChange={e => set({ less_deduction: Number(e.target.value) || 0 })} /></Field>
             <Field label="Signature Labels (comma separated)">

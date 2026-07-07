@@ -161,7 +161,6 @@ export interface BillVoucherOpts {
   title: string
   billRef: string
   date: string
-  project: string
   lines: BillLine[]
   lessDeduction: number
   signLabels: string[]
@@ -180,7 +179,7 @@ function BillVoucherDoc(o: BillVoucherOpts) {
     <Document>
       <Page size="A4" style={s.page}>
         <Header title={o.title} docNo={o.billRef} />
-        <MetaCols meta={[{ label: 'Submitted To', value: SUBMITTED_TO }, { label: 'Project', value: o.project }, { label: 'Bill Reference No', value: o.billRef }, { label: 'Date', value: o.date }]} />
+        <MetaCols meta={[{ label: 'Submitted To', value: SUBMITTED_TO }, { label: 'Bill Reference No', value: o.billRef }, { label: 'Date', value: o.date }]} />
         <View style={s.tHead}>
           <Text style={[s.th, { width: '6%' }]}>SL No.</Text>
           <Text style={[s.th, { width: wPart }]}>Particulars</Text>
@@ -224,7 +223,7 @@ export interface AdjustmentExpense { date: string; category: string; payee?: str
 export interface AdjustmentCategoryTotal { category: string; amount: number }
 
 export interface AdjustmentOpts {
-  client: string; period: string
+  period: string
   receipts: AdjustmentReceipt[]
   expenses: AdjustmentExpense[]
   categoryTotals: AdjustmentCategoryTotal[]
@@ -240,7 +239,6 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
         <Header title="Monthly Adjustment" docNo={o.period} />
         <MetaCols meta={[
           { label: 'Submitted To', value: SUBMITTED_TO },
-          { label: 'Project', value: o.client },
           { label: 'Period', value: o.period },
           { label: 'Total Received', value: `BDT ${money(o.totalReceived)}` },
           { label: 'Total Expense', value: `BDT ${money(o.totalExpense)}` },

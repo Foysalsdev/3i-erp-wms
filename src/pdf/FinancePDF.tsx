@@ -4,26 +4,50 @@ import { downloadBlob, amountInWords } from '@/lib/utils'
 import { pdfLayout, PdfHeader, PdfFooter } from './pdfLayout'
 
 // Finance-specific pieces on top of the shared pdfLayout.tsx letterhead/table
-// styles: a wrap-by-three meta strip, a summation box, and a signature row.
+// styles — the ERP document language every finance PDF shares: a bordered
+// metadata header grid, a bordered totals box, a running-balance ledger and
+// a signature row.
 const s = StyleSheet.create({
-  cols: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  col: { width: '33%' },
-  k: { fontSize: 8, color: '#1f3a93', fontWeight: 'bold' },
-  v: { fontSize: 9, marginTop: 1 },
-  sumWrap: { marginTop: 8, alignItems: 'flex-end' },
-  sumBox: { width: '46%' },
-  sumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  sumLabel: { fontSize: 9 },
-  sumValue: { fontSize: 9 },
-  sumTotalRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.7, borderTopColor: '#333', paddingTop: 3, marginTop: 2 },
   inWords: { marginTop: 10, fontSize: 9 },
   inWordsLabel: { fontWeight: 'bold' },
   inWordsValue: { fontStyle: 'italic' },
   signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 50 },
   signName: { fontSize: 9, fontWeight: 'bold', marginBottom: 3 },
   signBlock: { borderTopWidth: 0.7, borderColor: '#333', paddingTop: 4, textAlign: 'center', fontSize: 8, color: '#444' },
-  sectionLabel: { fontSize: 9, fontWeight: 'bold', marginTop: 10, marginBottom: 4 }
+  sectionLabel: { fontSize: 9, fontWeight: 'bold', marginTop: 10, marginBottom: 4 },
+  // Statement-of-account (ledger / cash-book) pieces — an account-summary
+  // strip and a running-balance ledger, the two things that make a document
+  // read as a finance statement rather than a generic goods table.
+  stmtMeta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, fontSize: 9 },
+  stmtMetaK: { fontWeight: 'bold' },
+  sumGrid: { flexDirection: 'row', borderWidth: 0.7, borderColor: '#333', marginBottom: 12 },
+  sumCell: { flex: 1, padding: 6, borderRightWidth: 0.5, borderRightColor: '#999' },
+  sumCellLast: { flex: 1, padding: 6, backgroundColor: '#eceff3' },
+  sumCap: { fontSize: 7, color: '#555', marginBottom: 3 },
+  sumAmt: { fontSize: 10, fontWeight: 'bold' },
+  rowOpen: { backgroundColor: '#f7f7f5' },
+  rowStripe: { backgroundColor: '#fafafa' },
+  rowTotal: { backgroundColor: '#f2f2f0' },
+  rowClose: { backgroundColor: '#eceff3' },
+  bold: { fontWeight: 'bold' },
+  // Bordered document-header metadata grid (SAP/ERP style) — replaces the
+  // loose text columns; each field is a labelled cell in a boxed strip.
+  infoGrid: { borderWidth: 0.7, borderColor: '#333', marginBottom: 12 },
+  infoRow: { flexDirection: 'row' },
+  infoCell: { flex: 1, padding: 6, borderRightWidth: 0.5, borderRightColor: '#999' },
+  infoCellWide: { padding: 6, borderTopWidth: 0.5, borderTopColor: '#999' },
+  infoCap: { fontSize: 7, color: '#555', marginBottom: 3 },
+  infoVal: { fontSize: 9, fontWeight: 'bold' },
+  // Bordered totals block, right-aligned, with an emphasised final row.
+  totalsWrap: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
+  totalsBox: { width: '52%', borderWidth: 0.7, borderColor: '#333' },
+  totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3, paddingHorizontal: 7 },
+  totalsRowLast: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, paddingHorizontal: 7, backgroundColor: '#eceff3', borderTopWidth: 0.7, borderTopColor: '#333' },
+  totalsTxt: { fontSize: 9 }
 })
+
+// Ledger column widths — kept in one place so header and body rows can never drift.
+const LW = { date: '11%', part: '38%', ref: '15%', dr: '12%', cr: '12%', bal: '12%' }
 
 const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -32,18 +56,48 @@ const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionD
 // but submitted TO 3i Logistics, so that needs to say so explicitly.
 export const SUBMITTED_TO = '3i Logistics Pvt Limited'
 
-export interface DocMeta { label: string; value: string }
+export interface DocMeta { label: string; value: string; wide?: boolean }
 
-// Three per row (matches the Delivery Challan's PO#/Invoice#/Dispatch-time
-// strip), wrapping onto further rows of three if there are more fields.
-function MetaCols({ meta }: { meta: DocMeta[] }) {
-  const rows: DocMeta[][] = []
-  for (let i = 0; i < meta.length; i += 3) rows.push(meta.slice(i, i + 3))
-  return <>{rows.map((row, i) => (
-    <View key={i} style={s.cols}>
-      {row.map(m => <View key={m.label} style={s.col}><Text style={s.k}>{m.label}</Text><Text style={s.v}>{m.value || '-'}</Text></View>)}
+// Bordered document-header grid: short fields sit as labelled cells in one
+// boxed row; any `wide` field (a long note) gets its own full-width row below.
+// This is the structured header an ERP document leads with — not loose text.
+function InfoGrid({ items }: { items: DocMeta[] }) {
+  const cells = items.filter(m => !m.wide)
+  const wides = items.filter(m => m.wide)
+  return (
+    <View style={s.infoGrid}>
+      <View style={s.infoRow}>
+        {cells.map((m, i) => (
+          <View key={i} style={[s.infoCell, i === cells.length - 1 ? { borderRightWidth: 0 } : {}]}>
+            <Text style={s.infoCap}>{m.label.toUpperCase()}</Text>
+            <Text style={s.infoVal}>{m.value || '-'}</Text>
+          </View>
+        ))}
+      </View>
+      {wides.map((m, i) => (
+        <View key={i} style={s.infoCellWide}>
+          <Text style={s.infoCap}>{m.label.toUpperCase()}</Text>
+          <Text style={s.infoVal}>{m.value || '-'}</Text>
+        </View>
+      ))}
     </View>
-  ))}<View style={pdfLayout.hr} /></>
+  )
+}
+
+interface TotalRow { label: string; value: string; strong?: boolean }
+function TotalsBox({ rows }: { rows: TotalRow[] }) {
+  return (
+    <View style={s.totalsWrap}>
+      <View style={s.totalsBox}>
+        {rows.map((r, i) => (
+          <View key={i} style={r.strong ? s.totalsRowLast : s.totalsRow}>
+            <Text style={[s.totalsTxt, r.strong ? s.bold : {}]}>{r.label}</Text>
+            <Text style={[s.totalsTxt, r.strong ? s.bold : {}]}>{r.value}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  )
 }
 
 interface SignBlock { label: string; name?: string }
@@ -61,18 +115,6 @@ function SignRow({ blocks }: { blocks: SignBlock[] }) {
   ))}</View>
 }
 
-function Summation({ total, deduction, net }: { total: number; deduction: number; net: number }) {
-  return (
-    <View style={s.sumWrap}>
-      <View style={s.sumBox}>
-        <View style={s.sumRow}><Text style={s.sumLabel}>Total Payable</Text><Text style={s.sumValue}>{money(total)}</Text></View>
-        <View style={s.sumRow}><Text style={s.sumLabel}>Less: Advance / Deduction</Text><Text style={s.sumValue}>{money(deduction)}</Text></View>
-        <View style={s.sumTotalRow}><Text style={[s.sumLabel, { fontWeight: 'bold' }]}>Net Amount Paid</Text><Text style={[s.sumValue, { fontWeight: 'bold' }]}>{money(net)}</Text></View>
-      </View>
-    </View>
-  )
-}
-
 function Footer({ docNo }: { docNo: string }) {
   const company = getCompanyInfo()
   return <PdfFooter render={({ pageNumber, totalPages }) => `${company.footer || company.name}  ·  ${docNo}  ·  Page ${pageNumber}/${totalPages}`} />
@@ -88,17 +130,17 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
     <Document>
       <Page size="A4" style={pdfLayout.page}>
         <PdfHeader title="Operating Cost Requisition" docNo={docNo} />
-        <MetaCols meta={meta} />
+        <InfoGrid items={meta} />
         <View style={pdfLayout.tHead}>
           <Text style={[pdfLayout.th, { width: '6%' }]}>#</Text>
           <Text style={[pdfLayout.th, { width: '34%' }]}>Purpose</Text>
           <Text style={[pdfLayout.th, { width: '12%' }]}>Unit</Text>
           <Text style={[pdfLayout.th, { width: '10%', textAlign: 'right' }]}>Qty</Text>
           <Text style={[pdfLayout.th, { width: '20%' }]}>Note</Text>
-          <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right' }]}>Amount</Text>
+          <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>Amount (BDT)</Text>
         </View>
         {lines.map((l, i) => (
-          <View key={i} style={pdfLayout.tr}>
+          <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
             <Text style={[pdfLayout.td, { width: '6%' }]}>{i + 1}</Text>
             <Text style={[pdfLayout.td, { width: '34%' }]}>{l.purpose}</Text>
             <Text style={[pdfLayout.td, { width: '12%' }]}>{l.unit || '-'}</Text>
@@ -107,7 +149,7 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
             <Text style={[pdfLayout.td, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>{money(l.amount)}</Text>
           </View>
         ))}
-        <Summation total={grandTotal} deduction={0} net={grandTotal} />
+        <TotalsBox rows={[{ label: 'Grand Total (BDT)', value: money(grandTotal), strong: true }]} />
         <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(grandTotal)}</Text></Text></View>
         <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Seal' }, { label: 'Approved By' }]} />
         <Footer docNo={docNo} />
@@ -157,23 +199,24 @@ function BillVoucherDoc(o: BillVoucherOpts) {
     <Document>
       <Page size="A4" style={pdfLayout.page}>
         <PdfHeader title={o.title} docNo={o.billRef} />
-        <MetaCols meta={[
-          { label: 'Submitted To', value: SUBMITTED_TO },
+        <InfoGrid items={[
+          { label: 'Voucher No', value: o.billRef },
+          { label: 'Date', value: o.date },
           ...(o.payee ? [{ label: 'Paid To', value: o.payee }] : []),
-          { label: 'Date', value: o.date }
+          { label: 'Submitted To', value: SUBMITTED_TO },
+          ...(o.purpose ? [{ label: 'Purpose', value: o.purpose, wide: true }] : [])
         ]} />
-        {o.purpose && <Text style={{ fontSize: 9, marginBottom: 10 }}><Text style={{ fontWeight: 'bold' }}>Purpose: </Text>{o.purpose}</Text>}
         <View style={pdfLayout.tHead}>
           <Text style={[pdfLayout.th, { width: '6%' }]}>SL No.</Text>
           <Text style={[pdfLayout.th, { width: wPart }]}>Particulars</Text>
           {hasUnit && <Text style={[pdfLayout.th, { width: '14%' }]}>Unit</Text>}
           {hasQty && <Text style={[pdfLayout.th, { width: '10%', textAlign: 'right' }]}>Qty</Text>}
           {hasRemarks && <Text style={[pdfLayout.th, { width: '18%' }]}>Remarks</Text>}
-          <Text style={[pdfLayout.th, { width: '16%', textAlign: 'right' }]}>Total Payable</Text>
+          <Text style={[pdfLayout.th, { width: '16%', textAlign: 'right', borderRightWidth: o.showLineSignature ? 0.5 : 0 }]}>Amount (BDT)</Text>
           {o.showLineSignature && <Text style={[pdfLayout.th, { width: '16%', borderRightWidth: 0 }]}>Signature</Text>}
         </View>
         {o.lines.map((l, i) => (
-          <View key={i} style={pdfLayout.tr}>
+          <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
             <Text style={[pdfLayout.td, { width: '6%' }]}>{i + 1}</Text>
             <Text style={[pdfLayout.td, { width: wPart }]}>{l.particulars}</Text>
             {hasUnit && <Text style={[pdfLayout.td, { width: '14%' }]}>{l.unit || '-'}</Text>}
@@ -183,7 +226,11 @@ function BillVoucherDoc(o: BillVoucherOpts) {
             {o.showLineSignature && <Text style={[pdfLayout.td, { width: '16%', borderRightWidth: 0 }]}></Text>}
           </View>
         ))}
-        <Summation total={total} deduction={o.lessDeduction} net={net} />
+        <TotalsBox rows={[
+          { label: 'Total Payable', value: money(total) },
+          { label: 'Less: Advance / Deduction', value: money(o.lessDeduction) },
+          { label: 'Net Amount Paid (BDT)', value: money(net), strong: true }
+        ]} />
         <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(net)}</Text></Text></View>
         <SignRow blocks={signBlocks} />
         <Footer docNo={o.billRef} />
@@ -198,105 +245,126 @@ export async function downloadBillVoucherPDF(opts: BillVoucherOpts) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Monthly Adjustment — fund receipts + full expense list + category
-//    subtotals, submitted to Head Office to settle the month.
+// 3. Monthly Statement of Account — a running-balance cash book. Opening
+//    Balance (b/d) → every receipt (Dr) and payment (Cr) in date order, each
+//    updating a running Balance column → Closing Balance (c/d). This is the
+//    format an accounts department (Zoho Books / SAP FI statement of account)
+//    actually reads: the balance column is the point, not a list of tables.
 // ---------------------------------------------------------------------------
-export interface AdjustmentReceipt { date: string; amount: number }
-export interface AdjustmentExpense { date: string; category: string; payee?: string; description?: string; amount: number }
 export interface AdjustmentCategoryTotal { category: string; amount: number }
-export interface AdjustmentBalanceAdjustment { date: string; amount: number; remarks?: string }
+// One posted line of the cash book. receipt/payment are mutually exclusive;
+// balance is the running total AFTER this line is applied.
+export interface LedgerRow { date: string; particulars: string; ref?: string; receipt?: number; payment?: number; balance: number }
 
 export interface AdjustmentOpts {
   period: string
-  receipts: AdjustmentReceipt[]
-  expenses: AdjustmentExpense[]
-  categoryTotals: AdjustmentCategoryTotal[]
-  balanceAdjustments: AdjustmentBalanceAdjustment[]
   openingBalance: number
-  totalReceived: number
-  totalExpense: number
   closingBalance: number
+  ledger: LedgerRow[]
+  categoryTotals: AdjustmentCategoryTotal[]
 }
 
+function SumCell({ cap, amount, last }: { cap: string; amount: number; last?: boolean }) {
+  return (
+    <View style={last ? s.sumCellLast : s.sumCell}>
+      <Text style={s.sumCap}>{cap}</Text>
+      <Text style={s.sumAmt}>BDT {money(amount)}</Text>
+    </View>
+  )
+}
+
+const LedgerHead = () => (
+  <View style={pdfLayout.tHead}>
+    <Text style={[pdfLayout.th, { width: LW.date }]}>Date</Text>
+    <Text style={[pdfLayout.th, { width: LW.part }]}>Particulars</Text>
+    <Text style={[pdfLayout.th, { width: LW.ref }]}>Voucher / Ref</Text>
+    <Text style={[pdfLayout.th, { width: LW.dr, textAlign: 'right' }]}>Receipt (Dr)</Text>
+    <Text style={[pdfLayout.th, { width: LW.cr, textAlign: 'right' }]}>Payment (Cr)</Text>
+    <Text style={[pdfLayout.th, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>Balance</Text>
+  </View>
+)
+
 function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
+  const totalReceipt = o.ledger.reduce((sum, r) => sum + (r.receipt || 0), 0)
+  const totalPayment = o.ledger.reduce((sum, r) => sum + (r.payment || 0), 0)
   return (
     <Document>
       <Page size="A4" style={pdfLayout.page}>
-        <PdfHeader title="Monthly Adjustment" docNo={o.period} />
-        <MetaCols meta={[
-          { label: 'Submitted To', value: SUBMITTED_TO },
-          { label: 'Period', value: o.period },
-          { label: 'Balance B/D', value: `BDT ${money(o.openingBalance)}` },
-          { label: 'Fund Received', value: `BDT ${money(o.totalReceived)}` },
-          { label: 'Expense', value: `BDT ${money(o.totalExpense)}` },
-          { label: 'Balance C/D', value: `BDT ${money(o.closingBalance)}` }
-        ]} />
+        <PdfHeader title="Statement of Account" docNo={o.period} />
 
-        <Text style={s.sectionLabel}>Fund Received</Text>
-        <View style={pdfLayout.tHead}>
-          <Text style={[pdfLayout.th, { width: '70%' }]}>Date</Text>
-          <Text style={[pdfLayout.th, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
+        <View style={s.stmtMeta}>
+          <Text><Text style={s.stmtMetaK}>Submitted To: </Text>{SUBMITTED_TO}</Text>
+          <Text><Text style={s.stmtMetaK}>Statement Period: </Text>{o.period}</Text>
         </View>
-        {o.receipts.length === 0 ? (
-          <View style={pdfLayout.tr}><Text style={[pdfLayout.td, { width: '100%', color: '#9a9a9f', borderRightWidth: 0 }]}>No fund received this period</Text></View>
-        ) : o.receipts.map((r, i) => (
-          <View key={i} style={pdfLayout.tr}>
-            <Text style={[pdfLayout.td, { width: '70%' }]}>{r.date}</Text>
-            <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{money(r.amount)}</Text>
+
+        {/* Account summary — the four figures an accounts reviewer checks first. */}
+        <View style={s.sumGrid}>
+          <SumCell cap="Opening Balance (B/D)" amount={o.openingBalance} />
+          <SumCell cap="Total Receipts" amount={totalReceipt} />
+          <SumCell cap="Total Payments" amount={totalPayment} />
+          <SumCell cap="Closing Balance (C/D)" amount={o.closingBalance} last />
+        </View>
+
+        <LedgerHead />
+        {/* Opening balance b/d — the ledger's first line, carried from last month. */}
+        <View style={[pdfLayout.tr, s.rowOpen]}>
+          <Text style={[pdfLayout.td, { width: LW.date }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.part }]}>Opening Balance b/d</Text>
+          <Text style={[pdfLayout.td, { width: LW.ref }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.dr }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.cr }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>{money(o.openingBalance)}</Text>
+        </View>
+        {o.ledger.length === 0 ? (
+          <View style={pdfLayout.tr}><Text style={[pdfLayout.td, { width: '100%', color: '#9a9a9f', borderRightWidth: 0 }]}>No transactions this period</Text></View>
+        ) : o.ledger.map((r, i) => (
+          <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
+            <Text style={[pdfLayout.td, { width: LW.date }]}>{r.date}</Text>
+            <Text style={[pdfLayout.td, { width: LW.part }]}>{r.particulars}</Text>
+            <Text style={[pdfLayout.td, { width: LW.ref }]}>{r.ref || '-'}</Text>
+            <Text style={[pdfLayout.td, { width: LW.dr, textAlign: 'right' }]}>{r.receipt ? money(r.receipt) : ''}</Text>
+            <Text style={[pdfLayout.td, { width: LW.cr, textAlign: 'right' }]}>{r.payment ? money(r.payment) : ''}</Text>
+            <Text style={[pdfLayout.td, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>{money(r.balance)}</Text>
           </View>
         ))}
+        {/* Column totals, then the closing balance carried down. */}
+        <View style={[pdfLayout.tr, s.rowTotal]}>
+          <Text style={[pdfLayout.td, { width: LW.date }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.part }]}>Total for the period</Text>
+          <Text style={[pdfLayout.td, { width: LW.ref }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.dr, textAlign: 'right' }]}>{money(totalReceipt)}</Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.cr, textAlign: 'right' }]}>{money(totalPayment)}</Text>
+          <Text style={[pdfLayout.td, { width: LW.bal, borderRightWidth: 0 }]}></Text>
+        </View>
+        <View style={[pdfLayout.tr, s.rowClose]}>
+          <Text style={[pdfLayout.td, { width: LW.date }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.part }]}>Closing Balance c/d</Text>
+          <Text style={[pdfLayout.td, { width: LW.ref }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.dr }]}></Text>
+          <Text style={[pdfLayout.td, { width: LW.cr }]}></Text>
+          <Text style={[pdfLayout.td, s.bold, { width: LW.bal, textAlign: 'right', borderRightWidth: 0 }]}>{money(o.closingBalance)}</Text>
+        </View>
 
-        {o.balanceAdjustments.length > 0 && (
+        <View style={s.inWords}><Text><Text style={s.inWordsLabel}>Closing Balance in Words: </Text><Text style={s.inWordsValue}>{amountInWords(o.closingBalance)}</Text></Text></View>
+
+        {o.categoryTotals.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>Balance Adjustments</Text>
+            <Text style={s.sectionLabel}>Expense Breakdown by Category</Text>
             <View style={pdfLayout.tHead}>
-              <Text style={[pdfLayout.th, { width: '20%' }]}>Date</Text>
-              <Text style={[pdfLayout.th, { width: '50%' }]}>Note</Text>
+              <Text style={[pdfLayout.th, { width: '70%' }]}>Category</Text>
               <Text style={[pdfLayout.th, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
             </View>
-            {o.balanceAdjustments.map((a, i) => (
-              <View key={i} style={pdfLayout.tr}>
-                <Text style={[pdfLayout.td, { width: '20%' }]}>{a.date}</Text>
-                <Text style={[pdfLayout.td, { width: '50%' }]}>{a.remarks || '-'}</Text>
-                <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{a.amount > 0 ? '+' : ''}{money(a.amount)}</Text>
+            {o.categoryTotals.map((c, i) => (
+              <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
+                <Text style={[pdfLayout.td, { width: '70%' }]}>{c.category}</Text>
+                <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{money(c.amount)}</Text>
               </View>
             ))}
           </>
         )}
 
-        <Text style={s.sectionLabel}>Expense Details</Text>
-        <View style={pdfLayout.tHead}>
-          <Text style={[pdfLayout.th, { width: '14%' }]}>Date</Text>
-          <Text style={[pdfLayout.th, { width: '20%' }]}>Category</Text>
-          <Text style={[pdfLayout.th, { width: '18%' }]}>Payee</Text>
-          <Text style={[pdfLayout.th, { width: '30%' }]}>Description</Text>
-          <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
-        </View>
-        {o.expenses.map((e, i) => (
-          <View key={i} style={pdfLayout.tr}>
-            <Text style={[pdfLayout.td, { width: '14%' }]}>{e.date}</Text>
-            <Text style={[pdfLayout.td, { width: '20%' }]}>{e.category}</Text>
-            <Text style={[pdfLayout.td, { width: '18%' }]}>{e.payee || '-'}</Text>
-            <Text style={[pdfLayout.td, { width: '30%' }]}>{e.description || '-'}</Text>
-            <Text style={[pdfLayout.td, { width: '18%', textAlign: 'right', borderRightWidth: 0 }]}>{money(e.amount)}</Text>
-          </View>
-        ))}
-
-        <Text style={s.sectionLabel}>Category Summary</Text>
-        <View style={pdfLayout.tHead}>
-          <Text style={[pdfLayout.th, { width: '70%' }]}>Category</Text>
-          <Text style={[pdfLayout.th, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
-        </View>
-        {o.categoryTotals.map((c, i) => (
-          <View key={i} style={pdfLayout.tr}>
-            <Text style={[pdfLayout.td, { width: '70%' }]}>{c.category}</Text>
-            <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{money(c.amount)}</Text>
-          </View>
-        ))}
-
-        <Summation total={o.totalExpense} deduction={0} net={o.totalExpense} />
         <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Reviewed By' }, { label: 'Head Office Approval' }]} />
-        <Footer docNo={`Monthly Adjustment · ${o.period}`} />
+        <Footer docNo={`Statement of Account · ${o.period}`} />
       </Page>
     </Document>
   )
@@ -304,5 +372,5 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
 
 export async function downloadMonthlyAdjustmentPDF(opts: AdjustmentOpts) {
   const blob = await pdf(<MonthlyAdjustmentDoc {...opts} />).toBlob()
-  downloadBlob(blob, `Monthly_Adjustment_${opts.period.replace(/[^\w]+/g, '_')}.pdf`)
+  downloadBlob(blob, `Statement_of_Account_${opts.period.replace(/[^\w]+/g, '_')}.pdf`)
 }

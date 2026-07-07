@@ -56,11 +56,11 @@ export function Requisitions() {
       await downloadRequisitionPDF({
         docNo: r.req_no,
         meta: [
-          { label: 'Submitted To', value: SUBMITTED_TO },
           { label: 'Requisition No', value: r.req_no },
           { label: 'Date', value: formatDate(r.req_date) },
           { label: 'Sent By', value: r.sender_name || '' },
-          ...(r.remarks ? [{ label: 'Note', value: r.remarks }] : [])
+          { label: 'Submitted To', value: SUBMITTED_TO },
+          ...(r.remarks ? [{ label: 'Note', value: r.remarks, wide: true }] : [])
         ],
         lines: lines.map((l: any) => ({ purpose: l.purpose, unit: l.unit, qty: l.qty ? Number(l.qty) : undefined, remarks: l.remarks, amount: Number(l.amount) || 0 })),
         grandTotal: Number(r.grand_total) || 0

@@ -7,7 +7,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
-import { downloadMonthlyAdjustmentPDF } from '@/pdf/FinancePDF'
+import { downloadMonthlyAdjustmentPDF, SUBMITTED_TO } from '@/pdf/FinancePDF'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid
 } from 'recharts'
@@ -147,13 +147,36 @@ export function MonthlyAdjustment() {
 
   const exportPDF = async () => {
     try {
+      // Fold receipts, manual balance adjustments and expenses into one
+      // date-ordered cash book, carrying a running balance from the opening
+      // B/D — a signed adjustment lands in Receipt (Dr) if positive, Payment
+      // (Cr) if negative, so the running balance stays exact either way.
+      type Posting = { raw: string; particulars: string; ref?: string; delta: number }
+      const postings: Posting[] = [
+        ...monthReceipts.map(r => ({ raw: r.receipt_date as string, particulars: `Fund received from ${SUBMITTED_TO}`, delta: Number(r.amount) || 0 })),
+        ...monthBalanceAdjustments.map((a: any) => ({ raw: a.adjustment_date as string, particulars: `Balance adjustment${a.remarks ? ` — ${a.remarks}` : ''}`, delta: Number(a.amount) || 0 })),
+        ...monthExpenses.map(e => ({
+          raw: e.expense_date as string,
+          particulars: catName(e.category_id) + (e.payee_name ? ` — ${e.payee_name}` : '') + (e.description ? ` (${e.description})` : ''),
+          ref: e.bill_ref || undefined,
+          delta: -(Number(e.amount) || 0)
+        }))
+      ].sort((a, b) => a.raw < b.raw ? -1 : a.raw > b.raw ? 1 : 0)
+
+      let running = openingBalance
+      const ledger = postings.map(p => {
+        running += p.delta
+        return {
+          date: formatDate(p.raw), particulars: p.particulars, ref: p.ref,
+          receipt: p.delta > 0 ? p.delta : undefined,
+          payment: p.delta < 0 ? -p.delta : undefined,
+          balance: running
+        }
+      })
+
       await downloadMonthlyAdjustmentPDF({
         period: monthLabel(period),
-        receipts: monthReceipts.map(r => ({ date: formatDate(r.receipt_date), amount: Number(r.amount) || 0 })),
-        expenses: monthExpenses.map(e => ({ date: formatDate(e.expense_date), category: catName(e.category_id), payee: e.payee_name, description: e.description, amount: Number(e.amount) || 0 })),
-        categoryTotals,
-        balanceAdjustments: monthBalanceAdjustments.map((a: any) => ({ date: formatDate(a.adjustment_date), amount: Number(a.amount) || 0, remarks: a.remarks })),
-        openingBalance, totalReceived: totalReceivedMonth, totalExpense: totalExpenseMonth, closingBalance
+        openingBalance, closingBalance, ledger, categoryTotals
       })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate PDF — check the company logo URL in Settings')
@@ -161,6 +184,13 @@ export function MonthlyAdjustment() {
   }
 
   const markSubmitted = async () => {
+    // This declares the month's figures final and sent to Head Office — too
+    // consequential to fire on a stray click, especially Re-submit which
+    // silently overwrites the already-submitted figures.
+    const question = existing?.submitted_at
+      ? `Re-submit ${monthLabel(period)}? This overwrites the figures already sent to Head Office (submitted ${formatDateTime(existing.submitted_at)}).`
+      : `Mark ${monthLabel(period)} as submitted to Head Office? Balance C/D: ${formatNumber(closingBalance, 2)} BDT.`
+    if (!window.confirm(question)) return
     setSubmitting(true)
     const payload = {
       client_id: currentClientId!, year, month,

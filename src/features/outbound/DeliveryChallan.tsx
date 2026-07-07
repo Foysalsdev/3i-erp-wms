@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
-import { nextDocNumber } from '@/hooks/useDocNumber'
+import { nextChallanNumber } from '@/hooks/useDocNumber'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
@@ -27,6 +27,8 @@ import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
 import { downloadChallanPdfFor } from './challanPdf'
 import { VehicleLoadingScan } from './VehicleLoadingScan'
+import { useRememberedField } from '@/hooks/useRememberedField'
+import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
@@ -259,8 +261,12 @@ function CnModal({ challan, notify, onClose, onDone }: any) {
 // PO are pulled in and locked, and the lines default to the still-pending qty.
 export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, transportVendors = [], couriers = [], clientId, notify, onClose, onDone }: any) {
   const profile = useAuth(s => s.profile)
+  // The printed acknowledgement note is always pre-filled and remembers the
+  // user's last edit across challans (per browser); an existing challan keeps
+  // the note it was saved with.
+  const [rememberedNote, rememberNote] = useRememberedField('print_note', DEFAULT_CHALLAN_NOTE, 'challan')
   // Prepared By defaults to whoever is logged in creating the challan.
-  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '' })
+  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '', print_note: rememberedNote })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -316,7 +322,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     const cust = customers.find((c: any) => c.id === so.customer_id)
     setH((x: any) => ({ ...x, sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
       po_no: so.reference_no || x.po_no, invoice_no: so.billing_doc_no || so.invoice_no || x.invoice_no,
-      bill_to_address: x.bill_to_address || cust?.billing_address || '' }))
+      bill_to_address: x.bill_to_address || cust?.billing_address || '',
+      ship_to_address: x.ship_to_address || cust?.shipping_address || '' }))
     setLines((items ?? []).map((it: any) => ({
       product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
       unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id,
@@ -375,15 +382,18 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         // optional extras
         dispatch_time: h.dispatch_time || null, prepared_by: h.prepared_by || null,
         receiver_name: h.receiver_name || null, receiver_phone: h.receiver_phone || null,
-        unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null,
-        status: h.status || 'draft', remarks: h.remarks || null
+        unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null, ship_to_address: h.ship_to_address || null,
+        status: h.status || 'draft', remarks: h.remarks || null,
+        print_note: (h.print_note ?? rememberedNote) || null
       }
+      // Remember this note as the default for the next challan.
+      if (h.print_note) rememberNote(h.print_note)
       let challanId = record?.id
       if (record) {
         const { error } = await supabase.from('delivery_challans').update(header as any).eq('id', record.id)
         if (error) throw error
       } else {
-        const challan_no = await nextDocNumber(clientId, 'DC')
+        const challan_no = await nextChallanNumber(clientId, invoice)
         if (!challan_no) throw new Error('Could not generate challan number')
         const { data, error } = await supabase.from('delivery_challans').insert({ ...header, challan_no } as any).select('id').single()
         if (error) throw error
@@ -434,7 +444,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             </Field>
             <Field label="Customer" required>
               <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''}
-                onChange={(id: string) => set({ customer_id: id, bill_to_address: customers.find((c: any) => c.id === id)?.billing_address || '' })}
+                onChange={(id: string) => { const c = customers.find((x: any) => x.id === id); set({ customer_id: id, bill_to_address: c?.billing_address || '', ship_to_address: c?.shipping_address || '' }) }}
                 placeholder="Search customer by code or name" />
             </Field>
             <Field label="Warehouse" required>
@@ -531,10 +541,18 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             <Field label="Bill-To Address" className="sm:col-span-2">
               <Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} placeholder="Auto-filled from customer master — edit if this delivery differs" />
             </Field>
+            <Field label="Ship-To Address" className="sm:col-span-2">
+              <Input value={h.ship_to_address ?? ''} onChange={e => set({ ship_to_address: e.target.value })} placeholder="Where goods are delivered — auto-filled from customer, edit if different from billing" />
+            </Field>
           </div>
         )}
 
         <Field label="Remarks"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
+
+        <Field label="Printed Note (acknowledgement line on the challan)">
+          <Textarea value={h.print_note ?? rememberedNote} onChange={e => set({ print_note: e.target.value })}
+            placeholder={DEFAULT_CHALLAN_NOTE} className="min-h-[56px]" />
+        </Field>
 
         <LineItems rows={lines} onChange={setLines} products={products} locations={locations} variant="out" />
 

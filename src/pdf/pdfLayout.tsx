@@ -135,14 +135,57 @@ function code39Rects(raw: string) {
   return { rects, total: x }
 }
 
+// --- Code 128 (subset C) ----------------------------------------------------
+// For all-numeric values (the new challan number is 12 digits), Code 128-C
+// encodes two digits per symbol, so the bars are far finer and the symbol far
+// shorter than Code 39 — the dense, professional look of a retail barcode.
+// Falls back to Code 39 for anything non-numeric or odd-length.
+const CODE128 = [
+  '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+  '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+  '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+  '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+  '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+  '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+  '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+  '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+  '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+  '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+  '114131', '311141', '411131', '211412', '211214', '211232'
+]
+const CODE128_STOP = '2331112'
+
+function code128CRects(raw: string) {
+  const digits = (raw || '').replace(/\D/g, '')
+  if (digits.length === 0 || digits.length % 2 !== 0) return null // subset C needs digit pairs
+  const codes = [105] // Start C
+  for (let i = 0; i < digits.length; i += 2) codes.push(parseInt(digits.slice(i, i + 2), 10))
+  let sum = codes[0]
+  for (let i = 1; i < codes.length; i++) sum += codes[i] * i
+  codes.push(sum % 103) // checksum
+  const rects: { x: number; w: number }[] = []
+  let x = 0
+  const draw = (pat: string) => {
+    for (let i = 0; i < pat.length; i++) {
+      const w = parseInt(pat[i], 10)
+      if (i % 2 === 0) rects.push({ x, w }) // even element = bar
+      x += w
+    }
+  }
+  for (const c of codes) draw(CODE128[c])
+  draw(CODE128_STOP)
+  return { rects, total: x }
+}
+
 export function Barcode({ value, width = 150, height = 32, showText = true }:
   { value?: string; width?: number; height?: number; showText?: boolean }) {
-  const { rects, total } = code39Rects(value || '')
+  const encoded = code128CRects(value || '') ?? code39Rects(value || '')
+  const { rects, total } = encoded
   if (!rects.length || total === 0) return null
   const barH = showText ? height - 9 : height
   return (
-    <View style={{ alignItems: 'center' }}>
-      <Svg width={width} height={barH} viewBox={`0 0 ${total} 100`}>
+    <View style={{ width, alignItems: 'center' }}>
+      <Svg width={width} height={barH} viewBox={`0 0 ${total} 100`} preserveAspectRatio="none">
         {rects.map((r, i) => <Rect key={i} x={r.x} y={0} width={r.w} height={100} fill="#000" />)}
       </Svg>
       {showText ? <Text style={{ fontSize: 7, marginTop: 2, letterSpacing: 1 }}>{value}</Text> : null}

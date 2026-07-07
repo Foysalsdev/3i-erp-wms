@@ -53,18 +53,19 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
               <Text style={s.billSub}>Receiver: {challan.receiver_name || '-'}{challan.receiver_phone ? '  ·  ' + challan.receiver_phone : ''}</Text>
             </View>
           </View>
-          <View style={{ width: '44%' }}>
+          <View style={{ width: '44%', alignItems: 'flex-end' }}>
+            {/* Barcode sits at the top-right, above the box; it already prints
+                the number beneath it, so the box no longer repeats Challan No. */}
+            <View style={{ marginBottom: 6 }}>
+              <Barcode value={challan.challan_no} width={230} height={32} />
+            </View>
             <DocInfoBox title="Delivery Challan" width="100%" fields={[
-              { label: 'Challan No', value: challan.challan_no },
               { label: 'Date', value: formatDate(challan.challan_date) },
               { label: 'PO No', value: challan.po_no },
               { label: 'Invoice No', value: challan.invoice_no },
               { label: 'Dispatch Time', value: challan.dispatch_time },
               { label: 'Delivery Mode', value: isCourier ? 'Courier' : 'Transport' }
             ]} />
-            <View style={{ marginTop: 8 }}>
-              <Barcode value={challan.challan_no} width={180} height={36} />
-            </View>
           </View>
         </View>
 

@@ -65,6 +65,8 @@ export function Expenses() {
         title: catName(r.category_id) === '—' ? 'Expense Voucher' : catName(r.category_id),
         billRef: r.bill_ref || r.id.slice(0, 8).toUpperCase(),
         date: formatDate(r.expense_date),
+        payee: r.payee_name || undefined,
+        purpose: r.description || undefined,
         lines: bills.map((b: any) => ({
           particulars: b.bill_ref || '—', unit: b.unit || undefined,
           qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined,

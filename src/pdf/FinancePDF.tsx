@@ -37,6 +37,7 @@ const s = StyleSheet.create({
   inWordsLabel: { fontWeight: 'bold' },
   inWordsValue: { fontStyle: 'italic' },
   signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 50 },
+  signName: { fontSize: 9, fontWeight: 'bold', marginBottom: 3 },
   signBlock: { borderTopWidth: 0.7, borderColor: '#333', paddingTop: 4, textAlign: 'center', fontSize: 8, color: '#444' },
   footer: { position: 'absolute', bottom: 18, left: 28, right: 28, fontSize: 7, color: '#777', textAlign: 'center' },
   sectionLabel: { fontSize: 9, fontWeight: 'bold', marginTop: 10, marginBottom: 4 }
@@ -85,9 +86,19 @@ function MetaCols({ meta }: { meta: DocMeta[] }) {
   ))}<View style={s.hr} /></>
 }
 
-function SignRow({ labels }: { labels: string[] }) {
-  const width = `${Math.floor(92 / Math.max(labels.length, 1))}%`
-  return <View style={s.signRow}>{labels.map(l => <View key={l} style={[s.signBlock, { width }]}><Text>{l}</Text></View>)}</View>
+interface SignBlock { label: string; name?: string }
+
+// Each block is a blank line to physically sign above a label — optionally
+// with a name printed above the line (e.g. the payee), so it's clear whose
+// signature is expected there rather than just a generic role.
+function SignRow({ blocks }: { blocks: SignBlock[] }) {
+  const width = `${Math.floor(92 / Math.max(blocks.length, 1))}%`
+  return <View style={s.signRow}>{blocks.map((b, i) => (
+    <View key={i} style={{ width }}>
+      {b.name && <Text style={s.signName}>{b.name}</Text>}
+      <View style={s.signBlock}><Text>{b.label}</Text></View>
+    </View>
+  ))}</View>
 }
 
 function Summation({ total, deduction, net }: { total: number; deduction: number; net: number }) {
@@ -138,7 +149,7 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
         ))}
         <Summation total={grandTotal} deduction={0} net={grandTotal} />
         <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(grandTotal)}</Text></Text></View>
-        <SignRow labels={['Prepared By', 'Seal', 'Approved By']} />
+        <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Seal' }, { label: 'Approved By' }]} />
         <Footer />
       </Page>
     </Document>
@@ -161,6 +172,8 @@ export interface BillVoucherOpts {
   title: string
   billRef: string
   date: string
+  payee?: string
+  purpose?: string
   lines: BillLine[]
   lessDeduction: number
   signLabels: string[]
@@ -175,11 +188,20 @@ function BillVoucherDoc(o: BillVoucherOpts) {
   const hasRemarks = o.lines.some(l => l.remarks)
   const cols = 2 + (hasUnit ? 1 : 0) + (hasQty ? 1 : 0) + (hasRemarks ? 1 : 0) + (o.showLineSignature ? 1 : 0)
   const wPart = `${Math.max(100 - (cols - 1) * 14 - 6, 26)}%`
+  // Bill Reference No already sits under the title (top right); the meta
+  // strip instead names who the money was actually paid to, so the document
+  // answers "paid to whom, and why" at a glance, not just "how much".
+  const signBlocks: SignBlock[] = [...o.signLabels.map(l => ({ label: l })), ...(o.payee ? [{ label: 'Received By (Sign)', name: o.payee }] : [])]
   return (
     <Document>
       <Page size="A4" style={s.page}>
         <Header title={o.title} docNo={o.billRef} />
-        <MetaCols meta={[{ label: 'Submitted To', value: SUBMITTED_TO }, { label: 'Bill Reference No', value: o.billRef }, { label: 'Date', value: o.date }]} />
+        <MetaCols meta={[
+          { label: 'Submitted To', value: SUBMITTED_TO },
+          ...(o.payee ? [{ label: 'Paid To', value: o.payee }] : []),
+          { label: 'Date', value: o.date }
+        ]} />
+        {o.purpose && <Text style={{ fontSize: 9, marginBottom: 10 }}><Text style={{ fontWeight: 'bold' }}>Purpose: </Text>{o.purpose}</Text>}
         <View style={s.tHead}>
           <Text style={[s.th, { width: '6%' }]}>SL No.</Text>
           <Text style={[s.th, { width: wPart }]}>Particulars</Text>
@@ -202,7 +224,7 @@ function BillVoucherDoc(o: BillVoucherOpts) {
         ))}
         <Summation total={total} deduction={o.lessDeduction} net={net} />
         <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(net)}</Text></Text></View>
-        <SignRow labels={o.signLabels} />
+        <SignRow blocks={signBlocks} />
         <Footer />
       </Page>
     </Document>
@@ -290,7 +312,7 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
         ))}
 
         <Summation total={o.totalExpense} deduction={0} net={o.totalExpense} />
-        <SignRow labels={['Prepared By', 'Reviewed By', 'Head Office Approval']} />
+        <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Reviewed By' }, { label: 'Head Office Approval' }]} />
         <Footer />
       </Page>
     </Document>

@@ -59,8 +59,10 @@ export const MODULES: NavModule[] = [
     { key: 'non-inventory-consumption', label: 'Non-Inventory Consumption' }, { key: 'history', label: 'Asset History' }
   ]},
   { key: 'finance', label: 'Finance', icon: 'payments', path: '/finance', permission: 'finance.view', tabs: [
+    { key: 'requisition', label: 'Operating Cost Requisition' }, { key: 'expense', label: 'Expense Management' },
+    { key: 'monthly-adjustment', label: 'Monthly Adjustment' },
     { key: 'customer-billing', label: 'Customer Billing' }, { key: 'transport-billing', label: 'Transport Billing' },
-    { key: 'supplier-bills', label: 'Supplier Bills' }, { key: 'expense', label: 'Expense Management' },
+    { key: 'supplier-bills', label: 'Supplier Bills' },
     { key: 'credit-notes', label: 'Credit Notes' }, { key: 'debit-notes', label: 'Debit Notes' },
     { key: 'payment-tracking', label: 'Payment Tracking' }, { key: 'financial-dashboard', label: 'Financial Dashboard' }
   ]},

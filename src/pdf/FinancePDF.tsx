@@ -65,7 +65,6 @@ function Header({ title, docNo }: { title: string; docNo: string }) {
       <View style={s.company}>
         <Text style={s.companyName}>{company.name}</Text>
         {companyLines.map((l, i) => <Text key={i} style={s.sub}>{l}</Text>)}
-        {company.bin ? <Text style={s.sub}>{company.bin}</Text> : null}
       </View>
       <View style={s.hr} />
     </>

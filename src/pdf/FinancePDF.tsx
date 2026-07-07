@@ -294,7 +294,14 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
           </View>
         ))}
 
-        <Summation total={o.totalExpense} deduction={0} net={o.totalExpense} />
+        <View style={s.sumWrap}>
+          <View style={s.sumBox}>
+            <View style={s.sumTotalRow}>
+              <Text style={[s.sumLabel, { fontWeight: 'bold' }]}>Balance Carried Down (C/D)</Text>
+              <Text style={[s.sumValue, { fontWeight: 'bold' }]}>BDT {money(o.closingBalance)}</Text>
+            </View>
+          </View>
+        </View>
         <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Reviewed By' }, { label: 'Head Office Approval' }]} />
         <Footer docNo={`Monthly Adjustment · ${o.period}`} />
       </Page>

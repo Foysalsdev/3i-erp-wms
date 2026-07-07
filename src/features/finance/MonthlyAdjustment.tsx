@@ -161,6 +161,13 @@ export function MonthlyAdjustment() {
   }
 
   const markSubmitted = async () => {
+    // This declares the month's figures final and sent to Head Office — too
+    // consequential to fire on a stray click, especially Re-submit which
+    // silently overwrites the already-submitted figures.
+    const question = existing?.submitted_at
+      ? `Re-submit ${monthLabel(period)}? This overwrites the figures already sent to Head Office (submitted ${formatDateTime(existing.submitted_at)}).`
+      : `Mark ${monthLabel(period)} as submitted to Head Office? Balance C/D: ${formatNumber(closingBalance, 2)} BDT.`
+    if (!window.confirm(question)) return
     setSubmitting(true)
     const payload = {
       client_id: currentClientId!, year, month,

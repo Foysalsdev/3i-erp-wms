@@ -1655,6 +1655,10 @@ export type Database = {
           created_at: string
           expense_id: string
           id: string
+          qty: number | null
+          rate: number | null
+          remarks: string | null
+          unit: string | null
           updated_at: string
         }
         Insert: {
@@ -1664,6 +1668,10 @@ export type Database = {
           created_at?: string
           expense_id: string
           id?: string
+          qty?: number | null
+          rate?: number | null
+          remarks?: string | null
+          unit?: string | null
           updated_at?: string
         }
         Update: {
@@ -1673,6 +1681,10 @@ export type Database = {
           created_at?: string
           expense_id?: string
           id?: string
+          qty?: number | null
+          rate?: number | null
+          remarks?: string | null
+          unit?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1727,6 +1739,7 @@ export type Database = {
       finance_expenses: {
         Row: {
           amount: number
+          bill_ref: string | null
           category_id: string | null
           client_id: string
           created_at: string
@@ -1734,11 +1747,16 @@ export type Database = {
           description: string | null
           expense_date: string
           id: string
+          less_deduction: number
           payee_name: string | null
+          project: string | null
+          show_line_signature: boolean
+          sign_labels: string | null
           updated_at: string
         }
         Insert: {
           amount?: number
+          bill_ref?: string | null
           category_id?: string | null
           client_id: string
           created_at?: string
@@ -1746,11 +1764,16 @@ export type Database = {
           description?: string | null
           expense_date?: string
           id?: string
+          less_deduction?: number
           payee_name?: string | null
+          project?: string | null
+          show_line_signature?: boolean
+          sign_labels?: string | null
           updated_at?: string
         }
         Update: {
           amount?: number
+          bill_ref?: string | null
           category_id?: string | null
           client_id?: string
           created_at?: string
@@ -1758,7 +1781,11 @@ export type Database = {
           description?: string | null
           expense_date?: string
           id?: string
+          less_deduction?: number
           payee_name?: string | null
+          project?: string | null
+          show_line_signature?: boolean
+          sign_labels?: string | null
           updated_at?: string
         }
         Relationships: [

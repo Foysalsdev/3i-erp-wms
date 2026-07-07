@@ -46,8 +46,7 @@ export function MonthlyAdjustment() {
   const { data: expenses, loading: l2 } = useCollection('finance_expenses', { order: 'expense_date' })
   const { data: categories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { data: adjustments, refresh: refreshAdj } = useCollection('finance_monthly_adjustments', { order: 'year' })
-  const { currentClientId, can, clients } = useAuth()
-  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   const canEdit = can('finance.create') || can('finance.edit')
   const [period, setPeriod] = useState(thisMonth())
@@ -118,7 +117,7 @@ export function MonthlyAdjustment() {
   const exportPDF = async () => {
     try {
       await downloadMonthlyAdjustmentPDF({
-        client: clientName, period: monthLabel(period),
+        period: monthLabel(period),
         receipts: monthReceipts.map(r => ({ date: formatDate(r.receipt_date), amount: Number(r.amount) || 0 })),
         expenses: monthExpenses.map(e => ({ date: formatDate(e.expense_date), category: catName(e.category_id), payee: e.payee_name, description: e.description, amount: Number(e.amount) || 0 })),
         categoryTotals,

@@ -14,8 +14,9 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { formatNumber, formatDate } from '@/lib/utils'
-import { downloadRequisitionPDF, type ReqLine } from '@/pdf/FinancePDF'
+import { downloadRequisitionPDF, SUBMITTED_TO, type ReqLine } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
+import { useRememberedField } from '@/hooks/useRememberedField'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remarks: '', amount: 0 })
@@ -23,7 +24,7 @@ const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remar
 export function Requisitions() {
   const { data, loading, refresh } = useCollection('finance_requisitions', { order: 'created_at' })
   const { data: allReceipts, refresh: refreshReceipts } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
-  const { currentClientId, can, isPlatformAdmin, clients, profile } = useAuth()
+  const { currentClientId, can, isPlatformAdmin, clients } = useAuth()
   const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
   const notify = useUI(s => s.notify)
   const canEdit = can('finance.create') || can('finance.edit')
@@ -51,10 +52,11 @@ export function Requisitions() {
       await downloadRequisitionPDF({
         client: clientName, docNo: r.req_no,
         meta: [
+          { label: 'Submitted To', value: SUBMITTED_TO },
+          { label: 'Requisition No', value: r.req_no },
           { label: 'Date', value: formatDate(r.req_date) },
           { label: 'Sent By', value: r.sender_name || '' },
-          { label: 'Addressed To', value: '3i Logistics — Whirlpool Project' },
-          { label: 'Remarks', value: r.remarks || '' }
+          ...(r.remarks ? [{ label: 'Remarks', value: r.remarks }] : [])
         ],
         lines: lines.map((l: any) => ({ purpose: l.purpose, unit: l.unit, qty: l.qty ? Number(l.qty) : undefined, remarks: l.remarks, amount: Number(l.amount) || 0 })),
         grandTotal: Number(r.grand_total) || 0
@@ -105,7 +107,7 @@ export function Requisitions() {
       </Card>
 
       {modal && (
-        <ReqForm record={editing} clientId={currentClientId!} senderDefault={profile?.full_name ?? ''} notify={notify}
+        <ReqForm record={editing} clientId={currentClientId!} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
 
@@ -128,8 +130,9 @@ export function Requisitions() {
   )
 }
 
-function ReqForm({ record, clientId, senderDefault, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? { req_date: today(), sender_name: senderDefault })
+function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
+  const [rememberedSender, rememberSender] = useRememberedField('sender_name')
+  const [h, setH] = useState<any>(record ?? { req_date: today(), sender_name: rememberedSender })
   const [lines, setLines] = useState<ReqLine[]>(record?.__lines?.length ? record.__lines : [blankLine()])
   const [saving, setSaving] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
@@ -139,6 +142,7 @@ function ReqForm({ record, clientId, senderDefault, notify, onClose, onDone }: a
   const save = async () => {
     const valid = lines.filter(l => l.purpose.trim())
     if (!valid.length) { notify('error', 'Add at least one line with a purpose'); return }
+    if (h.sender_name) rememberSender(h.sender_name)
     setSaving(true)
     try {
       const header = { client_id: clientId, req_date: h.req_date || today(), sender_name: h.sender_name || null, grand_total: grandTotal, remarks: h.remarks || null }

@@ -57,7 +57,7 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
             {/* Barcode sits at the top-right, above the box; it already prints
                 the number beneath it, so the box no longer repeats Challan No. */}
             <View style={{ marginBottom: 6 }}>
-              <Barcode value={challan.challan_no} width={230} height={32} />
+              <Barcode value={challan.challan_no} width={155} height={28} />
             </View>
             <DocInfoBox title="Delivery Challan" width="100%" fields={[
               { label: 'Date', value: formatDate(challan.challan_date) },

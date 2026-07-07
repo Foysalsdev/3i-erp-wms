@@ -405,24 +405,6 @@ export const OPERATIONS: Record<string, OpDef> = {
       { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
     ],
     listColumns: []
-  },
-  'customer-billing': {
-    key: 'customer-billing', module: 'finance', table: 'billing_invoices', docType: 'INV', numberField: 'invoice_no',
-    title: 'Billing Invoice', singular: 'Invoice', icon: 'receipt_long', permission: 'finance',
-    statuses: [S.draft, S.pending, S.billed, S.paid, S.cancelled], openStatuses: ['draft', 'pending', 'billed'],
-    searchFields: ['invoice_no', 'reference_no'],
-    fields: [
-      { name: 'customer_id', label: 'Customer', type: 'relation', relation: 'customers' },
-      { name: 'reference_no', label: 'Reference', type: 'text' },
-      { name: 'invoice_date', label: 'Invoice Date', type: 'date', required: true },
-      { name: 'due_date', label: 'Due Date', type: 'date' },
-      { name: 'amount', label: 'Amount', type: 'number' },
-      { name: 'tax', label: 'Tax', type: 'number' },
-      { name: 'total', label: 'Total', type: 'number' },
-      { name: 'status', label: 'Status', type: 'select', options: ['draft', 'pending', 'billed', 'paid', 'cancelled'], required: true },
-      { name: 'remarks', label: 'Remarks', type: 'textarea', span2: true }
-    ],
-    listColumns: []
   }
 }
 

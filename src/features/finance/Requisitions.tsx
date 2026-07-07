@@ -24,10 +24,13 @@ const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remar
 export function Requisitions() {
   const { data, loading, refresh } = useCollection('finance_requisitions', { order: 'created_at' })
   const { data: allReceipts, refresh: refreshReceipts } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
-  const { currentClientId, can, isPlatformAdmin, clients } = useAuth()
-  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const { currentClientId, can, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
-  const canEdit = can('finance.create') || can('finance.edit')
+  // Split by DB operation: RLS requires finance.create for inserts (new
+  // requisitions, fund receipts) and finance.edit for updates — a role with
+  // only one of the two should only see the actions that will actually pass.
+  const canCreate = can('finance.create')
+  const canEdit = can('finance.edit')
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
@@ -50,7 +53,7 @@ export function Requisitions() {
     try {
       const lines = await fetchLines(r.id)
       await downloadRequisitionPDF({
-        client: clientName, docNo: r.req_no,
+        docNo: r.req_no,
         meta: [
           { label: 'Submitted To', value: SUBMITTED_TO },
           { label: 'Requisition No', value: r.req_no },
@@ -98,7 +101,7 @@ export function Requisitions() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search requisition…" /></div>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
-        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Requisition</Button>}
+        {canCreate && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Requisition</Button>}
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -112,10 +115,10 @@ export function Requisitions() {
       )}
 
       {viewing && (
-        <ReqOverview req={viewing} receipts={receiptsFor(viewing.id)} clientId={currentClientId!} canEdit={canEdit} notify={notify}
+        <ReqOverview req={viewing} receipts={receiptsFor(viewing.id)} clientId={currentClientId!} canCreate={canCreate} canEdit={canEdit} notify={notify}
           onEdit={() => { const r = viewing; setViewing(null); openEdit(r) }}
           onPrint={() => printReq(viewing)}
-          onReceiptAdded={() => { refreshReceipts(); openView(viewing).then(v => setViewing(v)) }}
+          onReceiptAdded={() => { refreshReceipts(); openView(viewing) }}
           onClose={() => setViewing(null)} />
       )}
 
@@ -217,7 +220,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
   )
 }
 
-function ReqOverview({ req, receipts, clientId, canEdit, notify, onEdit, onPrint, onReceiptAdded, onClose }: any) {
+function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEdit, onPrint, onReceiptAdded, onClose }: any) {
   const lines: any[] = req.__lines ?? []
   const [addingReceipt, setAddingReceipt] = useState(false)
   const receivedTotal = receipts.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0)
@@ -251,7 +254,7 @@ function ReqOverview({ req, receipts, clientId, canEdit, notify, onEdit, onPrint
         <div>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Fund Received</p>
-            {canEdit && !addingReceipt && (fullyReceived
+            {canCreate && !addingReceipt && (fullyReceived
               ? <span className="text-xs text-ink-faint">Fully received</span>
               : <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingReceipt(true)}>Add Receipt</Button>)}
           </div>

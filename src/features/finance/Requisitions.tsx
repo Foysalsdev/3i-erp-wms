@@ -17,6 +17,7 @@ import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadRequisitionPDF, SUBMITTED_TO, type ReqLine } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
+import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remarks: '', amount: 0 })
@@ -180,23 +181,23 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
     <Modal open onClose={onClose} title={`${record ? 'Edit' : 'New'} Operating Cost Requisition`} size="xl">
       <div className="space-y-4">
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Requisition No: </span><span className="font-semibold">{record.req_no}</span></div>}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Date" required><Input type="date" value={h.req_date ?? ''} onChange={e => set({ req_date: e.target.value })} /></Field>
-          <Field label="Sent By"><Input value={h.sender_name ?? ''} onChange={e => set({ sender_name: e.target.value })} placeholder="Deputy Manager name" /></Field>
-          <Field label="Note" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
-        </div>
+        <FinancePanel icon="assignment" title="Requisition Details">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Date" required><Input type="date" value={h.req_date ?? ''} onChange={e => set({ req_date: e.target.value })} /></Field>
+            <Field label="Sent By"><Input value={h.sender_name ?? ''} onChange={e => set({ sender_name: e.target.value })} placeholder="Deputy Manager name" /></Field>
+            <Field label="Note" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
+          </div>
+        </FinancePanel>
 
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Cost Purpose Lines</p>
-            <Button size="sm" variant="secondary" icon="add" onClick={() => setLines(ls => [...ls, blankLine()])}>Add Line</Button>
-          </div>
+          <SectionHeader icon="list_alt" title="Cost Purpose Lines"
+            action={<Button size="sm" variant="secondary" icon="add" onClick={() => setLines(ls => [...ls, blankLine()])}>Add Line</Button>} />
           <div className="overflow-hidden rounded-xl border border-surface-line">
-            <div className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] gap-2 border-b border-surface-line bg-surface-sunken/60 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+            <div className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] gap-2 border-b border-surface-line bg-surface-sunken px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
               <span>Purpose *</span><span>Unit</span><span>Qty</span><span>Note</span><span className="text-right">Amount (BDT) *</span><span />
             </div>
             {lines.map((l, i) => (
-              <div key={i} className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0">
+              <div key={i} className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0 odd:bg-surface even:bg-surface-sunken/25">
                 <input className="fiori-input" value={l.purpose} onChange={e => setLine(i, { purpose: e.target.value })} placeholder="e.g. Fuel for delivery vehicle" />
                 <input className="fiori-input" value={l.unit ?? ''} onChange={e => setLine(i, { unit: e.target.value })} placeholder="Ltr" />
                 <input className="fiori-input" type="number" value={l.qty ?? ''} onChange={e => setLine(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
@@ -208,7 +209,11 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
               </div>
             ))}
           </div>
-          <div className="mt-2 flex justify-end text-sm"><span className="text-ink-faint">Grand Total:&nbsp;</span><span className="font-semibold text-ink">{formatNumber(grandTotal, 2)} BDT</span></div>
+          <div className="mt-2 flex justify-end">
+            <span className="rounded-lg bg-brand-50 px-3 py-1.5 text-sm dark:bg-brand-500/15">
+              <span className="text-ink-soft">Grand Total:&nbsp;</span><span className="font-bold text-brand-700 dark:text-brand-300">{formatNumber(grandTotal, 2)} BDT</span>
+            </span>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
@@ -225,21 +230,18 @@ function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEd
   const [addingReceipt, setAddingReceipt] = useState(false)
   const receivedTotal = receipts.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0)
   const fullyReceived = receivedTotal >= Number(req.grand_total) - 0.004
-  const Stat = ({ label, value }: any) => (
-    <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
-  )
   return (
     <Modal open onClose={onClose} title={`Requisition — ${req.req_no}`} size="lg">
       <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
-          <Stat label="Date" value={formatDate(req.req_date)} />
-          <Stat label="Sent By" value={req.sender_name || '—'} />
-          <Stat label="Requested" value={`${formatNumber(req.grand_total, 2)} BDT`} />
-          <Stat label="Received" value={`${formatNumber(receivedTotal, 2)} BDT`} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard icon="calendar_month" label="Date" value={formatDate(req.req_date)} />
+          <StatCard icon="person" label="Sent By" value={req.sender_name || '—'} />
+          <StatCard icon="account_balance_wallet" label="Requested" value={`${formatNumber(req.grand_total, 2)} BDT`} />
+          <StatCard icon="payments" tone="ok" label="Received" value={`${formatNumber(receivedTotal, 2)} BDT`} />
         </div>
 
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Cost Purpose Lines</p>
+          <SectionHeader icon="list_alt" title="Cost Purpose Lines" />
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {lines.length === 0 ? <p className="p-3 text-sm text-ink-faint">No lines</p> :
               lines.map((l, i) => (
@@ -252,12 +254,10 @@ function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEd
         </div>
 
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Fund Received</p>
-            {canCreate && !addingReceipt && (fullyReceived
-              ? <span className="text-xs text-ink-faint">Fully received</span>
-              : <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingReceipt(true)}>Add Receipt</Button>)}
-          </div>
+          <SectionHeader icon="payments" tone="ok" title="Fund Received"
+            action={canCreate && !addingReceipt && (fullyReceived
+              ? <span className="text-xs font-medium text-ok">Fully received</span>
+              : <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingReceipt(true)}>Add Receipt</Button>)} />
           {addingReceipt && (
             <AddReceiptRow requisitionId={req.id} clientId={clientId} notify={notify}
               remaining={Number(req.grand_total) - receivedTotal}
@@ -274,7 +274,7 @@ function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEd
           </div>
         </div>
 
-        {req.remarks && <div><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Note</p><p className="text-sm text-ink-soft">{req.remarks}</p></div>}
+        {req.remarks && <div><SectionHeader icon="sticky_note_2" title="Note" /><p className="-mt-1 text-sm text-ink-soft">{req.remarks}</p></div>}
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>

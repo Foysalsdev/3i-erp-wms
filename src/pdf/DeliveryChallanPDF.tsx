@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
 import { downloadBlob, formatDate } from '@/lib/utils'
-import { pdfLayout, PdfFooter, LetterheadSlim, DocInfoBox } from './pdfLayout'
+import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
+import { pdfLayout, PdfFooter, LetterheadSlim, DocInfoBox, Barcode } from './pdfLayout'
 
 const s = StyleSheet.create({
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
@@ -52,14 +53,19 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
               <Text style={s.billSub}>Receiver: {challan.receiver_name || '-'}{challan.receiver_phone ? '  ·  ' + challan.receiver_phone : ''}</Text>
             </View>
           </View>
-          <DocInfoBox title="Delivery Challan" fields={[
-            { label: 'Challan No', value: challan.challan_no },
-            { label: 'Date', value: formatDate(challan.challan_date) },
-            { label: 'PO No', value: challan.po_no },
-            { label: 'Invoice No', value: challan.invoice_no },
-            { label: 'Dispatch Time', value: challan.dispatch_time },
-            { label: 'Delivery Mode', value: isCourier ? 'Courier' : 'Transport' }
-          ]} />
+          <View style={{ width: '44%' }}>
+            <DocInfoBox title="Delivery Challan" width="100%" fields={[
+              { label: 'Challan No', value: challan.challan_no },
+              { label: 'Date', value: formatDate(challan.challan_date) },
+              { label: 'PO No', value: challan.po_no },
+              { label: 'Invoice No', value: challan.invoice_no },
+              { label: 'Dispatch Time', value: challan.dispatch_time },
+              { label: 'Delivery Mode', value: isCourier ? 'Courier' : 'Transport' }
+            ]} />
+            <View style={{ marginTop: 8 }}>
+              <Barcode value={challan.challan_no} width={150} height={34} />
+            </View>
+          </View>
         </View>
 
         {/* Dispatch conditions, split into two labelled columns. */}
@@ -117,7 +123,7 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
           <Text style={{ width: '20%' }}></Text>
         </View>
 
-        <Text style={s.notes}>Notes: Acknowledgement receipt of Goods: Goods received in following described order and condition</Text>
+        <Text style={s.notes}>Notes: {challan.print_note || DEFAULT_CHALLAN_NOTE}</Text>
         <Text style={s.sign}>Receiver Sign with Seal &amp; Date..</Text>
         <View style={s.signRow}><Text>Security</Text><Text>Authorised By</Text></View>
 

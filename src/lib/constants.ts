@@ -93,3 +93,11 @@ export const MODULES: NavModule[] = [
 import { STOCK_CONDITIONS } from './conditions'
 export const STOCK_STATUS: Record<string, { label: string; tone: 'positive' | 'negative' | 'neutral' | 'info' | 'critical' }> =
   Object.fromEntries(Object.values(STOCK_CONDITIONS).map(c => [c.key, { label: c.label, tone: c.tone }]))
+
+// Default acknowledgement note printed on a Delivery Challan above the
+// receiver signature. Shown pre-filled in the challan form (editable, and the
+// user's last edit is remembered), and used as the fallback when a challan has
+// no saved note. Kept here (not in the PDF module) so the form can import it
+// without pulling @react-pdf/renderer into its bundle.
+export const DEFAULT_CHALLAN_NOTE =
+  'Acknowledgement receipt of Goods: Goods received in following described order and condition'

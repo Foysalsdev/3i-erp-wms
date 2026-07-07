@@ -1,4 +1,4 @@
-import { Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { Text, View, StyleSheet, Image, Svg, Rect } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
 
 // Shared building blocks for the app's "plain minimal document" PDF style —
@@ -93,6 +93,60 @@ export function LetterheadSlim() {
       </View>
       <View style={pdfLayout.hr} />
     </>
+  )
+}
+
+// --- Code 39 barcode --------------------------------------------------------
+// Dependency-free barcode drawn as react-pdf <Rect>s. Code 39 is chosen over
+// Code 128 because it needs no checksum and directly encodes the uppercase
+// letters, digits and hyphen that document numbers use (e.g. DC-0707260025) —
+// simple enough to implement inline yet scannable by any 1D reader.
+const CODE39: Record<string, string> = {
+  '0': 'nnnwwnwnn', '1': 'wnnwnnnnw', '2': 'nnwwnnnnw', '3': 'wnwwnnnnn',
+  '4': 'nnnwwnnnw', '5': 'wnnwwnnnn', '6': 'nnwwwnnnn', '7': 'nnnwnnwnw',
+  '8': 'wnnwnnwnn', '9': 'nnwwnnwnn',
+  'A': 'wnnnnwnnw', 'B': 'nnwnnwnnw', 'C': 'wnwnnwnnn', 'D': 'nnnnwwnnw',
+  'E': 'wnnnwwnnn', 'F': 'nnwnwwnnn', 'G': 'nnnnnwwnw', 'H': 'wnnnnwwnn',
+  'I': 'nnwnnwwnn', 'J': 'nnnnwwwnn', 'K': 'wnnnnnnww', 'L': 'nnwnnnnww',
+  'M': 'wnwnnnnwn', 'N': 'nnnnwnnww', 'O': 'wnnnwnnwn', 'P': 'nnwnwnnwn',
+  'Q': 'nnnnnnwww', 'R': 'wnnnnnwwn', 'S': 'nnwnnnwwn', 'T': 'nnnnwnwwn',
+  'U': 'wwnnnnnnw', 'V': 'nwwnnnnnw', 'W': 'wwwnnnnnn', 'X': 'nwnnwnnnw',
+  'Y': 'wwnnwnnnn', 'Z': 'nwwnwnnnn',
+  '-': 'nwnnnnwnw', '.': 'wwnnnnwnn', ' ': 'nwwnnnwnn', '*': 'nwnnwnwnn',
+  '$': 'nwnwnwnnn', '/': 'nwnwnnnwn', '+': 'nwnnnwnwn', '%': 'nnnwnwnwn'
+}
+
+function code39Rects(raw: string) {
+  const clean = (raw || '').toUpperCase().replace(/[^0-9A-Z\-. $/+%]/g, '')
+  const text = `*${clean}*` // Code 39 frames the data with a start/stop '*'
+  const NARROW = 1, WIDE = 3, GAP = 1
+  const rects: { x: number; w: number }[] = []
+  let x = 0
+  for (const ch of text) {
+    const pat = CODE39[ch]
+    if (!pat) continue
+    for (let i = 0; i < 9; i++) {
+      const w = pat[i] === 'w' ? WIDE : NARROW
+      if (i % 2 === 0) rects.push({ x, w }) // even element = bar, odd = space
+      x += w
+    }
+    x += GAP // narrow inter-character gap
+  }
+  return { rects, total: x }
+}
+
+export function Barcode({ value, width = 150, height = 32, showText = true }:
+  { value?: string; width?: number; height?: number; showText?: boolean }) {
+  const { rects, total } = code39Rects(value || '')
+  if (!rects.length || total === 0) return null
+  const barH = showText ? height - 9 : height
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <Svg width={width} height={barH} viewBox={`0 0 ${total} 100`}>
+        {rects.map((r, i) => <Rect key={i} x={r.x} y={0} width={r.w} height={100} fill="#000" />)}
+      </Svg>
+      {showText ? <Text style={{ fontSize: 7, marginTop: 2, letterSpacing: 1 }}>{value}</Text> : null}
+    </View>
   )
 }
 

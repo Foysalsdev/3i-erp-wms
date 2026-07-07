@@ -27,6 +27,8 @@ import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
 import { downloadChallanPdfFor } from './challanPdf'
 import { VehicleLoadingScan } from './VehicleLoadingScan'
+import { useRememberedField } from '@/hooks/useRememberedField'
+import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
@@ -259,8 +261,12 @@ function CnModal({ challan, notify, onClose, onDone }: any) {
 // PO are pulled in and locked, and the lines default to the still-pending qty.
 export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, transportVendors = [], couriers = [], clientId, notify, onClose, onDone }: any) {
   const profile = useAuth(s => s.profile)
+  // The printed acknowledgement note is always pre-filled and remembers the
+  // user's last edit across challans (per browser); an existing challan keeps
+  // the note it was saved with.
+  const [rememberedNote, rememberNote] = useRememberedField('print_note', DEFAULT_CHALLAN_NOTE, 'challan')
   // Prepared By defaults to whoever is logged in creating the challan.
-  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '' })
+  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '', print_note: rememberedNote })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -377,8 +383,11 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         dispatch_time: h.dispatch_time || null, prepared_by: h.prepared_by || null,
         receiver_name: h.receiver_name || null, receiver_phone: h.receiver_phone || null,
         unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null, ship_to_address: h.ship_to_address || null,
-        status: h.status || 'draft', remarks: h.remarks || null
+        status: h.status || 'draft', remarks: h.remarks || null,
+        print_note: (h.print_note ?? rememberedNote) || null
       }
+      // Remember this note as the default for the next challan.
+      if (h.print_note) rememberNote(h.print_note)
       let challanId = record?.id
       if (record) {
         const { error } = await supabase.from('delivery_challans').update(header as any).eq('id', record.id)
@@ -539,6 +548,11 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         )}
 
         <Field label="Remarks"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
+
+        <Field label="Printed Note (acknowledgement line on the challan)">
+          <Textarea value={h.print_note ?? rememberedNote} onChange={e => set({ print_note: e.target.value })}
+            placeholder={DEFAULT_CHALLAN_NOTE} className="min-h-[56px]" />
+        </Field>
 
         <LineItems rows={lines} onChange={setLines} products={products} locations={locations} variant="out" />
 

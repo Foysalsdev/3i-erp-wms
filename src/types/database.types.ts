@@ -989,6 +989,7 @@ export type Database = {
           remarks: string | null
           sales_order_id: string | null
           ship_to_address: string | null
+          print_note: string | null
           status: string
           total_qty: number
           transport_vendor: string | null
@@ -1027,6 +1028,7 @@ export type Database = {
           remarks?: string | null
           sales_order_id?: string | null
           ship_to_address?: string | null
+          print_note?: string | null
           status?: string
           total_qty?: number
           transport_vendor?: string | null
@@ -1065,6 +1067,7 @@ export type Database = {
           remarks?: string | null
           sales_order_id?: string | null
           ship_to_address?: string | null
+          print_note?: string | null
           status?: string
           total_qty?: number
           transport_vendor?: string | null

@@ -11,6 +11,7 @@ import { downloadMonthlyAdjustmentPDF } from '@/pdf/FinancePDF'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid
 } from 'recharts'
+import { SectionHeader, StatCard } from './components/FinanceUI'
 
 // Same fixed categorical order used on the main Dashboard (green/gold/orange/red/gray) —
 // kept identical here so color meaning stays consistent across the app.
@@ -175,13 +176,6 @@ export function MonthlyAdjustment() {
     refreshAdj()
   }
 
-  const Stat = ({ label, value, tone }: any) => (
-    <Card className="p-4">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p>
-      <p className={'mt-1 text-xl font-semibold ' + (tone === 'negative' ? 'text-bad' : 'text-ink')}>{value}</p>
-    </Card>
-  )
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -205,15 +199,15 @@ export function MonthlyAdjustment() {
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Balance B/D" value={`${formatNumber(openingBalance, 2)} BDT`} tone={openingBalance < 0 ? 'negative' : undefined} />
-        <Stat label="Fund Received (Month)" value={`${formatNumber(totalReceivedMonth, 2)} BDT`} />
-        <Stat label="Expense (Month)" value={`${formatNumber(totalExpenseMonth, 2)} BDT`} />
-        <Stat label="Balance C/D" value={`${formatNumber(closingBalance, 2)} BDT`} tone={closingBalance < 0 ? 'negative' : undefined} />
+        <StatCard icon="account_balance" tone={openingBalance < 0 ? 'bad' : 'brand'} label="Balance B/D" value={`${formatNumber(openingBalance, 2)} BDT`} />
+        <StatCard icon="payments" tone="ok" label="Fund Received (Month)" value={`${formatNumber(totalReceivedMonth, 2)} BDT`} />
+        <StatCard icon="shopping_cart" tone="bad" label="Expense (Month)" value={`${formatNumber(totalExpenseMonth, 2)} BDT`} />
+        <StatCard icon="account_balance_wallet" tone={closingBalance < 0 ? 'bad' : 'brand'} label="Balance C/D" value={`${formatNumber(closingBalance, 2)} BDT`} />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="flex min-h-0 flex-col overflow-hidden p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Fund Received — {monthLabel(period)}</p>
+          <SectionHeader icon="payments" tone="ok" title={`Fund Received — ${monthLabel(period)}`} />
           <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-line">
             {l1 ? <p className="p-3 text-sm text-ink-faint">Loading…</p> : monthReceipts.length === 0 ? <p className="p-3 text-sm text-ink-faint">No fund received this month</p> :
               monthReceipts.map((r, i) => (
@@ -226,10 +220,8 @@ export function MonthlyAdjustment() {
         </Card>
 
         <Card className="flex min-h-0 flex-col overflow-hidden p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Balance Adjustments — {monthLabel(period)}</p>
-            {canCreate && !addingAdjustment && <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingAdjustment(true)}>Add</Button>}
-          </div>
+          <SectionHeader icon="tune" title={`Balance Adjustments — ${monthLabel(period)}`}
+            action={canCreate && !addingAdjustment && <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingAdjustment(true)}>Add</Button>} />
           {addingAdjustment && (
             <AddBalanceAdjustmentRow clientId={currentClientId!} notify={notify}
               onDone={() => { setAddingAdjustment(false); refreshBalanceAdj() }} onCancel={() => setAddingAdjustment(false)} />
@@ -246,7 +238,7 @@ export function MonthlyAdjustment() {
         </Card>
 
         <Card className="flex min-h-0 flex-col overflow-hidden p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Category Summary — {monthLabel(period)}</p>
+          <SectionHeader icon="pie_chart" title={`Category Summary — ${monthLabel(period)}`} />
           <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-line">
             {categoryTotals.length === 0 ? <p className="p-3 text-sm text-ink-faint">No expense this month</p> :
               categoryTotals.map((c, i) => (
@@ -260,7 +252,7 @@ export function MonthlyAdjustment() {
       </div>
 
       <Card className="flex min-h-0 flex-col overflow-hidden p-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Expense Details — {monthLabel(period)}</p>
+        <SectionHeader icon="receipt_long" tone="bad" title={`Expense Details — ${monthLabel(period)}`} />
         <div className="max-h-72 overflow-y-auto rounded-xl border border-surface-line">
           {l2 ? <p className="p-3 text-sm text-ink-faint">Loading…</p> : monthExpenses.length === 0 ? <p className="p-3 text-sm text-ink-faint">No expenses this month</p> :
             monthExpenses.map((e, i) => (

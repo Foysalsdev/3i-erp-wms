@@ -18,6 +18,7 @@ import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
+import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SIGN_LABELS = 'Prepared By, Verified By, Approved By, Head Office'
@@ -210,18 +211,19 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
   return (
     <Modal open onClose={onClose} title={`${record ? 'Edit' : 'New'} Expense`} size="xl">
       <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Date" required><Input type="date" value={h.expense_date ?? ''} onChange={e => set({ expense_date: e.target.value })} /></Field>
-          <Field label="Category (also the bill's printed title)">
-            <CreatableCombobox items={catItems} value={h.category_id ?? ''} onChange={(id: string) => set({ category_id: id })}
-              onCreate={createCategory} noun="category" placeholder="e.g. Dinner Bill, Labour Bill, Accommodation Rent…" />
-          </Field>
-          <Field label="Payee"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Who was paid" /></Field>
-          <Field label="Description"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} /></Field>
-        </div>
+        <FinancePanel icon="receipt_long" title="Expense Details">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Date" required><Input type="date" value={h.expense_date ?? ''} onChange={e => set({ expense_date: e.target.value })} /></Field>
+            <Field label="Category (also the bill's printed title)">
+              <CreatableCombobox items={catItems} value={h.category_id ?? ''} onChange={(id: string) => set({ category_id: id })}
+                onCreate={createCategory} noun="category" placeholder="e.g. Dinner Bill, Labour Bill, Accommodation Rent…" />
+            </Field>
+            <Field label="Payee"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Who was paid" /></Field>
+            <Field label="Description"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} /></Field>
+          </div>
+        </FinancePanel>
 
-        <div className="rounded-xl border border-surface-line p-3">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Bill / Voucher print details</p>
+        <FinancePanel icon="edit_note" tone="warn" title="Bill / Voucher print details">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Bill Reference No"><Input value={h.bill_ref ?? ''} onChange={e => set({ bill_ref: e.target.value })} placeholder="e.g. WBL/30JUN/D-001" /></Field>
             <Field label="Less: Advance / Deduction (BDT)"><Input type="number" value={h.less_deduction ?? 0} onChange={e => set({ less_deduction: Number(e.target.value) || 0 })} /></Field>
@@ -233,19 +235,17 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
             <input type="checkbox" checked={!!h.show_line_signature} onChange={e => set({ show_line_signature: e.target.checked })} />
             Add a blank signature column per line (for multiple workers to sign individually)
           </label>
-        </div>
+        </FinancePanel>
 
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Bill Lines</p>
-            <Button size="sm" variant="secondary" icon="add" onClick={() => setBills(bs => [...bs, blankBill()])}>Add Line</Button>
-          </div>
+          <SectionHeader icon="view_list" title="Bill Lines"
+            action={<Button size="sm" variant="secondary" icon="add" onClick={() => setBills(bs => [...bs, blankBill()])}>Add Line</Button>} />
           <div className="overflow-hidden rounded-xl border border-surface-line">
-            <div className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] gap-2 border-b border-surface-line bg-surface-sunken/60 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+            <div className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] gap-2 border-b border-surface-line bg-surface-sunken px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
               <span>Particulars *</span><span>Unit</span><span>Qty</span><span>Rate</span><span>Remarks</span><span className="text-right">Amount (BDT) *</span><span />
             </div>
             {bills.map((b, i) => (
-              <div key={i} className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0">
+              <div key={i} className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0 odd:bg-surface even:bg-surface-sunken/25">
                 <input className="fiori-input" value={b.bill_ref ?? ''} onChange={e => setBill(i, { bill_ref: e.target.value })} placeholder="e.g. Dinner for all staff" />
                 <input className="fiori-input" value={b.unit ?? ''} onChange={e => setBill(i, { unit: e.target.value })} placeholder="Person" />
                 <input className="fiori-input" type="number" value={b.qty ?? ''} onChange={e => setBill(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
@@ -258,9 +258,9 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
               </div>
             ))}
           </div>
-          <div className="mt-2 flex justify-end gap-6 text-sm">
-            <span><span className="text-ink-faint">Total:&nbsp;</span><span className="font-semibold text-ink">{formatNumber(total, 2)}</span></span>
-            <span><span className="text-ink-faint">Net (after deduction):&nbsp;</span><span className="font-semibold text-ink">{formatNumber(net, 2)} BDT</span></span>
+          <div className="mt-2 flex justify-end gap-2 text-sm">
+            <span className="rounded-lg bg-surface-sunken px-3 py-1.5"><span className="text-ink-faint">Total:&nbsp;</span><span className="font-semibold text-ink">{formatNumber(total, 2)}</span></span>
+            <span className="rounded-lg bg-brand-50 px-3 py-1.5 dark:bg-brand-500/15"><span className="text-ink-soft">Net (after deduction):&nbsp;</span><span className="font-bold text-brand-700 dark:text-brand-300">{formatNumber(net, 2)} BDT</span></span>
           </div>
         </div>
 
@@ -275,23 +275,20 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
 
 function ExpenseOverview({ exp, catName, canEdit, onEdit, onPrintBill, onClose }: any) {
   const bills: any[] = exp.__bills ?? []
-  const Stat = ({ label, value }: any) => (
-    <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
-  )
   return (
     <Modal open onClose={onClose} title="Expense Detail" size="lg">
       <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
-          <Stat label="Date" value={formatDate(exp.expense_date)} />
-          <Stat label="Category / Bill" value={catName} />
-          <Stat label="Payee" value={exp.payee_name || '—'} />
-          <Stat label="Bill Ref" value={exp.bill_ref || '—'} />
-          <Stat label="Amount" value={`${formatNumber(exp.amount, 2)} BDT`} />
-          <Stat label="Net (after deduction)" value={`${formatNumber((Number(exp.amount) || 0) - (Number(exp.less_deduction) || 0), 2)} BDT`} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatCard icon="calendar_month" label="Date" value={formatDate(exp.expense_date)} />
+          <StatCard icon="sell" label="Category / Bill" value={catName} />
+          <StatCard icon="person" label="Payee" value={exp.payee_name || '—'} />
+          <StatCard icon="tag" label="Bill Ref" value={exp.bill_ref || '—'} />
+          <StatCard icon="payments" tone="bad" label="Amount" value={`${formatNumber(exp.amount, 2)} BDT`} />
+          <StatCard icon="account_balance_wallet" tone="bad" label="Net (after deduction)" value={`${formatNumber((Number(exp.amount) || 0) - (Number(exp.less_deduction) || 0), 2)} BDT`} />
         </div>
-        {exp.description && <div><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Description</p><p className="text-sm text-ink-soft">{exp.description}</p></div>}
+        {exp.description && <div><SectionHeader icon="notes" title="Description" /><p className="-mt-1 text-sm text-ink-soft">{exp.description}</p></div>}
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Bill Lines</p>
+          <SectionHeader icon="view_list" title="Bill Lines" />
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {bills.length === 0 ? <p className="p-3 text-sm text-ink-faint">No bill lines</p> :
               bills.map((b, i) => (

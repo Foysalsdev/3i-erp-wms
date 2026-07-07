@@ -210,7 +210,6 @@ function AdminDashboard() {
           <OpTile icon="shopping_cart_checkout" label="Pending Picking" value={ops.picking ?? 0} to="/outbound/picking" alert={(ops.picking ?? 0) > 0} />
           <OpTile icon="local_shipping" label="Pending Dispatch" value={ops.dispatch ?? 0} to="/outbound/dispatch" alert={(ops.dispatch ?? 0) > 0} />
           <OpTile icon="assignment" label="Open Transport Requests" value={ops['transport-request'] ?? 0} to="/transport/transport-request" alert={(ops['transport-request'] ?? 0) > 0} />
-          <OpTile icon="receipt_long" label="Pending Billing" value={ops['customer-billing'] ?? 0} to="/finance/customer-billing" alert={(ops['customer-billing'] ?? 0) > 0} />
         </div>
       </div>
     ),

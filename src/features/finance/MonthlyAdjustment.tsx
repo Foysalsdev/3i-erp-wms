@@ -15,6 +15,7 @@ import {
 // Same fixed categorical order used on the main Dashboard (green/gold/orange/red/gray) —
 // kept identical here so color meaning stays consistent across the app.
 const CAT_COLORS = ['#16a34a', '#f2a900', '#ea7a0c', '#dc2626', '#8c8f94']
+const OTHER_COLOR = '#64748b' // distinct from all 5 above — "Other" must never repeat a top category's color
 const MAX_SERIES = 5 // top categories get their own color; the rest fold into "Other"
 const TREND_MONTHS = 6
 
@@ -48,7 +49,11 @@ export function MonthlyAdjustment() {
   const { data: adjustments, refresh: refreshAdj } = useCollection('finance_monthly_adjustments', { order: 'year' })
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
-  const canEdit = can('finance.create') || can('finance.edit')
+  // Marking a month submitted is an insert the first time (needs
+  // finance.create) and an update on every re-submit after that (needs
+  // finance.edit) — matched below against whether a snapshot already exists.
+  const canCreate = can('finance.create')
+  const canEdit = can('finance.edit')
   const [period, setPeriod] = useState(thisMonth())
   const [submitting, setSubmitting] = useState(false)
 
@@ -78,6 +83,15 @@ export function MonthlyAdjustment() {
   }, [monthExpenses, categories])
 
   const existing = (adjustments as any[]).find(a => a.year === year && a.month === month)
+  // Submitting only snapshots the figures at that moment — it doesn't lock
+  // the underlying receipts/expenses, so a later edit can silently diverge
+  // from what was already sent to Head Office. Surface that instead of
+  // hiding it behind an always-live recompute.
+  const submittedDrift = !!existing?.submitted_at && (
+    Math.abs(Number(existing.total_fund_received) - totalReceivedMonth) > 0.01 ||
+    Math.abs(Number(existing.total_expense) - totalExpenseMonth) > 0.01 ||
+    Math.abs(Number(existing.closing_balance) - closingBalance) > 0.01
+  )
 
   const trendMonths = useMemo(() => lastNMonths(TREND_MONTHS), [])
 
@@ -161,12 +175,23 @@ export function MonthlyAdjustment() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <input type="month" className="fiori-input w-48" value={period} onChange={e => setPeriod(e.target.value)} />
-        {existing?.submitted_at && <Badge tone="positive">Submitted {formatDateTime(existing.submitted_at)}</Badge>}
+        {existing?.submitted_at && (
+          <Badge tone={submittedDrift ? 'critical' : 'positive'}>
+            Submitted {formatDateTime(existing.submitted_at)}{submittedDrift ? ' · figures changed since' : ''}
+          </Badge>
+        )}
         <div className="ml-auto flex gap-2">
           <Button variant="secondary" icon="picture_as_pdf" onClick={exportPDF}>Export PDF</Button>
-          {canEdit && <Button icon="task_alt" loading={submitting} onClick={markSubmitted}>{existing?.submitted_at ? 'Re-submit' : 'Mark Submitted'}</Button>}
+          {(existing ? canEdit : canCreate) && <Button icon="task_alt" loading={submitting} onClick={markSubmitted}>{existing?.submitted_at ? 'Re-submit' : 'Mark Submitted'}</Button>}
         </div>
       </div>
+      {submittedDrift && (
+        <p className="rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">
+          This month's receipts/expenses were edited after it was submitted — the figures shown no longer match what was sent to Head Office
+          (submitted: {formatNumber(existing.total_fund_received, 2)} received / {formatNumber(existing.total_expense, 2)} expense / {formatNumber(existing.closing_balance, 2)} C/D).
+          Re-submit to send the corrected figures.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Balance B/D" value={`${formatNumber(openingBalance, 2)} BDT`} tone={openingBalance < 0 ? 'negative' : undefined} />
@@ -249,7 +274,7 @@ export function MonthlyAdjustment() {
                   <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {topCats.map((cat, i) => (
-                    <Bar key={cat} dataKey={cat} stackId="exp" fill={CAT_COLORS[i % CAT_COLORS.length]} radius={i === topCats.length - 1 ? [4, 4, 0, 0] : undefined} maxBarSize={48} />
+                    <Bar key={cat} dataKey={cat} stackId="exp" fill={cat === 'Other' ? OTHER_COLOR : CAT_COLORS[i]} radius={i === topCats.length - 1 ? [4, 4, 0, 0] : undefined} maxBarSize={48} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>

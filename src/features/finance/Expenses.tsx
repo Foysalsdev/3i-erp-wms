@@ -29,7 +29,11 @@ export function Expenses() {
   const { data: categories, refresh: refreshCategories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { currentClientId, can, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
-  const canEdit = can('finance.create') || can('finance.edit')
+  // Split by DB operation: RLS requires finance.create for new expenses and
+  // finance.edit for updates — a role with only one shouldn't be shown the
+  // action that will fail.
+  const canCreate = can('finance.create')
+  const canEdit = can('finance.edit')
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
@@ -114,7 +118,7 @@ export function Expenses() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search payee, description, category…" /></div>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
-        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Expense</Button>}
+        {canCreate && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Expense</Button>}
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">

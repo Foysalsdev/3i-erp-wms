@@ -4,7 +4,8 @@ import { pdfLayout, PdfFooter, LetterheadSlim, DocInfoBox } from './pdfLayout'
 
 const s = StyleSheet.create({
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  billTo: { width: '52%' },
+  parties: { width: '52%' },
+  partyBox: { marginBottom: 8 },
   cap: { fontSize: 8, color: '#555', marginBottom: 3 },
   billName: { fontSize: 11, fontWeight: 'bold' },
   billSub: { fontSize: 8.5, color: '#3a3a3a', marginTop: 2 },
@@ -34,14 +35,22 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
       <Page size="A4" style={pdfLayout.page}>
         <LetterheadSlim />
 
-        {/* Recipient (Bill To) on the left, the bordered document box on the right. */}
+        {/* Bill-To (billing party) and Ship-To (delivery destination) on the
+            left — the two can differ (bill HQ, ship to a branch) — with the
+            bordered document box on the right. */}
         <View style={s.billRow}>
-          <View style={s.billTo}>
-            <Text style={s.cap}>BILL TO</Text>
-            <Text style={s.billName}>{customerName}</Text>
-            {challan.bill_to_address ? <Text style={s.billSub}>{challan.bill_to_address}</Text> : null}
-            <Text style={s.billSub}>Receiver: {challan.receiver_name || '-'}{challan.receiver_phone ? '  ·  ' + challan.receiver_phone : ''}</Text>
-            <Text style={s.billSub}>Unloading Point: {challan.unloading_point || '-'}</Text>
+          <View style={s.parties}>
+            <View style={s.partyBox}>
+              <Text style={s.cap}>BILL TO</Text>
+              <Text style={s.billName}>{customerName}</Text>
+              {challan.bill_to_address ? <Text style={s.billSub}>{challan.bill_to_address}</Text> : null}
+            </View>
+            <View style={s.partyBox}>
+              <Text style={s.cap}>SHIP TO</Text>
+              <Text style={s.billSub}>{challan.ship_to_address || challan.bill_to_address || '-'}</Text>
+              {challan.unloading_point ? <Text style={s.billSub}>Unloading Point: {challan.unloading_point}</Text> : null}
+              <Text style={s.billSub}>Receiver: {challan.receiver_name || '-'}{challan.receiver_phone ? '  ·  ' + challan.receiver_phone : ''}</Text>
+            </View>
           </View>
           <DocInfoBox title="Delivery Challan" fields={[
             { label: 'Challan No', value: challan.challan_no },

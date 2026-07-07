@@ -988,6 +988,7 @@ export type Database = {
           receiver_phone: string | null
           remarks: string | null
           sales_order_id: string | null
+          ship_to_address: string | null
           status: string
           total_qty: number
           transport_vendor: string | null
@@ -1025,6 +1026,7 @@ export type Database = {
           receiver_phone?: string | null
           remarks?: string | null
           sales_order_id?: string | null
+          ship_to_address?: string | null
           status?: string
           total_qty?: number
           transport_vendor?: string | null
@@ -1062,6 +1064,7 @@ export type Database = {
           receiver_phone?: string | null
           remarks?: string | null
           sales_order_id?: string | null
+          ship_to_address?: string | null
           status?: string
           total_qty?: number
           transport_vendor?: string | null

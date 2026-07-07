@@ -316,7 +316,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     const cust = customers.find((c: any) => c.id === so.customer_id)
     setH((x: any) => ({ ...x, sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
       po_no: so.reference_no || x.po_no, invoice_no: so.billing_doc_no || so.invoice_no || x.invoice_no,
-      bill_to_address: x.bill_to_address || cust?.billing_address || '' }))
+      bill_to_address: x.bill_to_address || cust?.billing_address || '',
+      ship_to_address: x.ship_to_address || cust?.shipping_address || '' }))
     setLines((items ?? []).map((it: any) => ({
       product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
       unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id,
@@ -375,7 +376,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         // optional extras
         dispatch_time: h.dispatch_time || null, prepared_by: h.prepared_by || null,
         receiver_name: h.receiver_name || null, receiver_phone: h.receiver_phone || null,
-        unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null,
+        unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null, ship_to_address: h.ship_to_address || null,
         status: h.status || 'draft', remarks: h.remarks || null
       }
       let challanId = record?.id
@@ -434,7 +435,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             </Field>
             <Field label="Customer" required>
               <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''}
-                onChange={(id: string) => set({ customer_id: id, bill_to_address: customers.find((c: any) => c.id === id)?.billing_address || '' })}
+                onChange={(id: string) => { const c = customers.find((x: any) => x.id === id); set({ customer_id: id, bill_to_address: c?.billing_address || '', ship_to_address: c?.shipping_address || '' }) }}
                 placeholder="Search customer by code or name" />
             </Field>
             <Field label="Warehouse" required>
@@ -530,6 +531,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             <Field label="Unloading Point"><Input value={h.unloading_point ?? ''} onChange={e => set({ unloading_point: e.target.value })} /></Field>
             <Field label="Bill-To Address" className="sm:col-span-2">
               <Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} placeholder="Auto-filled from customer master — edit if this delivery differs" />
+            </Field>
+            <Field label="Ship-To Address" className="sm:col-span-2">
+              <Input value={h.ship_to_address ?? ''} onChange={e => set({ ship_to_address: e.target.value })} placeholder="Where goods are delivered — auto-filled from customer, edit if different from billing" />
             </Field>
           </div>
         )}

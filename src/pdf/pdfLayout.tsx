@@ -56,8 +56,11 @@ export function PdfFooter({ render }: { render?: (info: { pageNumber: number; to
 // the right beside the recipient's Bill-To block — the layout that reads as
 // machine-produced rather than a hand-made voucher.
 const dib = StyleSheet.create({
-  slim: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  sender: { fontSize: 7.5, color: '#555', width: '58%', marginTop: 22 },
+  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
+  headLeft: { width: '62%' },
+  headName: { fontSize: 13, fontWeight: 'bold' },
+  headAddr: { fontSize: 8.5, color: '#3a3a3a', marginTop: 1 },
+  headContact: { fontSize: 8, color: '#555', marginTop: 2 },
   box: { borderWidth: 0.8, borderColor: '#333' },
   boxTitleBar: { paddingVertical: 5, paddingHorizontal: 7, borderBottomWidth: 0.8, borderBottomColor: '#333', backgroundColor: '#f2f2f0' },
   boxTitle: { fontSize: 12, fontWeight: 'bold' },
@@ -70,15 +73,26 @@ const dib = StyleSheet.create({
 
 export interface DocField { label: string; value?: string }
 
-// Logo top-right with the company's own address as a slim "from" line.
+// Full letterhead: company name + address block on the left, logo on the
+// right. Name and each address line print on their own line (not crammed
+// onto one), and the logo comes from Settings → Company (falling back to the
+// bundled Whirlpool mark).
 export function LetterheadSlim() {
   const company = getCompanyInfo()
-  const sender = [company.name, (company.address || '').split('\n').filter(Boolean).join(', ')].filter(Boolean).join(' · ')
+  const addrLines = (company.address || '').split('\n').map(l => l.trim()).filter(Boolean)
+  const contact = [company.phone, company.email, company.website].filter(Boolean).join('   ·   ')
   return (
-    <View style={dib.slim}>
-      <Text style={dib.sender}>{sender}</Text>
-      <Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 118, height: 39 }} />
-    </View>
+    <>
+      <View style={dib.head}>
+        <View style={dib.headLeft}>
+          <Text style={dib.headName}>{company.name}</Text>
+          {addrLines.map((l, i) => <Text key={i} style={dib.headAddr}>{l}</Text>)}
+          {contact ? <Text style={dib.headContact}>{contact}</Text> : null}
+        </View>
+        <Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 118, height: 39 }} />
+      </View>
+      <View style={pdfLayout.hr} />
+    </>
   )
 }
 

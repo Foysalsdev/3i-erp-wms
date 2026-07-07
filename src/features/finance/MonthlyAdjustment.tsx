@@ -23,6 +23,7 @@ const TREND_MONTHS = 6
 // since that converts to UTC and shifts the date for any UTC+ timezone
 // (e.g. Asia/Dhaka, UTC+6), silently dropping month-end transactions.
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+const today = () => new Date().toISOString().slice(0, 10)
 const monthLabel = (ym: string) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 const monthShortLabel = (ym: string) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
 const inMonth = (dateStr: string, ym: string) => (dateStr ?? '').slice(0, 7) === ym
@@ -47,6 +48,7 @@ export function MonthlyAdjustment() {
   const { data: expenses, loading: l2 } = useCollection('finance_expenses', { order: 'expense_date' })
   const { data: categories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { data: adjustments, refresh: refreshAdj } = useCollection('finance_monthly_adjustments', { order: 'year' })
+  const { data: balanceAdjustments, refresh: refreshBalanceAdj } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   // Marking a month submitted is an insert the first time (needs
@@ -56,25 +58,32 @@ export function MonthlyAdjustment() {
   const canEdit = can('finance.edit')
   const [period, setPeriod] = useState(thisMonth())
   const [submitting, setSubmitting] = useState(false)
+  const [addingAdjustment, setAddingAdjustment] = useState(false)
 
   const catName = (id: string) => (categories as any[]).find(c => c.id === id)?.name ?? 'Uncategorized'
   const [year, month] = period.split('-').map(Number)
 
   const monthReceipts = useMemo(() => (receipts as any[]).filter(r => inMonth(r.receipt_date, period)), [receipts, period])
   const monthExpenses = useMemo(() => (expenses as any[]).filter(e => inMonth(e.expense_date, period)), [expenses, period])
+  const monthBalanceAdjustments = useMemo(() => (balanceAdjustments as any[]).filter(a => inMonth(a.adjustment_date, period)), [balanceAdjustments, period])
   const totalReceivedMonth = monthReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   const totalExpenseMonth = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  const totalAdjustmentMonth = monthBalanceAdjustments.reduce((s, a) => s + (Number(a.amount) || 0), 0)
 
   // Ledger-style carry-forward: this month's opening balance (B/D, "brought
   // down") is everything up to the end of the previous month; the closing
   // balance (C/D, "carried down") becomes next month's B/D automatically,
-  // since it's the same all-time cumulative figure one month later.
+  // since it's the same all-time cumulative figure one month later. Manual
+  // balance adjustments (seeding a starting balance carried from before this
+  // system was used, or a one-off correction) fold into the same running
+  // total alongside real receipts/expenses.
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year
   const prevMonthEndDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${lastDayOfMonth(prevYear, prevMonth)}`
   const openingBalance = (receipts as any[]).filter(r => r.receipt_date <= prevMonthEndDate).reduce((s, r) => s + (Number(r.amount) || 0), 0)
     - (expenses as any[]).filter(e => e.expense_date <= prevMonthEndDate).reduce((s, e) => s + (Number(e.amount) || 0), 0)
-  const closingBalance = openingBalance + totalReceivedMonth - totalExpenseMonth
+    + (balanceAdjustments as any[]).filter(a => a.adjustment_date <= prevMonthEndDate).reduce((s, a) => s + (Number(a.amount) || 0), 0)
+  const closingBalance = openingBalance + totalReceivedMonth - totalExpenseMonth + totalAdjustmentMonth
 
   const categoryTotals = useMemo(() => {
     const m = new Map<string, number>()
@@ -103,9 +112,10 @@ export function MonthlyAdjustment() {
       const cutoff = `${y}-${String(m).padStart(2, '0')}-${lastDayOfMonth(y, m)}`
       const received = (receipts as any[]).filter(r => r.receipt_date <= cutoff).reduce((s, r) => s + (Number(r.amount) || 0), 0)
       const spent = (expenses as any[]).filter(e => e.expense_date <= cutoff).reduce((s, e) => s + (Number(e.amount) || 0), 0)
-      return { label: monthShortLabel(ym), balance: received - spent }
+      const adjusted = (balanceAdjustments as any[]).filter(a => a.adjustment_date <= cutoff).reduce((s, a) => s + (Number(a.amount) || 0), 0)
+      return { label: monthShortLabel(ym), balance: received - spent + adjusted }
     })
-  }, [trendMonths, receipts, expenses])
+  }, [trendMonths, receipts, expenses, balanceAdjustments])
 
   // Top categories by spend within the trend window; the rest fold into "Other".
   const { topCats, categoryTrend } = useMemo(() => {
@@ -141,6 +151,7 @@ export function MonthlyAdjustment() {
         receipts: monthReceipts.map(r => ({ date: formatDate(r.receipt_date), amount: Number(r.amount) || 0 })),
         expenses: monthExpenses.map(e => ({ date: formatDate(e.expense_date), category: catName(e.category_id), payee: e.payee_name, description: e.description, amount: Number(e.amount) || 0 })),
         categoryTotals,
+        balanceAdjustments: monthBalanceAdjustments.map((a: any) => ({ date: formatDate(a.adjustment_date), amount: Number(a.amount) || 0, remarks: a.remarks })),
         openingBalance, totalReceived: totalReceivedMonth, totalExpense: totalExpenseMonth, closingBalance
       })
     } catch (e: any) {
@@ -200,7 +211,7 @@ export function MonthlyAdjustment() {
         <Stat label="Balance C/D" value={`${formatNumber(closingBalance, 2)} BDT`} tone={closingBalance < 0 ? 'negative' : undefined} />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="flex min-h-0 flex-col overflow-hidden p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Fund Received — {monthLabel(period)}</p>
           <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-line">
@@ -209,6 +220,26 @@ export function MonthlyAdjustment() {
                 <div key={r.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="text-ink">{formatDate(r.receipt_date)}</span>
                   <span className="font-semibold text-ink">{formatNumber(r.amount, 2)}</span>
+                </div>
+              ))}
+          </div>
+        </Card>
+
+        <Card className="flex min-h-0 flex-col overflow-hidden p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Balance Adjustments — {monthLabel(period)}</p>
+            {canCreate && !addingAdjustment && <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingAdjustment(true)}>Add</Button>}
+          </div>
+          {addingAdjustment && (
+            <AddBalanceAdjustmentRow clientId={currentClientId!} notify={notify}
+              onDone={() => { setAddingAdjustment(false); refreshBalanceAdj() }} onCancel={() => setAddingAdjustment(false)} />
+          )}
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-line">
+            {monthBalanceAdjustments.length === 0 && !addingAdjustment ? <p className="p-3 text-sm text-ink-faint">No adjustments this month</p> :
+              monthBalanceAdjustments.map((a: any, i: number) => (
+                <div key={a.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                  <span className="text-ink">{formatDate(a.adjustment_date)}{a.remarks ? <span className="text-ink-faint"> · {a.remarks}</span> : null}</span>
+                  <span className={'font-semibold ' + (Number(a.amount) < 0 ? 'text-bad' : 'text-ink')}>{Number(a.amount) > 0 ? '+' : ''}{formatNumber(a.amount, 2)}</span>
                 </div>
               ))}
           </div>
@@ -282,6 +313,43 @@ export function MonthlyAdjustment() {
           </div>
         </Card>
       </div>
+    </div>
+  )
+}
+
+// A signed manual correction to the running balance — most commonly used
+// once, to seed the opening balance this system inherited from whatever
+// tracking (Excel, paper) was used before it, but also available for any
+// later one-off correction (a bank charge, a rounding fix) that isn't a
+// real fund receipt or expense.
+function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel }: any) {
+  const [date, setDate] = useState(today())
+  const [amount, setAmount] = useState('')
+  const [remarks, setRemarks] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    if (!Number(amount)) { notify('error', 'Enter an adjustment amount (positive to add, negative to subtract)'); return }
+    setSaving(true)
+    const { error } = await supabase.from('finance_balance_adjustments').insert({
+      client_id: clientId, adjustment_date: date, amount: Number(amount), remarks: remarks || null
+    })
+    setSaving(false)
+    if (error) { notify('error', error.message); return }
+    notify('success', 'Balance adjustment recorded')
+    onDone()
+  }
+
+  return (
+    <div className="mb-2 rounded-lg border border-surface-line bg-surface-sunken/40 p-2">
+      <div className="grid grid-cols-[130px_110px_1fr_auto_auto] items-center gap-2">
+        <input className="fiori-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <input className="fiori-input" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="+/- Amount" />
+        <input className="fiori-input" value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="e.g. Opening balance carried from manual records" />
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" loading={saving} onClick={save}>Save</Button>
+      </div>
+      <p className="mt-1.5 text-xs text-ink-faint">Positive adds to the balance, negative subtracts. Dated on or before this month, it also carries into every later month's B/D.</p>
     </div>
   )
 }

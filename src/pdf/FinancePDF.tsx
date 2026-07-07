@@ -94,7 +94,7 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
           <Text style={[pdfLayout.th, { width: '34%' }]}>Purpose</Text>
           <Text style={[pdfLayout.th, { width: '12%' }]}>Unit</Text>
           <Text style={[pdfLayout.th, { width: '10%', textAlign: 'right' }]}>Qty</Text>
-          <Text style={[pdfLayout.th, { width: '20%' }]}>Remarks</Text>
+          <Text style={[pdfLayout.th, { width: '20%' }]}>Note</Text>
           <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right' }]}>Amount</Text>
         </View>
         {lines.map((l, i) => (
@@ -204,12 +204,14 @@ export async function downloadBillVoucherPDF(opts: BillVoucherOpts) {
 export interface AdjustmentReceipt { date: string; amount: number }
 export interface AdjustmentExpense { date: string; category: string; payee?: string; description?: string; amount: number }
 export interface AdjustmentCategoryTotal { category: string; amount: number }
+export interface AdjustmentBalanceAdjustment { date: string; amount: number; remarks?: string }
 
 export interface AdjustmentOpts {
   period: string
   receipts: AdjustmentReceipt[]
   expenses: AdjustmentExpense[]
   categoryTotals: AdjustmentCategoryTotal[]
+  balanceAdjustments: AdjustmentBalanceAdjustment[]
   openingBalance: number
   totalReceived: number
   totalExpense: number
@@ -243,6 +245,24 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
             <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{money(r.amount)}</Text>
           </View>
         ))}
+
+        {o.balanceAdjustments.length > 0 && (
+          <>
+            <Text style={s.sectionLabel}>Balance Adjustments</Text>
+            <View style={pdfLayout.tHead}>
+              <Text style={[pdfLayout.th, { width: '20%' }]}>Date</Text>
+              <Text style={[pdfLayout.th, { width: '50%' }]}>Note</Text>
+              <Text style={[pdfLayout.th, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
+            </View>
+            {o.balanceAdjustments.map((a, i) => (
+              <View key={i} style={pdfLayout.tr}>
+                <Text style={[pdfLayout.td, { width: '20%' }]}>{a.date}</Text>
+                <Text style={[pdfLayout.td, { width: '50%' }]}>{a.remarks || '-'}</Text>
+                <Text style={[pdfLayout.td, { width: '30%', textAlign: 'right', borderRightWidth: 0 }]}>{a.amount > 0 ? '+' : ''}{money(a.amount)}</Text>
+              </View>
+            ))}
+          </>
+        )}
 
         <Text style={s.sectionLabel}>Expense Details</Text>
         <View style={pdfLayout.tHead}>

@@ -1647,6 +1647,47 @@ export type Database = {
           },
         ]
       }
+      finance_balance_adjustments: {
+        Row: {
+          adjustment_date: string
+          amount: number
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          remarks: string | null
+          updated_at: string
+        }
+        Insert: {
+          adjustment_date?: string
+          amount?: number
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          remarks?: string | null
+          updated_at?: string
+        }
+        Update: {
+          adjustment_date?: string
+          amount?: number
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          remarks?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_balance_adjustments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_expense_bills: {
         Row: {
           amount: number

@@ -59,7 +59,7 @@ export function Requisitions() {
           { label: 'Requisition No', value: r.req_no },
           { label: 'Date', value: formatDate(r.req_date) },
           { label: 'Sent By', value: r.sender_name || '' },
-          ...(r.remarks ? [{ label: 'Remarks', value: r.remarks }] : [])
+          ...(r.remarks ? [{ label: 'Note', value: r.remarks }] : [])
         ],
         lines: lines.map((l: any) => ({ purpose: l.purpose, unit: l.unit, qty: l.qty ? Number(l.qty) : undefined, remarks: l.remarks, amount: Number(l.amount) || 0 })),
         grandTotal: Number(r.grand_total) || 0
@@ -183,7 +183,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date" required><Input type="date" value={h.req_date ?? ''} onChange={e => set({ req_date: e.target.value })} /></Field>
           <Field label="Sent By"><Input value={h.sender_name ?? ''} onChange={e => set({ sender_name: e.target.value })} placeholder="Deputy Manager name" /></Field>
-          <Field label="Remarks" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
+          <Field label="Note" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
         </div>
 
         <div>
@@ -193,7 +193,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
           </div>
           <div className="overflow-hidden rounded-xl border border-surface-line">
             <div className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] gap-2 border-b border-surface-line bg-surface-sunken/60 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
-              <span>Purpose *</span><span>Unit</span><span>Qty</span><span>Remarks</span><span className="text-right">Amount (BDT) *</span><span />
+              <span>Purpose *</span><span>Unit</span><span>Qty</span><span>Note</span><span className="text-right">Amount (BDT) *</span><span />
             </div>
             {lines.map((l, i) => (
               <div key={i} className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0">
@@ -274,7 +274,7 @@ function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEd
           </div>
         </div>
 
-        {req.remarks && <div><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Remarks</p><p className="text-sm text-ink-soft">{req.remarks}</p></div>}
+        {req.remarks && <div><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Note</p><p className="text-sm text-ink-soft">{req.remarks}</p></div>}
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>

@@ -221,6 +221,7 @@ function ReqOverview({ req, receipts, clientId, canEdit, notify, onEdit, onPrint
   const lines: any[] = req.__lines ?? []
   const [addingReceipt, setAddingReceipt] = useState(false)
   const receivedTotal = receipts.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0)
+  const fullyReceived = receivedTotal >= Number(req.grand_total) - 0.004
   const Stat = ({ label, value }: any) => (
     <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
   )
@@ -250,10 +251,13 @@ function ReqOverview({ req, receipts, clientId, canEdit, notify, onEdit, onPrint
         <div>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Fund Received</p>
-            {canEdit && !addingReceipt && <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingReceipt(true)}>Add Receipt</Button>}
+            {canEdit && !addingReceipt && (fullyReceived
+              ? <span className="text-xs text-ink-faint">Fully received</span>
+              : <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingReceipt(true)}>Add Receipt</Button>)}
           </div>
           {addingReceipt && (
             <AddReceiptRow requisitionId={req.id} clientId={clientId} notify={notify}
+              remaining={Number(req.grand_total) - receivedTotal}
               onDone={() => { setAddingReceipt(false); onReceiptAdded() }} onCancel={() => setAddingReceipt(false)} />
           )}
           <div className="overflow-hidden rounded-xl border border-surface-line">
@@ -279,7 +283,7 @@ function ReqOverview({ req, receipts, clientId, canEdit, notify, onEdit, onPrint
   )
 }
 
-function AddReceiptRow({ requisitionId, clientId, notify, onDone, onCancel }: any) {
+function AddReceiptRow({ requisitionId, clientId, notify, remaining, onDone, onCancel }: any) {
   const [date, setDate] = useState(today())
   const [amount, setAmount] = useState('')
   const [remarks, setRemarks] = useState('')
@@ -287,6 +291,9 @@ function AddReceiptRow({ requisitionId, clientId, notify, onDone, onCancel }: an
 
   const save = async () => {
     if (!Number(amount)) { notify('error', 'Enter a receipt amount'); return }
+    // A requisition can't receive more than it asked for — the balance
+    // stays with 3i Logistics, it doesn't roll into a new requisition here.
+    if (Number(amount) > remaining + 0.004) { notify('error', `Cannot exceed the requisition's remaining amount (${formatNumber(remaining, 2)} BDT)`); return }
     setSaving(true)
     const { error } = await supabase.from('finance_fund_receipts').insert({
       client_id: clientId, requisition_id: requisitionId, receipt_date: date, amount: Number(amount), remarks: remarks || null
@@ -298,12 +305,15 @@ function AddReceiptRow({ requisitionId, clientId, notify, onDone, onCancel }: an
   }
 
   return (
-    <div className="mb-2 grid grid-cols-[130px_120px_1fr_auto_auto] items-center gap-2 rounded-lg border border-surface-line bg-surface-sunken/40 p-2">
-      <input className="fiori-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
-      <input className="fiori-input" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount" />
-      <input className="fiori-input" value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Remarks (optional)" />
-      <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
-      <Button size="sm" loading={saving} onClick={save}>Save</Button>
+    <div className="mb-2 rounded-lg border border-surface-line bg-surface-sunken/40 p-2">
+      <div className="grid grid-cols-[130px_120px_1fr_auto_auto] items-center gap-2">
+        <input className="fiori-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <input className="fiori-input" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount" max={remaining} />
+        <input className="fiori-input" value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Remarks (optional)" />
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" loading={saving} onClick={save}>Save</Button>
+      </div>
+      <p className="mt-1.5 text-xs text-ink-faint">Remaining on this requisition: {formatNumber(remaining, 2)} BDT</p>
     </div>
   )
 }

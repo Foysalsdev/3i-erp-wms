@@ -54,16 +54,22 @@ export function MonthlyAdjustment() {
 
   const catName = (id: string) => (categories as any[]).find(c => c.id === id)?.name ?? 'Uncategorized'
   const [year, month] = period.split('-').map(Number)
-  const monthEndDate = `${year}-${String(month).padStart(2, '0')}-${lastDayOfMonth(year, month)}`
 
   const monthReceipts = useMemo(() => (receipts as any[]).filter(r => inMonth(r.receipt_date, period)), [receipts, period])
   const monthExpenses = useMemo(() => (expenses as any[]).filter(e => inMonth(e.expense_date, period)), [expenses, period])
   const totalReceivedMonth = monthReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   const totalExpenseMonth = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
 
-  const allTimeReceived = (receipts as any[]).filter(r => r.receipt_date <= monthEndDate).reduce((s, r) => s + (Number(r.amount) || 0), 0)
-  const allTimeExpense = (expenses as any[]).filter(e => e.expense_date <= monthEndDate).reduce((s, e) => s + (Number(e.amount) || 0), 0)
-  const closingBalance = allTimeReceived - allTimeExpense
+  // Ledger-style carry-forward: this month's opening balance (B/D, "brought
+  // down") is everything up to the end of the previous month; the closing
+  // balance (C/D, "carried down") becomes next month's B/D automatically,
+  // since it's the same all-time cumulative figure one month later.
+  const prevMonth = month === 1 ? 12 : month - 1
+  const prevYear = month === 1 ? year - 1 : year
+  const prevMonthEndDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${lastDayOfMonth(prevYear, prevMonth)}`
+  const openingBalance = (receipts as any[]).filter(r => r.receipt_date <= prevMonthEndDate).reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    - (expenses as any[]).filter(e => e.expense_date <= prevMonthEndDate).reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  const closingBalance = openingBalance + totalReceivedMonth - totalExpenseMonth
 
   const categoryTotals = useMemo(() => {
     const m = new Map<string, number>()
@@ -121,7 +127,7 @@ export function MonthlyAdjustment() {
         receipts: monthReceipts.map(r => ({ date: formatDate(r.receipt_date), amount: Number(r.amount) || 0 })),
         expenses: monthExpenses.map(e => ({ date: formatDate(e.expense_date), category: catName(e.category_id), payee: e.payee_name, description: e.description, amount: Number(e.amount) || 0 })),
         categoryTotals,
-        totalReceived: totalReceivedMonth, totalExpense: totalExpenseMonth, closingBalance
+        openingBalance, totalReceived: totalReceivedMonth, totalExpense: totalExpenseMonth, closingBalance
       })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate PDF — check the company logo URL in Settings')
@@ -162,10 +168,11 @@ export function MonthlyAdjustment() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Balance B/D" value={`${formatNumber(openingBalance, 2)} BDT`} tone={openingBalance < 0 ? 'negative' : undefined} />
         <Stat label="Fund Received (Month)" value={`${formatNumber(totalReceivedMonth, 2)} BDT`} />
         <Stat label="Expense (Month)" value={`${formatNumber(totalExpenseMonth, 2)} BDT`} />
-        <Stat label="Closing Balance" value={`${formatNumber(closingBalance, 2)} BDT`} tone={closingBalance < 0 ? 'negative' : undefined} />
+        <Stat label="Balance C/D" value={`${formatNumber(closingBalance, 2)} BDT`} tone={closingBalance < 0 ? 'negative' : undefined} />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">

@@ -248,6 +248,7 @@ export interface AdjustmentOpts {
   receipts: AdjustmentReceipt[]
   expenses: AdjustmentExpense[]
   categoryTotals: AdjustmentCategoryTotal[]
+  openingBalance: number
   totalReceived: number
   totalExpense: number
   closingBalance: number
@@ -261,9 +262,10 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
         <MetaCols meta={[
           { label: 'Submitted To', value: SUBMITTED_TO },
           { label: 'Period', value: o.period },
-          { label: 'Total Received', value: `BDT ${money(o.totalReceived)}` },
-          { label: 'Total Expense', value: `BDT ${money(o.totalExpense)}` },
-          { label: 'Closing Balance', value: `BDT ${money(o.closingBalance)}` }
+          { label: 'Balance B/D', value: `BDT ${money(o.openingBalance)}` },
+          { label: 'Fund Received', value: `BDT ${money(o.totalReceived)}` },
+          { label: 'Expense', value: `BDT ${money(o.totalExpense)}` },
+          { label: 'Balance C/D', value: `BDT ${money(o.closingBalance)}` }
         ]} />
 
         <Text style={s.sectionLabel}>Fund Received</Text>

@@ -49,3 +49,55 @@ export function PdfFooter({ render }: { render?: (info: { pageNumber: number; to
   if (render) return <Text style={pdfLayout.footer} render={render} fixed />
   return <Text style={pdfLayout.footer} fixed>{company.footer}</Text>
 }
+
+// --- "Software-generated invoice" header pieces (SAP/ERP style) -------------
+// A slim sender line on the left + logo on the right, and a bordered
+// document-info box (title bar over a labelled key/value grid) that sits on
+// the right beside the recipient's Bill-To block — the layout that reads as
+// machine-produced rather than a hand-made voucher.
+const dib = StyleSheet.create({
+  slim: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  sender: { fontSize: 7.5, color: '#555', width: '58%', marginTop: 22 },
+  box: { borderWidth: 0.8, borderColor: '#333' },
+  boxTitleBar: { paddingVertical: 5, paddingHorizontal: 7, borderBottomWidth: 0.8, borderBottomColor: '#333', backgroundColor: '#f2f2f0' },
+  boxTitle: { fontSize: 12, fontWeight: 'bold' },
+  boxSub: { fontSize: 7.5, color: '#555', marginTop: 1 },
+  boxBody: { paddingVertical: 3 },
+  row: { flexDirection: 'row', paddingHorizontal: 7, paddingVertical: 1.8 },
+  k: { width: '46%', fontSize: 8, color: '#555' },
+  v: { flex: 1, fontSize: 8.5, fontWeight: 'bold', textAlign: 'right' }
+})
+
+export interface DocField { label: string; value?: string }
+
+// Logo top-right with the company's own address as a slim "from" line.
+export function LetterheadSlim() {
+  const company = getCompanyInfo()
+  const sender = [company.name, (company.address || '').split('\n').filter(Boolean).join(', ')].filter(Boolean).join(' · ')
+  return (
+    <View style={dib.slim}>
+      <Text style={dib.sender}>{sender}</Text>
+      <Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 118, height: 39 }} />
+    </View>
+  )
+}
+
+// Bordered document-info box: a title bar over a right-aligned key/value grid.
+export function DocInfoBox({ title, subtitle, fields, width = '44%' }: { title: string; subtitle?: string; fields: DocField[]; width?: string }) {
+  return (
+    <View style={[dib.box, { width }]}>
+      <View style={dib.boxTitleBar}>
+        <Text style={dib.boxTitle}>{title}</Text>
+        {subtitle ? <Text style={dib.boxSub}>{subtitle}</Text> : null}
+      </View>
+      <View style={dib.boxBody}>
+        {fields.map((f, i) => (
+          <View key={i} style={dib.row}>
+            <Text style={dib.k}>{f.label}</Text>
+            <Text style={dib.v}>{f.value || '-'}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}

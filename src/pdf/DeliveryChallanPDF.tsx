@@ -1,71 +1,87 @@
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
-import { downloadBlob } from '@/lib/utils'
-import { pdfLayout, PdfHeader, PdfFooter } from './pdfLayout'
+import { downloadBlob, formatDate } from '@/lib/utils'
+import { pdfLayout, PdfFooter, LetterheadSlim, DocInfoBox } from './pdfLayout'
 
 const s = StyleSheet.create({
-  three: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  col: { width: '33%' },
-  k: { fontSize: 8, color: '#1f3a93', fontWeight: 'bold' },
-  v: { fontSize: 9, marginTop: 1 },
-  two: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  vb: { fontSize: 10, fontWeight: 'bold' },
-  r: { flexDirection: 'row', marginBottom: 2 },
-  rk: { width: 78, fontSize: 8, color: '#444' },
-  rv: { fontSize: 9, flex: 1 },
-  totalRow: { flexDirection: 'row', borderWidth: 0.7, borderTopWidth: 0, borderColor: '#333', paddingVertical: 3 },
-  notes: { marginTop: 14, fontSize: 9, fontWeight: 'bold', textAlign: 'center' },
-  sign: { marginTop: 22, fontSize: 9, fontWeight: 'bold', textAlign: 'right' },
-  signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 60 }
+  billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  billTo: { width: '52%' },
+  cap: { fontSize: 8, color: '#555', marginBottom: 3 },
+  billName: { fontSize: 11, fontWeight: 'bold' },
+  billSub: { fontSize: 8.5, color: '#3a3a3a', marginTop: 2 },
+  section: { fontSize: 8, fontWeight: 'bold', color: '#555', letterSpacing: 0.5, marginBottom: 4 },
+  dispatch: { flexDirection: 'row', borderWidth: 0.7, borderColor: '#333', marginBottom: 12 },
+  dispatchCol: { flex: 1, paddingVertical: 4, paddingHorizontal: 7 },
+  dispatchColDiv: { borderLeftWidth: 0.5, borderLeftColor: '#999' },
+  r: { flexDirection: 'row', paddingVertical: 1.5 },
+  rk: { width: 92, fontSize: 8, color: '#555' },
+  rv: { fontSize: 8.5, flex: 1, fontWeight: 'bold' },
+  totalRow: { flexDirection: 'row', borderWidth: 0.7, borderTopWidth: 0, borderColor: '#333', backgroundColor: '#eceff3', paddingVertical: 3 },
+  stripe: { backgroundColor: '#fafafa' },
+  notes: { marginTop: 16, fontSize: 9, fontWeight: 'bold', textAlign: 'center' },
+  sign: { marginTop: 20, fontSize: 9, fontWeight: 'bold', textAlign: 'right' },
+  signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 55, fontSize: 9 }
 })
 
-function Row({ k, v }: { k: string; v?: string }) {
-  return <View style={s.r}><Text style={s.rk}>{k}</Text><Text style={s.rv}>{v || ''}</Text></View>
+function KV({ k, v }: { k: string; v?: string }) {
+  return <View style={s.r}><Text style={s.rk}>{k}</Text><Text style={s.rv}>{v || '-'}</Text></View>
 }
 
 function Doc({ challan, customerName, vehicleNo, items }: any) {
   const total = (items || []).reduce((a: number, it: any) => a + (Number(it.qty) || 0), 0)
+  const isCourier = challan.delivery_method === 'courier'
   return (
     <Document>
       <Page size="A4" style={pdfLayout.page}>
-        <PdfHeader title="Delivery Challan" docNo={`Delivery Challan# - ${challan.challan_no}`} />
+        <LetterheadSlim />
 
-        <View style={s.three}>
-          <View style={s.col}><Text style={s.k}>PO #</Text><Text style={s.v}>{challan.po_no || '-'}</Text></View>
-          <View style={s.col}><Text style={s.k}>Invoice No #</Text><Text style={s.v}>{challan.invoice_no || '-'}</Text></View>
-          <View style={s.col}><Text style={s.k}>Dispatch time #</Text><Text style={s.v}>{challan.dispatch_time || '-'}</Text></View>
-        </View>
-        <View style={pdfLayout.hr} />
-
-        <View style={s.two}>
-          <View style={{ width: '55%' }}>
-            <Text style={s.k}>Bill To:</Text>
-            <Text style={s.vb}>{customerName}</Text>
-            {challan.bill_to_address ? <Text style={pdfLayout.sub}>{challan.bill_to_address}</Text> : null}
-            <Text style={pdfLayout.sub}>Receiver: {challan.receiver_name || ''}{challan.receiver_phone ? '  ' + challan.receiver_phone : ''}</Text>
-            <Text style={pdfLayout.sub}>Unloading Point: {challan.unloading_point || ''}</Text>
+        {/* Recipient (Bill To) on the left, the bordered document box on the right. */}
+        <View style={s.billRow}>
+          <View style={s.billTo}>
+            <Text style={s.cap}>BILL TO</Text>
+            <Text style={s.billName}>{customerName}</Text>
+            {challan.bill_to_address ? <Text style={s.billSub}>{challan.bill_to_address}</Text> : null}
+            <Text style={s.billSub}>Receiver: {challan.receiver_name || '-'}{challan.receiver_phone ? '  ·  ' + challan.receiver_phone : ''}</Text>
+            <Text style={s.billSub}>Unloading Point: {challan.unloading_point || '-'}</Text>
           </View>
-          <View style={{ width: '43%' }}>
-            {challan.delivery_method === 'courier' ? (
-              // Courier despatch: the vehicle/driver block is meaningless — show
-              // the courier and consignment/tracking number instead.
-              <>
-                <Row k="Sent via:" v="Courier" />
-                <Row k="Courier:" v={challan.courier_name} />
-                <Row k="Tracking / CN #" v={challan.courier_tracking_no} />
-                <Row k="Prepared by:" v={challan.prepared_by} />
-              </>
-            ) : (
-              <>
-                <Row k="Lock No #" v={challan.lock_no} />
-                <Row k="Driver #" v={[challan.driver_name, challan.driver_phone].filter(Boolean).join(' | ')} />
-                <Row k="Vehicle No#" v={vehicleNo} />
-                <Row k="Transport Vendor:" v={challan.transport_vendor} />
-                <Row k="Prepared by:" v={challan.prepared_by} />
-              </>
-            )}
-          </View>
+          <DocInfoBox title="Delivery Challan" fields={[
+            { label: 'Challan No', value: challan.challan_no },
+            { label: 'Date', value: formatDate(challan.challan_date) },
+            { label: 'PO No', value: challan.po_no },
+            { label: 'Invoice No', value: challan.invoice_no },
+            { label: 'Dispatch Time', value: challan.dispatch_time },
+            { label: 'Delivery Mode', value: isCourier ? 'Courier' : 'Transport' }
+          ]} />
         </View>
 
+        {/* Dispatch conditions, split into two labelled columns. */}
+        <Text style={s.section}>DISPATCH DETAILS</Text>
+        <View style={s.dispatch}>
+          {isCourier ? (
+            <>
+              <View style={s.dispatchCol}>
+                <KV k="Courier" v={challan.courier_name} />
+                <KV k="Tracking / CN #" v={challan.courier_tracking_no} />
+              </View>
+              <View style={[s.dispatchCol, s.dispatchColDiv]}>
+                <KV k="Prepared By" v={challan.prepared_by} />
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={s.dispatchCol}>
+                <KV k="Vehicle No" v={vehicleNo} />
+                <KV k="Driver" v={[challan.driver_name, challan.driver_phone].filter(Boolean).join(' | ')} />
+                <KV k="Lock No" v={challan.lock_no} />
+              </View>
+              <View style={[s.dispatchCol, s.dispatchColDiv]}>
+                <KV k="Transport Vendor" v={challan.transport_vendor} />
+                <KV k="Prepared By" v={challan.prepared_by} />
+              </View>
+            </>
+          )}
+        </View>
+
+        <Text style={s.section}>ITEMS DISPATCHED</Text>
         <View style={pdfLayout.tHead}>
           <Text style={[pdfLayout.th, { width: '5%' }]}>SL</Text>
           <Text style={[pdfLayout.th, { width: '41%' }]}>Description</Text>
@@ -73,28 +89,28 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
           <Text style={[pdfLayout.th, { width: '13%' }]}>Category</Text>
           <Text style={[pdfLayout.th, { width: '7%', textAlign: 'right' }]}>Qty</Text>
           <Text style={[pdfLayout.th, { width: '7%' }]}>Unit</Text>
-          <Text style={[pdfLayout.th, { width: '13%' }]}>Remarks</Text>
+          <Text style={[pdfLayout.th, { width: '13%', borderRightWidth: 0 }]}>Remarks</Text>
         </View>
-        {(items || []).map((it: any) => (
-          <View key={it.sl} style={pdfLayout.tr}>
+        {(items || []).map((it: any, i: number) => (
+          <View key={it.sl} style={[pdfLayout.tr, i % 2 === 1 ? s.stripe : {}]}>
             <Text style={[pdfLayout.td, { width: '5%' }]}>{it.sl}</Text>
             <Text style={[pdfLayout.td, { width: '41%', fontSize: 7.5 }]}>{it.description}</Text>
             <Text style={[pdfLayout.td, { width: '14%' }]}>{it.material_code}</Text>
             <Text style={[pdfLayout.td, { width: '13%' }]}>{it.category}</Text>
             <Text style={[pdfLayout.td, { width: '7%', textAlign: 'right' }]}>{it.qty}</Text>
             <Text style={[pdfLayout.td, { width: '7%' }]}>{it.unit}</Text>
-            <Text style={[pdfLayout.td, { width: '13%' }]}>{it.remarks}</Text>
+            <Text style={[pdfLayout.td, { width: '13%', borderRightWidth: 0 }]}>{it.remarks}</Text>
           </View>
         ))}
         <View style={s.totalRow}>
-          <Text style={{ width: '73%', textAlign: 'right', paddingRight: 6, fontWeight: 'bold' }}>Total =</Text>
+          <Text style={{ width: '73%', textAlign: 'right', paddingRight: 6, fontWeight: 'bold' }}>Total Qty =</Text>
           <Text style={{ width: '7%', textAlign: 'right', fontWeight: 'bold' }}>{total}</Text>
           <Text style={{ width: '20%' }}></Text>
         </View>
 
         <Text style={s.notes}>Notes: Acknowledgement receipt of Goods: Goods received in following described order and condition</Text>
         <Text style={s.sign}>Receiver Sign with Seal &amp; Date..</Text>
-        <View style={s.signRow}><Text>security</Text><Text>Authorised by</Text></View>
+        <View style={s.signRow}><Text>Security</Text><Text>Authorised By</Text></View>
 
         <PdfFooter />
       </Page>

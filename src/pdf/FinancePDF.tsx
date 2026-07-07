@@ -94,7 +94,7 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
           <Text style={[pdfLayout.th, { width: '34%' }]}>Purpose</Text>
           <Text style={[pdfLayout.th, { width: '12%' }]}>Unit</Text>
           <Text style={[pdfLayout.th, { width: '10%', textAlign: 'right' }]}>Qty</Text>
-          <Text style={[pdfLayout.th, { width: '20%' }]}>Remarks</Text>
+          <Text style={[pdfLayout.th, { width: '20%' }]}>Note</Text>
           <Text style={[pdfLayout.th, { width: '18%', textAlign: 'right' }]}>Amount</Text>
         </View>
         {lines.map((l, i) => (

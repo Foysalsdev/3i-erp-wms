@@ -38,12 +38,15 @@ export function FinancialDashboard() {
 
   const months = useMemo(() => lastNMonths(MONTHS_SHOWN), [])
 
-  // Cumulative balance at the end of each of the last N months.
+  // Cumulative balance at the end of each of the last N months. Cutoff day is
+  // computed with Date.UTC so no local timezone conversion can shift it —
+  // a plain toISOString() round-trip would drop a day for any UTC+ zone
+  // (e.g. Asia/Dhaka, UTC+6), silently excluding month-end transactions.
   const balanceTrend = useMemo(() => {
     return months.map(ym => {
-      const cutoff = new Date(`${ym}-01T00:00:00`)
-      cutoff.setMonth(cutoff.getMonth() + 1); cutoff.setDate(0)
-      const cutoffStr = cutoff.toISOString().slice(0, 10)
+      const [y, m] = ym.split('-').map(Number)
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+      const cutoffStr = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       const received = (receipts as any[]).filter(r => r.receipt_date <= cutoffStr).reduce((s, r) => s + (Number(r.amount) || 0), 0)
       const spent = (expenses as any[]).filter(e => e.expense_date <= cutoffStr).reduce((s, e) => s + (Number(e.amount) || 0), 0)
       return { label: monthLabel(ym), balance: received - spent }

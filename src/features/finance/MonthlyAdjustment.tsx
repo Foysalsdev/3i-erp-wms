@@ -9,9 +9,15 @@ import { Badge } from '@/components/ui/Badge'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadMonthlyAdjustmentPDF } from '@/pdf/FinancePDF'
 
-const thisMonth = () => new Date().toISOString().slice(0, 7)
+// Local calendar parts only — never round-trip through toISOString() here,
+// since that converts to UTC and shifts the date for any UTC+ timezone
+// (e.g. Asia/Dhaka, UTC+6), silently dropping month-end transactions.
+const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 const monthLabel = (ym: string) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 const inMonth = (dateStr: string, ym: string) => (dateStr ?? '').slice(0, 7) === ym
+// Last calendar day of YYYY-MM, computed purely with UTC arithmetic so no
+// local timezone conversion can shift it — "day 0 of next month" in UTC.
+const lastDayOfMonth = (year: number, month: number) => String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')
 
 export function MonthlyAdjustment() {
   const { data: receipts, loading: l1 } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
@@ -27,7 +33,7 @@ export function MonthlyAdjustment() {
 
   const catName = (id: string) => (categories as any[]).find(c => c.id === id)?.name ?? 'Uncategorized'
   const [year, month] = period.split('-').map(Number)
-  const monthEndDate = new Date(year, month, 0).toISOString().slice(0, 10)
+  const monthEndDate = `${year}-${String(month).padStart(2, '0')}-${lastDayOfMonth(year, month)}`
 
   const monthReceipts = useMemo(() => (receipts as any[]).filter(r => inMonth(r.receipt_date, period)), [receipts, period])
   const monthExpenses = useMemo(() => (expenses as any[]).filter(e => inMonth(e.expense_date, period)), [expenses, period])

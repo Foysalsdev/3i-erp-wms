@@ -29,6 +29,7 @@ import { downloadChallanPdfFor } from './challanPdf'
 import { VehicleLoadingScan } from './VehicleLoadingScan'
 import { useRememberedField } from '@/hooks/useRememberedField'
 import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
+import { fetchStockAvailability } from '@/lib/stockAvailability'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
@@ -268,6 +269,19 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   // Prepared By defaults to whoever is logged in creating the challan.
   const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '', print_note: rememberedNote })
   const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
+  // Saleable stock per product, shown in the line picker so a shortage is
+  // visible up front — issuing already blocks any line that would drive stock
+  // negative, but this surfaces it before that point. The linked SO is
+  // excluded so the order this challan fulfils doesn't count against itself.
+  const [stockMap, setStockMap] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (!clientId) return
+    fetchStockAvailability(clientId, h.sales_order_id).then(avail => {
+      const m: Record<string, number> = {}
+      Object.entries(avail).forEach(([pid, a]) => { m[pid] = a.saleable })
+      setStockMap(m)
+    })
+  }, [clientId, h.sales_order_id])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [more, setMore] = useState(false)
@@ -554,7 +568,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             placeholder={DEFAULT_CHALLAN_NOTE} className="min-h-[56px]" />
         </Field>
 
-        <LineItems rows={lines} onChange={setLines} products={products} locations={locations} variant="out" />
+        <LineItems rows={lines} onChange={setLines} products={products} locations={locations} variant="out" stock={stockMap} />
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

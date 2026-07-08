@@ -1,7 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
 import { downloadBlob, amountInWords } from '@/lib/utils'
-import { pdfLayout, PdfHeader, PdfFooter } from './pdfLayout'
+import { pdfLayout, PdfFooter, LetterheadSlim, DocInfoBox, Barcode } from './pdfLayout'
 
 // Finance-specific pieces on top of the shared pdfLayout.tsx letterhead/table
 // styles — the ERP document language every finance PDF shares: a bordered
@@ -18,8 +18,6 @@ const s = StyleSheet.create({
   // Statement-of-account (ledger / cash-book) pieces — an account-summary
   // strip and a running-balance ledger, the two things that make a document
   // read as a finance statement rather than a generic goods table.
-  stmtMeta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, fontSize: 9 },
-  stmtMetaK: { fontWeight: 'bold' },
   sumGrid: { flexDirection: 'row', borderWidth: 0.7, borderColor: '#333', marginBottom: 12 },
   sumCell: { flex: 1, padding: 6, borderRightWidth: 0.5, borderRightColor: '#999' },
   sumCellLast: { flex: 1, padding: 6, backgroundColor: '#eceff3' },
@@ -30,14 +28,14 @@ const s = StyleSheet.create({
   rowTotal: { backgroundColor: '#f2f2f0' },
   rowClose: { backgroundColor: '#eceff3' },
   bold: { fontWeight: 'bold' },
-  // Bordered document-header metadata grid (SAP/ERP style) — replaces the
-  // loose text columns; each field is a labelled cell in a boxed strip.
-  infoGrid: { borderWidth: 0.7, borderColor: '#333', marginBottom: 12 },
-  infoRow: { flexDirection: 'row' },
-  infoCell: { flex: 1, padding: 6, borderRightWidth: 0.5, borderRightColor: '#999' },
-  infoCellWide: { padding: 6, borderTopWidth: 0.5, borderTopColor: '#999' },
-  infoCap: { fontSize: 7, color: '#555', marginBottom: 3 },
-  infoVal: { fontSize: 9, fontWeight: 'bold' },
+  // Finance-document header: "Submitted To" party block on the left, doc box
+  // on the right — mirrors the challan's Bill-To / document-box split.
+  fhRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  fhLeft: { width: '52%' },
+  fhRight: { width: '44%', alignItems: 'flex-end' },
+  fhCap: { fontSize: 8, color: '#555', marginBottom: 2 },
+  fhName: { fontSize: 11, fontWeight: 'bold' },
+  fhSub: { fontSize: 8.5, color: '#3a3a3a', marginTop: 1 },
   // Bordered totals block, right-aligned, with an emphasised final row.
   totalsWrap: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
   totalsBox: { width: '52%', borderWidth: 0.7, borderColor: '#333' },
@@ -56,31 +54,37 @@ const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionD
 // but submitted TO 3i Logistics, so that needs to say so explicitly.
 export const SUBMITTED_TO = '3i Logistics Pvt Limited'
 
-export interface DocMeta { label: string; value: string; wide?: boolean }
+// `wide` fields (a long note/purpose) and `left` fields (the payee) render in
+// the left block of the header; everything else goes into the right-hand box.
+export interface DocMeta { label: string; value: string; wide?: boolean; left?: boolean }
 
-// Bordered document-header grid: short fields sit as labelled cells in one
-// boxed row; any `wide` field (a long note) gets its own full-width row below.
-// This is the structured header an ERP document leads with — not loose text.
-function InfoGrid({ items }: { items: DocMeta[] }) {
-  const cells = items.filter(m => !m.wide)
-  const wides = items.filter(m => m.wide)
+// Shared finance-document header, matching the Delivery Challan's ERP look:
+// company letterhead, a "Submitted To" party block on the left, and a bordered
+// document-info box (title bar + key/value) on the right with an optional
+// barcode of the document number above it.
+function FinanceHeader({ title, meta, barcode }: { title: string; meta: DocMeta[]; barcode?: string }) {
+  const submittedTo = meta.find(m => m.label === 'Submitted To')?.value
+  const leftExtras = meta.filter(m => (m.wide || m.left) && m.label !== 'Submitted To')
+  const boxFields = meta.filter(m => m.label !== 'Submitted To' && !m.wide && !m.left)
   return (
-    <View style={s.infoGrid}>
-      <View style={s.infoRow}>
-        {cells.map((m, i) => (
-          <View key={i} style={[s.infoCell, i === cells.length - 1 ? { borderRightWidth: 0 } : {}]}>
-            <Text style={s.infoCap}>{m.label.toUpperCase()}</Text>
-            <Text style={s.infoVal}>{m.value || '-'}</Text>
-          </View>
-        ))}
-      </View>
-      {wides.map((m, i) => (
-        <View key={i} style={s.infoCellWide}>
-          <Text style={s.infoCap}>{m.label.toUpperCase()}</Text>
-          <Text style={s.infoVal}>{m.value || '-'}</Text>
+    <>
+      <LetterheadSlim />
+      <View style={s.fhRow}>
+        <View style={s.fhLeft}>
+          {submittedTo ? <><Text style={s.fhCap}>SUBMITTED TO</Text><Text style={s.fhName}>{submittedTo}</Text></> : null}
+          {leftExtras.map((m, i) => (
+            <View key={i} style={{ marginTop: 6 }}>
+              <Text style={s.fhCap}>{m.label.toUpperCase()}</Text>
+              <Text style={s.fhSub}>{m.value || '-'}</Text>
+            </View>
+          ))}
         </View>
-      ))}
-    </View>
+        <View style={s.fhRight}>
+          {barcode ? <View style={{ marginBottom: 6 }}><Barcode value={barcode} width={155} height={28} /></View> : null}
+          <DocInfoBox title={title} width="100%" fields={boxFields.map(m => ({ label: m.label, value: m.value }))} />
+        </View>
+      </View>
+    </>
   )
 }
 
@@ -129,8 +133,7 @@ function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; met
   return (
     <Document>
       <Page size="A4" style={pdfLayout.page}>
-        <PdfHeader title="Operating Cost Requisition" docNo={docNo} />
-        <InfoGrid items={meta} />
+        <FinanceHeader title="Operating Cost Requisition" meta={meta} barcode={docNo} />
         <View style={pdfLayout.tHead}>
           <Text style={[pdfLayout.th, { width: '6%' }]}>#</Text>
           <Text style={[pdfLayout.th, { width: '34%' }]}>Purpose</Text>
@@ -198,11 +201,10 @@ function BillVoucherDoc(o: BillVoucherOpts) {
   return (
     <Document>
       <Page size="A4" style={pdfLayout.page}>
-        <PdfHeader title={o.title} docNo={o.billRef} />
-        <InfoGrid items={[
+        <FinanceHeader title={o.title} barcode={o.billRef} meta={[
           { label: 'Voucher No', value: o.billRef },
           { label: 'Date', value: o.date },
-          ...(o.payee ? [{ label: 'Paid To', value: o.payee }] : []),
+          ...(o.payee ? [{ label: 'Paid To', value: o.payee, left: true }] : []),
           { label: 'Submitted To', value: SUBMITTED_TO },
           ...(o.purpose ? [{ label: 'Purpose', value: o.purpose, wide: true }] : [])
         ]} />
@@ -290,12 +292,10 @@ function MonthlyAdjustmentDoc(o: AdjustmentOpts) {
   return (
     <Document>
       <Page size="A4" style={pdfLayout.page}>
-        <PdfHeader title="Statement of Account" docNo={o.period} />
-
-        <View style={s.stmtMeta}>
-          <Text><Text style={s.stmtMetaK}>Submitted To: </Text>{SUBMITTED_TO}</Text>
-          <Text><Text style={s.stmtMetaK}>Statement Period: </Text>{o.period}</Text>
-        </View>
+        <FinanceHeader title="Statement of Account" meta={[
+          { label: 'Statement Period', value: o.period },
+          { label: 'Submitted To', value: SUBMITTED_TO }
+        ]} />
 
         {/* Account summary — the four figures an accounts reviewer checks first. */}
         <View style={s.sumGrid}>

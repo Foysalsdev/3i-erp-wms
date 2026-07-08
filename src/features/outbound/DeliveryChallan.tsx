@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { TrailPanel } from '@/components/shared/TrailPanel'
 import { DocVersions } from '@/components/shared/DocVersions'
+import { DocumentFlow } from '@/components/shared/DocumentFlow'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { FilterPanel } from '@/components/ui/FilterPanel'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -669,20 +670,11 @@ function ChallanOverview({ challan, customerName, vehicles, products, transportV
           <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge>{challan.posted_at && <Badge tone="positive">Stock out</Badge>}</div>} />
         </div>
 
-        <Section title="Linked documents">
-          <div className="overflow-hidden rounded-xl border border-surface-line">
-            {[
-              ...(so ? [{ key: 'so', icon: 'shopping_cart', label: `Sales Order · ${so.so_no}`, meta: `${so.status}${so.reference_no ? ' · PO ' + so.reference_no : ''}` }] : []),
-              ...gatePasses.map((g: any) => ({ key: g.gate_pass_no, icon: 'door_front', label: `Gate Pass · ${g.gate_pass_no}`, meta: `${g.status} · ${formatDate(g.gate_out_date)}` }))
-            ].map((row, i) => (
-              <div key={row.key} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
-                <span className="flex min-w-0 items-center gap-2 text-ink"><Icon name={row.icon} className="shrink-0 text-[18px] text-ink-faint" /> <span className="truncate">{row.label}</span></span>
-                <span className="shrink-0 text-ink-soft">{row.meta}</span>
-              </div>
-            ))}
-            {!so && gatePasses.length === 0 && <p className="p-3.5 text-sm text-ink-faint">No linked documents yet.</p>}
-          </div>
-        </Section>
+        <DocumentFlow nodes={[
+          so ? { icon: 'shopping_cart', type: 'Sales Order', number: so.so_no, status: so.status, to: `/outbound/sales-order?q=${encodeURIComponent(so.so_no)}` } : null,
+          { icon: 'local_shipping', type: 'Delivery Challan', number: challan.challan_no, status: statusLabel(challan.status), tone: tone(challan.status), current: true },
+          ...gatePasses.map((g: any) => ({ icon: 'door_front', type: 'Gate Pass', number: g.gate_pass_no, status: g.status, to: `/outbound/gate-pass?q=${encodeURIComponent(g.gate_pass_no)}` }))
+        ]} />
 
         <Section title="Items">
           <div className="overflow-hidden rounded-xl border border-surface-line">

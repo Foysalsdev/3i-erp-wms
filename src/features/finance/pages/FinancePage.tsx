@@ -17,7 +17,7 @@ export default function FinancePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <PageHeader icon="payments" title="Finance" subtitle="Warehouse fund, requisitions, vouchers & cash book" />
+      <PageHeader icon="payments" title="Finance" subtitle="Warehouse fund, requisitions, procurement & cash book" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/finance/${k}`)} />
       {active === 'dashboard' ? <FinanceDashboard />
         : active === 'requisition' ? <Requisitions />

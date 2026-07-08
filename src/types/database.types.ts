@@ -1700,14 +1700,166 @@ export type Database = {
           },
         ]
       }
+      finance_additional_expenses: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          expense_id: string
+          expense_type: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          client_id: string
+          created_at?: string
+          expense_id: string
+          expense_type?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          expense_id?: string
+          expense_type?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_additional_expenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_additional_expenses_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "finance_expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_items: {
+        Row: {
+          category_id: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          last_price: number | null
+          last_vendor_id: string | null
+          name: string
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_price?: number | null
+          last_vendor_id?: string | null
+          name: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_price?: number | null
+          last_vendor_id?: string | null
+          name?: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "finance_expense_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_items_last_vendor_id_fkey"
+            columns: ["last_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_vendors: {
+        Row: {
+          client_id: string
+          contact_number: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          contact_number?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          contact_number?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_vendors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_expense_bills: {
         Row: {
           amount: number
           bill_ref: string | null
+          category_id: string | null
           client_id: string
           created_at: string
           expense_id: string
           id: string
+          item_id: string | null
           memo_no: string | null
           qty: number | null
           rate: number | null
@@ -1719,10 +1871,12 @@ export type Database = {
         Insert: {
           amount?: number
           bill_ref?: string | null
+          category_id?: string | null
           client_id: string
           created_at?: string
           expense_id: string
           id?: string
+          item_id?: string | null
           memo_no?: string | null
           qty?: number | null
           rate?: number | null
@@ -1734,10 +1888,12 @@ export type Database = {
         Update: {
           amount?: number
           bill_ref?: string | null
+          category_id?: string | null
           client_id?: string
           created_at?: string
           expense_id?: string
           id?: string
+          item_id?: string | null
           memo_no?: string | null
           qty?: number | null
           rate?: number | null
@@ -1821,13 +1977,19 @@ export type Database = {
           client_id: string
           created_at: string
           created_by: string | null
+          department: string | null
           description: string | null
+          doc_no: string | null
+          due_date: string | null
           expense_date: string
           id: string
           less_deduction: number
           payee_name: string | null
           payment_mode: string | null
+          procurement_type: string | null
+          status: string
           vendor_bill_no: string | null
+          vendor_id: string | null
           show_line_signature: boolean
           sign_labels: string | null
           updated_at: string
@@ -1839,13 +2001,19 @@ export type Database = {
           client_id: string
           created_at?: string
           created_by?: string | null
+          department?: string | null
           description?: string | null
+          doc_no?: string | null
+          due_date?: string | null
           expense_date?: string
           id?: string
           less_deduction?: number
           payee_name?: string | null
           payment_mode?: string | null
+          procurement_type?: string | null
+          status?: string
           vendor_bill_no?: string | null
+          vendor_id?: string | null
           show_line_signature?: boolean
           sign_labels?: string | null
           updated_at?: string
@@ -1857,13 +2025,19 @@ export type Database = {
           client_id?: string
           created_at?: string
           created_by?: string | null
+          department?: string | null
           description?: string | null
+          doc_no?: string | null
+          due_date?: string | null
           expense_date?: string
           id?: string
           less_deduction?: number
           payee_name?: string | null
           payment_mode?: string | null
+          procurement_type?: string | null
+          status?: string
           vendor_bill_no?: string | null
+          vendor_id?: string | null
           show_line_signature?: boolean
           sign_labels?: string | null
           updated_at?: string

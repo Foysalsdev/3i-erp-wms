@@ -3,63 +3,32 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
-import { nextDocNumber } from '@/hooks/useDocNumber'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Field, Input, Select } from '@/components/ui/Field'
-import { Icon } from '@/components/ui/Icon'
-import { Combobox } from '@/components/shared/Combobox'
-import { Link } from 'react-router-dom'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
-import { useRememberedField } from '@/hooks/useRememberedField'
-import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
-import { LineGrid, type LineColumn } from './components/LineGrid'
+import { StatCard, SectionHeader } from './components/FinanceUI'
+import { ProcurementForm } from './ProcurementForm'
 
 const today = () => new Date().toISOString().slice(0, 10)
-const DEFAULT_SIGN_LABELS = 'Prepared By, Verified By, Approved By, Head Office'
-const HANDOVER_SIGN_LABELS = 'Handed Over By, Received By'
-const PAYMENT_MODES = ['Cash', 'Bank', 'bKash', 'Nagad', 'Card', 'Other']
-const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: undefined as number | undefined, vendor_name: '', memo_no: '' })
-const BILL_COLUMNS: LineColumn[] = [
-  { key: 'bill_ref', label: 'Particulars', width: '1fr', required: true, placeholder: 'e.g. Dinner for all staff' },
-  { key: 'unit', label: 'Unit', width: '80px', placeholder: 'Person' },
-  { key: 'qty', label: 'Qty', width: '70px', type: 'number' },
-  { key: 'rate', label: 'Rate', width: '80px', type: 'number' },
-  { key: 'remarks', label: 'Remarks', width: '1fr' },
-  { key: 'amount', label: 'Amount (BDT)', width: '110px', type: 'number', align: 'right', required: true }
-]
-// Purchase vouchers: each line is a shop memo — what was bought, which shop,
-// that shop's memo/bill no (both optional), and the amount. No qty/rate.
-const PURCHASE_COLUMNS: LineColumn[] = [
-  { key: 'bill_ref', label: 'Particulars', width: '1fr', required: true, placeholder: 'e.g. Safety gloves, packaging tape' },
-  { key: 'vendor_name', label: 'Shop / Vendor', width: '150px', placeholder: 'Shop name (optional)' },
-  { key: 'memo_no', label: 'Memo No', width: '110px', placeholder: 'Optional' },
-  { key: 'amount', label: 'Amount (BDT)', width: '120px', type: 'number', align: 'right', required: true }
-]
-// Qty × Rate auto-fills Amount (dinner @ rate/head, labour @ rate/unit) —
-// still overridable by typing directly into Amount.
-const recomputeBill = (row: any, patch: any) =>
-  (('qty' in patch || 'rate' in patch) && Number(row.qty) > 0 && Number(row.rate) > 0)
-    ? { ...row, amount: Number(row.qty) * Number(row.rate) } : row
-const signLabelList = (s: string) => (s || DEFAULT_SIGN_LABELS).split(',').map(x => x.trim()).filter(Boolean)
 
+// Finance → Procurement: daily-operation purchases. Each row is one bill/vendor
+// with its items; the fast entry form lives in ProcurementForm.
 export function Expenses() {
-  const { data, loading, refresh } = useCollection('finance_expenses', { order: 'expense_date' })
+  const { data, loading, refresh } = useCollection('finance_expenses', { order: 'created_at', ascending: false })
+  const { data: vendors, refresh: refreshVendors } = useCollection('finance_vendors', { order: 'name', ascending: true })
+  const { data: items, refresh: refreshItems } = useCollection('finance_items', { order: 'name', ascending: true })
   const { data: categories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { currentClientId, can, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
-  // Split by DB operation: RLS requires finance.create for new expenses and
-  // finance.edit for updates — a role with only one shouldn't be shown the
-  // action that will fail.
-  const canCreate = can('finance.create')
-  const canEdit = can('finance.edit')
+  const canCreate = can('finance.create'), canEdit = can('finance.edit')
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
@@ -67,74 +36,75 @@ export function Expenses() {
   const [viewing, setViewing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
 
-  // Vouchers pick from the active Expense Head master (managed in Finance →
-  // Setup) — not created inline. The code shows as the mono chip, the name as
-  // the description.
-  const catItems = (categories as any[]).filter(c => c.is_active !== false)
-    .map(c => ({ id: c.id, label: c.code || c.name, sublabel: c.code ? c.name : undefined }))
-  const catName = (id: string) => (categories as any[]).find(c => c.id === id)?.name ?? '—'
+  const vendorName = (id?: string) => (vendors as any[]).find(v => v.id === id)?.name
+  const refreshMasters = () => { refreshVendors(); refreshItems() }
 
-  const fetchBills = async (expenseId: string) => {
-    const { data: bills } = await supabase.from('finance_expense_bills').select('*').eq('expense_id', expenseId).order('created_at')
-    return bills ?? []
+  const fetchLines = async (expId: string) => {
+    const [{ data: bills }, { data: extra }] = await Promise.all([
+      supabase.from('finance_expense_bills').select('*').eq('expense_id', expId).order('created_at'),
+      supabase.from('finance_additional_expenses').select('*').eq('expense_id', expId).order('created_at')
+    ])
+    const __items = (bills ?? []).map((b: any) => ({ item_id: b.item_id || '', name: b.bill_ref || '', category_id: b.category_id || '', unit: b.unit || '', qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined }))
+    const __addl = (extra ?? []).map((a: any) => ({ expense_type: a.expense_type || '', amount: a.amount != null ? Number(a.amount) : undefined }))
+    return { __items, __addl }
   }
 
-  const openView = async (r: any) => setViewing({ ...r, __bills: await fetchBills(r.id) })
-  const openEdit = async (r: any) => { const bills = await fetchBills(r.id); setEditing({ ...r, __bills: bills }); setModal(true) }
+  const openView = async (r: any) => setViewing({ ...r, ...(await fetchLines(r.id)) })
+  const openEdit = async (r: any) => { setEditing({ ...r, ...(await fetchLines(r.id)) }); setModal(true) }
+  const duplicate = async (r: any) => {
+    const { __items, __addl } = await fetchLines(r.id)
+    setEditing({ procurement_type: r.procurement_type, department: r.department, payment_mode: r.payment_mode, vendor_id: r.vendor_id, expense_date: today(), __items, __addl })
+    setModal(true)
+  }
 
-  // The category name doubles as the printed bill/voucher's title (Dinner
-  // Bill, Labour Bill, Accommodation Rent, ...) — no separate "bill type"
-  // field, since that's exactly what category already means here.
   const printBill = async (r: any) => {
     try {
-      const bills = await fetchBills(r.id)
-      // A quick single-amount expense has no breakdown lines — synthesise one
-      // row from the expense itself so the voucher still has a body.
-      const lines = bills.length
-        ? bills.map((b: any) => ({
-            particulars: b.bill_ref || '—', unit: b.unit || undefined,
-            qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined,
-            remarks: b.remarks || undefined, amount: Number(b.amount) || 0,
-            vendor: b.vendor_name || undefined, memoNo: b.memo_no || undefined
-          }))
-        : [{ particulars: r.description || catName(r.category_id) || 'Expense', amount: Number(r.amount) || 0 }]
+      const { __items, __addl } = await fetchLines(r.id)
+      const lines = [
+        ...__items.map((it: any) => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
+        ...__addl.map((a: any) => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
+      ]
       await downloadBillVoucherPDF({
-        title: catName(r.category_id) === '—' ? 'Expense Voucher' : catName(r.category_id),
-        billRef: r.bill_ref || r.id.slice(0, 8).toUpperCase(),
+        title: r.procurement_type || 'Procurement',
+        billRef: r.doc_no || r.id.slice(0, 8).toUpperCase(),
         date: formatDate(r.expense_date),
-        payee: r.payee_name || undefined,
-        purpose: r.description || undefined,
-        lines,
-        lessDeduction: Number(r.less_deduction) || 0,
-        signLabels: signLabelList(r.sign_labels),
-        showLineSignature: !!r.show_line_signature
+        payee: vendorName(r.vendor_id) || r.payee_name || undefined,
+        purpose: [r.department, r.description].filter(Boolean).join(' · ') || undefined,
+        lines: lines.length ? lines : [{ particulars: 'Procurement', amount: Number(r.amount) || 0 }],
+        lessDeduction: 0,
+        signLabels: ['Prepared By', 'Verified By', 'Approved By', 'Head Office']
       })
     } catch (e: any) {
-      notify('error', e?.message ?? 'Could not generate the bill/voucher PDF')
+      notify('error', e?.message ?? 'Could not generate the PDF')
     }
   }
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    const list = !t ? (data as any[]) : (data as any[]).filter(r =>
-      String(r.payee_name ?? '').toLowerCase().includes(t) || String(r.description ?? '').toLowerCase().includes(t) || catName(r.category_id).toLowerCase().includes(t))
-    return list
-  }, [data, q, categories])
+    if (!t) return data as any[]
+    return (data as any[]).filter(r =>
+      String(r.doc_no ?? '').toLowerCase().includes(t) ||
+      String(vendorName(r.vendor_id) ?? r.payee_name ?? '').toLowerCase().includes(t) ||
+      String(r.department ?? '').toLowerCase().includes(t) ||
+      String(r.procurement_type ?? '').toLowerCase().includes(t))
+  }, [data, q, vendors])
 
   const columns = [
+    { key: 'doc_no', header: 'Procurement No', render: (r: any) => <span className="font-medium">{r.doc_no || '—'}</span> },
     { key: 'expense_date', header: 'Date', render: (r: any) => formatDate(r.expense_date), sortable: true },
-    { key: 'category', header: 'Expense Head', render: (r: any) => catName(r.category_id) },
-    { key: 'payee_name', header: 'Paid To', render: (r: any) => r.payee_name || '—' },
-    { key: 'payment_mode', header: 'Mode', render: (r: any) => r.payment_mode || '—' },
-    { key: 'description', header: 'Description', render: (r: any) => <span className="truncate">{r.description || '—'}</span> },
-    { key: 'amount', header: 'Amount', accessor: (r: any) => formatNumber(r.amount, 2), className: 'text-right' },
+    { key: 'procurement_type', header: 'Type', render: (r: any) => r.procurement_type || '—' },
+    { key: 'vendor', header: 'Vendor', render: (r: any) => vendorName(r.vendor_id) || r.payee_name || '—' },
+    { key: 'department', header: 'Department', render: (r: any) => r.department || '—' },
+    { key: 'payment_mode', header: 'Payment', render: (r: any) => r.payment_mode || '—' },
+    { key: 'amount', header: 'Total (BDT)', accessor: (r: any) => formatNumber(r.amount, 2), className: 'text-right' },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
       render: (r: any) => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => openView(r) },
-            { icon: 'receipt_long', label: 'Generate Bill / Voucher', onClick: () => printBill(r) },
+            { icon: 'receipt_long', label: 'Generate PDF', onClick: () => printBill(r) },
+            ...(canCreate ? [{ icon: 'content_copy', label: 'Duplicate', onClick: () => duplicate(r) }] : []),
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
@@ -146,29 +116,29 @@ export function Expenses() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search payee, description, category…" /></div>
+        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search procurement no, vendor, department…" /></div>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
-        {canCreate && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Expense</Button>}
+        {canCreate && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Procurement</Button>}
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={canEdit ? openEdit : openView} emptyTitle="No expenses recorded yet" />
+          onRowClick={canEdit ? openEdit : openView} emptyTitle="No procurement recorded yet" />
       </Card>
 
       {modal && (
-        <ExpenseForm record={editing} clientId={currentClientId!} catItems={catItems} heads={categories} notify={notify}
-          onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
+        <ProcurementForm record={editing} clientId={currentClientId!} vendors={vendors} items={items} categories={categories}
+          onMastersChanged={refreshMasters} notify={notify} onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
 
       {viewing && (
-        <ExpenseOverview exp={viewing} catName={catName(viewing.category_id)} canEdit={canEdit}
+        <ProcurementOverview p={viewing} vendorName={vendorName(viewing.vendor_id) || viewing.payee_name} canEdit={canEdit}
           onEdit={() => { const r = viewing; setViewing(null); openEdit(r) }}
-          onPrintBill={() => printBill(viewing)} onClose={() => setViewing(null)} />
+          onPrint={() => printBill(viewing)} onClose={() => setViewing(null)} />
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
-        name={deleting ? `Expense · ${formatDate(deleting.expense_date)} · ${formatNumber(deleting.amount, 2)}` : undefined}
+        name={deleting ? `Procurement · ${deleting.doc_no || formatDate(deleting.expense_date)}` : undefined}
         onConfirm={async () => {
           const res = await supabase.from('finance_expenses').delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
@@ -178,203 +148,52 @@ export function Expenses() {
   )
 }
 
-function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDone }: any) {
-  const [rememberedSignLabels, rememberSignLabels] = useRememberedField('sign_labels', DEFAULT_SIGN_LABELS)
-  const [h, setH] = useState<any>(record ?? { expense_date: today(), sign_labels: rememberedSignLabels, less_deduction: 0, payment_mode: 'Cash', amount: '' })
-  // Line items are OPTIONAL — a small cash purchase is just a single amount, a
-  // larger one an itemised breakdown. So start with none.
-  const [bills, setBills] = useState<any[]>(record?.__bills ?? [])
-  const [showVoucher, setShowVoucher] = useState(!!record?.bill_ref)
-  const [saving, setSaving] = useState(false)
-  // The form auto-adapts to the picked Expense Head's configured behaviour
-  // (Finance → Setup): mode = single | itemised | handover, plus owner-copy.
-  // Every applied value stays user-overridable below.
-  const initHead = record?.category_id ? (heads as any[])?.find((x: any) => x.id === record.category_id) : null
-  const [mode, setMode] = useState<string>(initHead?.voucher_mode || 'single')
-  const [ownerCopy, setOwnerCopy] = useState<boolean>(!!initHead?.owner_copy_required)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
-
-  // On head select, apply that head's configured behaviour.
-  const applyHead = (id: string) => {
-    const head = (heads as any[])?.find((x: any) => x.id === id)
-    const m = head?.voucher_mode || 'single'
-    setMode(m)
-    setOwnerCopy(!!head?.owner_copy_required)
-    const patch: any = { category_id: id }
-    if (head?.default_sign_labels) patch.sign_labels = head.default_sign_labels
-    else if (m === 'handover') patch.sign_labels = HANDOVER_SIGN_LABELS
-    if (head?.default_line_signature) patch.show_line_signature = true
-    set(patch)
-    if (m === 'itemised' || m === 'purchase') setBills(bs => bs.length ? bs : [blankBill()])
-    if (m === 'handover' || head?.default_line_signature) setShowVoucher(true)
-  }
-
-  // When a breakdown is present the amount is its sum; otherwise it's typed
-  // directly on the header (the quick single-amount purchase).
-  const lineTotal = bills.reduce((s, b) => s + (Number(b.amount) || 0), 0)
-  const hasLines = bills.length > 0
-  // Breakdown grid is shown for itemised/purchase heads (or when the record
-  // already has lines); single/handover heads keep the clean single-amount form.
-  const showBreakdown = mode === 'itemised' || mode === 'purchase' || hasLines
-  const isPurchase = mode === 'purchase'
-  const total = hasLines ? lineTotal : (Number(h.amount) || 0)
-  const net = total - (Number(h.less_deduction) || 0)
-
-  const save = async () => {
-    if (!(total > 0)) { notify('error', 'Enter the expense amount (or add a breakdown line with an amount)'); return }
-    if (h.sign_labels) rememberSignLabels(h.sign_labels)
-    setSaving(true)
-    try {
-      const header = {
-        client_id: clientId, expense_date: h.expense_date || today(), category_id: h.category_id || null,
-        payee_name: h.payee_name || null, description: h.description || null, amount: total,
-        payment_mode: h.payment_mode || null, vendor_bill_no: h.vendor_bill_no || null,
-        bill_ref: h.bill_ref || null, less_deduction: Number(h.less_deduction) || 0,
-        sign_labels: h.sign_labels || null, show_line_signature: !!h.show_line_signature
-      }
-      let expId = record?.id
-      if (record) {
-        const { error } = await supabase.from('finance_expenses').update(header).eq('id', record.id)
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase.from('finance_expenses').insert(header).select('id').single()
-        if (error) throw error
-        expId = data.id
-      }
-      await supabase.from('finance_expense_bills').delete().eq('expense_id', expId)
-      const payload = bills.filter(b => Number(b.amount) > 0).map(b => ({
-        client_id: clientId, expense_id: expId, bill_ref: b.bill_ref || null, amount: Number(b.amount) || 0,
-        unit: b.unit || null, qty: b.qty ? Number(b.qty) : null, rate: b.rate ? Number(b.rate) : null, remarks: b.remarks || null,
-        vendor_name: b.vendor_name || null, memo_no: b.memo_no || null
-      }))
-      if (payload.length) {
-        const { error: billErr } = await supabase.from('finance_expense_bills').insert(payload)
-        if (billErr) throw billErr
-      }
-      notify('success', `Expense ${record ? 'updated' : 'recorded'}`)
-      onDone()
-    } catch (e: any) {
-      notify('error', e?.message ?? 'Could not save expense')
-    } finally {
-      setSaving(false)
-    }
-  }
-
+function ProcurementOverview({ p, vendorName, canEdit, onEdit, onPrint, onClose }: any) {
+  const items: any[] = p.__items ?? []
+  const addl: any[] = p.__addl ?? []
+  const subtotal = items.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0)
+  const addlTotal = addl.reduce((s, a) => s + (Number(a.amount) || 0), 0)
   return (
-    <Modal open onClose={onClose} title={`${record ? 'Edit' : 'New'} Expense`} size="xl">
-      <div className="space-y-4">
-        <FinancePanel icon="receipt_long" title="Expense Details">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Date" required><Input type="date" value={h.expense_date ?? ''} onChange={e => set({ expense_date: e.target.value })} /></Field>
-            <Field label="Expense Head" required>
-              {catItems.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-surface-line px-3 py-2 text-xs text-ink-faint">
-                  No expense heads yet. Add them in <Link to="/finance/setup" className="font-medium text-brand-600 hover:underline">Finance → Setup</Link>.
-                </div>
-              ) : (
-                <Combobox items={catItems} value={h.category_id ?? ''} onChange={applyHead}
-                  placeholder="Pick an expense head…" />
-              )}
-            </Field>
-            {!isPurchase && <Field label="Paid To"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Shop / vendor / person paid" /></Field>}
-            <Field label="Payment Mode">
-              <Select value={h.payment_mode ?? 'Cash'} onChange={e => set({ payment_mode: e.target.value })}>
-                {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
-              </Select>
-            </Field>
-            <Field label="Amount (BDT)" required>
-              <Input type="number" value={hasLines ? total : (h.amount ?? '')} onChange={e => set({ amount: e.target.value })}
-                disabled={hasLines} placeholder="Total amount paid" />
-            </Field>
-            {mode !== 'handover' && !isPurchase && <Field label="Vendor Bill No"><Input value={h.vendor_bill_no ?? ''} onChange={e => set({ vendor_bill_no: e.target.value })} placeholder="Shop's own bill no — leave blank if none" /></Field>}
-            <Field label="Description / Note" className="sm:col-span-2"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} placeholder="What was this purchase for" /></Field>
-          </div>
-          {hasLines && <p className="mt-2 text-xs text-ink-faint">Amount is the sum of the items below.</p>}
-          {mode === 'handover' && <p className="mt-2 text-xs text-ink-soft">Handover head — record who handed over and who received on the voucher signatures below (no vendor bill).</p>}
-          {ownerCopy && <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"><Icon name="info" className="text-[15px]" /> Owner copy required — keep a signed copy for the accommodation owner / recipient.</p>}
-        </FinancePanel>
-
-        {showBreakdown ? <div>
-          <SectionHeader icon={isPurchase ? 'storefront' : 'view_list'} title={isPurchase ? 'Purchase items (shop memos)' : 'Items / Purchases'}
-            action={<Button size="sm" variant="secondary" icon="add" onClick={() => setBills(bs => [...bs, blankBill()])}>Add Line</Button>} />
-          <LineGrid columns={isPurchase ? PURCHASE_COLUMNS : BILL_COLUMNS} rows={bills} onChange={setBills} blank={blankBill} recompute={isPurchase ? undefined : recomputeBill}
-            totalKey="amount" footerLabel="Total" minRows={0}
-            footerExtra={() => <span><span className="text-ink-soft">Net (after deduction):&nbsp;</span><span className="font-bold tabular-nums text-brand-700 dark:text-brand-300">{formatNumber(net, 2)} BDT</span></span>} />
-        </div> : mode !== 'handover' && (
-          // Any voucher can list several small purchases on one slip — for petty
-          // day-to-day buys (tea, sugar, stationery…) where the single amount
-          // above isn't enough. One click reveals the item grid.
-          <button type="button" onClick={() => setBills([blankBill()])}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-surface-line py-2.5 text-sm font-medium text-ink-soft transition-colors hover:border-brand-400 hover:text-brand-600">
-            <Icon name="add_shopping_cart" className="text-[18px]" /> Bought several small things on one voucher? Add items
-          </button>
-        )}
-
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-ink-soft">
-            <input type="checkbox" checked={showVoucher} onChange={e => {
-              const on = e.target.checked; setShowVoucher(on)
-              if (on && !h.bill_ref) nextDocNumber(clientId, 'BILL').then(no => { if (no) set({ bill_ref: no }) })
-            }} />
-            Generate a self-voucher / receipt for this expense (signature slip — for cash payments with no vendor bill, or when a signed voucher is still needed)
-          </label>
-          {showVoucher && (
-            <FinancePanel icon="edit_note" tone="warn" title="Voucher / Receipt print details">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Voucher Reference No"><Input value={h.bill_ref ?? ''} onChange={e => set({ bill_ref: e.target.value })} placeholder="Auto-generated — editable" /></Field>
-                <Field label="Less: Advance / Deduction (BDT)"><Input type="number" value={h.less_deduction ?? 0} onChange={e => set({ less_deduction: Number(e.target.value) || 0 })} /></Field>
-                <Field label="Signature Labels (comma separated)">
-                  <Input value={h.sign_labels ?? ''} onChange={e => set({ sign_labels: e.target.value })} placeholder={DEFAULT_SIGN_LABELS} />
-                </Field>
-              </div>
-              <label className="mt-3 flex items-center gap-2 text-sm text-ink-soft">
-                <input type="checkbox" checked={!!h.show_line_signature} onChange={e => set({ show_line_signature: e.target.checked })} />
-                Add a blank signature column per line (for multiple workers to sign individually)
-              </label>
-            </FinancePanel>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button icon="save" loading={saving} onClick={save}>{record ? 'Update' : 'Save'}</Button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-function ExpenseOverview({ exp, catName, canEdit, onEdit, onPrintBill, onClose }: any) {
-  const bills: any[] = exp.__bills ?? []
-  return (
-    <Modal open onClose={onClose} title="Expense Detail" size="lg">
+    <Modal open onClose={onClose} title={`Procurement — ${p.doc_no || ''}`} size="lg">
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatCard icon="calendar_month" label="Date" value={formatDate(exp.expense_date)} />
-          <StatCard icon="sell" label="Expense Head" value={catName} />
-          <StatCard icon="person" label="Paid To" value={exp.payee_name || '—'} />
-          <StatCard icon="account_balance" label="Payment Mode" value={exp.payment_mode || '—'} />
-          <StatCard icon="receipt" label="Vendor Bill No" value={exp.vendor_bill_no || '—'} />
-          <StatCard icon="payments" tone="bad" label="Amount" value={`${formatNumber(exp.amount, 2)} BDT`} />
+          <StatCard icon="calendar_month" label="Date" value={formatDate(p.expense_date)} />
+          <StatCard icon="local_shipping" label="Vendor" value={vendorName || '—'} />
+          <StatCard icon="sell" label="Type" value={p.procurement_type || '—'} />
+          <StatCard icon="account_balance" label="Payment" value={p.payment_mode || '—'} />
+          <StatCard icon="apartment" label="Department" value={p.department || '—'} />
+          <StatCard icon="payments" tone="bad" label="Total" value={`${formatNumber(p.amount, 2)} BDT`} />
         </div>
-        {exp.description && <div><SectionHeader icon="notes" title="Description / Note" /><p className="-mt-1 text-sm text-ink-soft">{exp.description}</p></div>}
-        {bills.length > 0 && <div>
-          <SectionHeader icon="view_list" title="Itemised breakdown" />
+        <div>
+          <SectionHeader icon="inventory_2" title="Items" />
           <div className="overflow-hidden rounded-xl border border-surface-line">
-            {bills.map((b, i) => (
-              <div key={b.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
-                <span className="text-ink">{b.bill_ref || '—'}
-                  {b.qty || b.rate ? <span className="text-ink-faint"> · {b.qty ?? ''} {b.unit ?? ''} × {b.rate ?? ''}</span> : null}
-                  {b.vendor_name || b.memo_no ? <span className="text-ink-faint"> · {b.vendor_name || '—'}{b.memo_no ? ` (memo ${b.memo_no})` : ''}</span> : null}
-                </span>
-                <span className="font-semibold text-ink">{formatNumber(b.amount, 2)}</span>
+            {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> : items.map((it, i) => (
+              <div key={i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                <span className="text-ink">{it.name || '—'}<span className="text-ink-faint"> · {it.qty ?? ''} {it.unit ?? ''} × {formatNumber(it.rate, 2)}</span></span>
+                <span className="font-semibold tabular-nums text-ink">{formatNumber((Number(it.qty) || 0) * (Number(it.rate) || 0), 2)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {addl.length > 0 && <div>
+          <SectionHeader icon="add_card" title="Additional Expenses" />
+          <div className="overflow-hidden rounded-xl border border-surface-line">
+            {addl.map((a, i) => (
+              <div key={i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                <span className="text-ink">{a.expense_type || '—'}</span><span className="font-semibold tabular-nums text-ink">{formatNumber(a.amount, 2)}</span>
               </div>
             ))}
           </div>
         </div>}
+        <div className="flex flex-col items-end gap-1 text-sm">
+          <div className="flex w-full max-w-xs justify-between"><span className="text-ink-soft">Subtotal</span><span className="tabular-nums">{formatNumber(subtotal, 2)}</span></div>
+          <div className="flex w-full max-w-xs justify-between"><span className="text-ink-soft">Additional</span><span className="tabular-nums">{formatNumber(addlTotal, 2)}</span></div>
+          <div className="flex w-full max-w-xs justify-between border-t border-surface-line pt-1"><span className="font-semibold">Grand Total</span><span className="font-bold tabular-nums text-brand-700 dark:text-brand-300">{formatNumber(p.amount, 2)} BDT</span></div>
+        </div>
+        {p.description && <p className="text-sm text-ink-soft"><span className="text-ink-faint">Remarks: </span>{p.description}</p>}
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>
-          <Button variant="secondary" icon="receipt_long" onClick={onPrintBill}>Generate Voucher / Receipt</Button>
+          <Button variant="secondary" icon="receipt_long" onClick={onPrint}>Generate PDF</Button>
           {canEdit && <Button icon="edit" onClick={onEdit}>Edit</Button>}
         </div>
       </div>

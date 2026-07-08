@@ -49,7 +49,7 @@ export function FinanceRegister() {
   const cols = isV ? vCols : rCols
   const csv = useMemo(() => (isV ? vData.map(({ id, ...r }) => ({ ...r, amount: r.amount.toFixed(2) }))
     : rData.map(({ id, ...r }) => ({ ...r, amount: r.amount.toFixed(2) }))), [isV, vData, rData])
-  const title = isV ? 'Voucher / Expense Register' : 'Requisition Register'
+  const title = isV ? 'Procurement Register' : 'Requisition Register'
   const subtitle = `${isV ? 'Total spend' : 'Total requested'} ${formatNumber(total, 2)} BDT · ${count} entries${month ? ` · ${month}` : ''}`
 
   const vTable = [
@@ -74,7 +74,7 @@ export function FinanceRegister() {
           {(['voucher', 'requisition'] as const).map(k => (
             <button key={k} onClick={() => setReg(k)}
               className={'rounded-md px-3 py-1.5 text-sm font-medium ' + (reg === k ? 'bg-brand-400 text-coal-900' : 'text-ink-soft hover:bg-surface-sunken')}>
-              {k === 'voucher' ? 'Vouchers' : 'Requisitions'}
+              {k === 'voucher' ? 'Procurement' : 'Requisitions'}
             </button>
           ))}
         </div>

@@ -72,11 +72,11 @@ export function FinanceDashboard() {
 
         <Card className="p-4">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Recent vouchers</p>
-            <Link to="/finance/voucher" className="text-xs font-medium text-brand-700 hover:underline">All vouchers →</Link>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Recent procurement</p>
+            <Link to="/finance/voucher" className="text-xs font-medium text-brand-700 hover:underline">All →</Link>
           </div>
           <div className="overflow-hidden rounded-xl border border-surface-line">
-            {recent.length === 0 ? <p className="p-3 text-sm text-ink-faint">No vouchers yet</p> :
+            {recent.length === 0 ? <p className="p-3 text-sm text-ink-faint">No procurement yet</p> :
               recent.map((e: any, i: number) => (
                 <div key={e.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{formatDate(e.expense_date)} · {catName(e.category_id)}{e.payee_name ? <span className="text-ink-faint"> · {e.payee_name}</span> : null}</span>
@@ -89,7 +89,7 @@ export function FinanceDashboard() {
 
       <div className="flex flex-wrap gap-2">
         <Link to="/finance/requisition" className="inline-flex items-center gap-2 rounded-lg border border-surface-line bg-surface px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-sunken"><Icon name="assignment" className="text-[18px] text-ink-soft" /> New Requisition</Link>
-        <Link to="/finance/voucher" className="inline-flex items-center gap-2 rounded-lg border border-surface-line bg-surface px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-sunken"><Icon name="receipt_long" className="text-[18px] text-ink-soft" /> New Voucher</Link>
+        <Link to="/finance/voucher" className="inline-flex items-center gap-2 rounded-lg border border-surface-line bg-surface px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-sunken"><Icon name="receipt_long" className="text-[18px] text-ink-soft" /> New Procurement</Link>
         <Link to="/finance/cash-book" className="inline-flex items-center gap-2 rounded-lg border border-surface-line bg-surface px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-sunken"><Icon name="menu_book" className="text-[18px] text-ink-soft" /> Cash Book</Link>
       </div>
     </div>

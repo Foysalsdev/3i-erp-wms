@@ -76,7 +76,7 @@ export const MODULES: NavModule[] = [
     { key: 'inbound', label: 'Inbound Reports', group: 'Inbound / Outbound' }, { key: 'outbound', label: 'Outbound Reports', group: 'Inbound / Outbound' },
     { key: 'outbound-deliveries', label: 'Delivery Register', group: 'Inbound / Outbound' },
     { key: 'transport', label: 'Transport Reports', group: 'Other Modules' }, { key: 'asset', label: 'Asset Reports', group: 'Other Modules' },
-    { key: 'finance', label: 'Finance Reports', group: 'Other Modules' }, { key: 'hr', label: 'HR Reports', group: 'Other Modules' },
+    { key: 'hr', label: 'HR Reports', group: 'Other Modules' },
     { key: 'builder', label: 'Custom Report Builder', group: 'Custom' }
   ]},
   { key: 'settings', label: 'Settings', icon: 'settings', path: '/settings', permission: 'settings.view', tabs: [

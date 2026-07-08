@@ -59,8 +59,9 @@ export const MODULES: NavModule[] = [
     { key: 'non-inventory-consumption', label: 'Non-Inventory Consumption' }, { key: 'history', label: 'Asset History' }
   ]},
   { key: 'finance', label: 'Finance', icon: 'payments', path: '/finance', permission: 'finance.view', tabs: [
-    { key: 'requisition', label: 'Operating Cost Requisition' }, { key: 'expense', label: 'Expense Management' },
-    { key: 'monthly-adjustment', label: 'Monthly Adjustment' }
+    { key: 'dashboard', label: 'Dashboard' }, { key: 'requisition', label: 'Requisitions' },
+    { key: 'voucher', label: 'Vouchers' }, { key: 'cash-book', label: 'Cash Book' },
+    { key: 'register', label: 'Registers' }, { key: 'setup', label: 'Setup' }
   ]},
   { key: 'hr', label: 'HR & Administration', icon: 'groups', path: '/hr', permission: 'hr.view', tabs: [
     { key: 'employee', label: 'Employee Master' }, { key: 'department', label: 'Department Master' },
@@ -76,7 +77,7 @@ export const MODULES: NavModule[] = [
     { key: 'inbound', label: 'Inbound Reports', group: 'Inbound / Outbound' }, { key: 'outbound', label: 'Outbound Reports', group: 'Inbound / Outbound' },
     { key: 'outbound-deliveries', label: 'Delivery Register', group: 'Inbound / Outbound' },
     { key: 'transport', label: 'Transport Reports', group: 'Other Modules' }, { key: 'asset', label: 'Asset Reports', group: 'Other Modules' },
-    { key: 'finance', label: 'Finance Reports', group: 'Other Modules' }, { key: 'hr', label: 'HR Reports', group: 'Other Modules' },
+    { key: 'hr', label: 'HR Reports', group: 'Other Modules' },
     { key: 'builder', label: 'Custom Report Builder', group: 'Custom' }
   ]},
   { key: 'settings', label: 'Settings', icon: 'settings', path: '/settings', permission: 'settings.view', tabs: [

@@ -20,7 +20,7 @@ import { useRememberedField } from '@/hooks/useRememberedField'
 import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
-const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remarks: '', amount: 0 })
+const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remarks: '', amount: undefined })
 
 export function Requisitions() {
   const { data, loading, refresh } = useCollection('finance_requisitions', { order: 'created_at' })
@@ -202,7 +202,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
                 <input className="fiori-input" value={l.unit ?? ''} onChange={e => setLine(i, { unit: e.target.value })} placeholder="Ltr" />
                 <input className="fiori-input" type="number" value={l.qty ?? ''} onChange={e => setLine(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
                 <input className="fiori-input" value={l.remarks ?? ''} onChange={e => setLine(i, { remarks: e.target.value })} />
-                <input className="fiori-input text-right" type="number" value={l.amount ?? ''} onChange={e => setLine(i, { amount: Number(e.target.value) || 0 })} />
+                <input className="fiori-input text-right" type="number" value={l.amount ?? ''} onChange={e => setLine(i, { amount: e.target.value === '' ? undefined : (Number(e.target.value) || 0) })} placeholder="0.00" />
                 <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad" onClick={() => setLines(ls => ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls)}>
                   <Icon name="close" className="text-[18px]" />
                 </button>

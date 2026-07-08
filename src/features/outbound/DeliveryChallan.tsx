@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { TrailPanel } from '@/components/shared/TrailPanel'
 import { DocVersions } from '@/components/shared/DocVersions'
+import { DocumentFlow } from '@/components/shared/DocumentFlow'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { FilterPanel } from '@/components/ui/FilterPanel'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -282,16 +283,61 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       setStockMap(m)
     })
   }, [clientId, h.sales_order_id])
+  // Saved Bill-To / Ship-To addresses for the chosen customer (customer master
+  // → Addresses). A customer can have many; the challan picks from them.
+  const [custAddresses, setCustAddresses] = useState<any[]>([])
+  useEffect(() => {
+    if (!h.customer_id) { setCustAddresses([]); return }
+    supabase.from('customer_addresses').select('*').eq('customer_id', h.customer_id).then(({ data }) => {
+      const list = data ?? []
+      setCustAddresses(list)
+      // On a NEW challan, prefill from the customer's saved addresses: a
+      // Billing-type for Bill-To, a Shipping-type for Ship-To, else the default.
+      if (!record && list.length) {
+        const def = list.find((a: any) => a.is_default)
+        const bill = list.find((a: any) => a.address_type === 'Billing' || a.address_type === 'Both') || def || list[0]
+        const ship = list.find((a: any) => a.address_type === 'Shipping' || a.address_type === 'Both') || def || list[0]
+        set({
+          bill_to_address_id: bill?.id ?? null, bill_to_address: bill?.address ?? h.bill_to_address,
+          ship_to_address_id: ship?.id ?? null, ship_to_address: ship?.address ?? h.ship_to_address
+        })
+      }
+    })
+  }, [h.customer_id])
+  // Driver master for the picker; ad-hoc vendor drivers can still be typed free.
+  const [drivers, setDrivers] = useState<any[]>([])
+  useEffect(() => { supabase.from('drivers').select('id,name,phone,driver_code').order('name').then(({ data }) => setDrivers(data ?? [])) }, [])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [more, setMore] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+
+  // Bill-To / Ship-To: pick a saved customer address (sets the link + copies
+  // the text as a snapshot), still fully editable as free text below.
+  const renderAddr = (label: string, idKey: string, textKey: string) => (
+    <Field label={label} className="sm:col-span-2">
+      {custAddresses.length > 0 && (
+        <SelectBox className="mb-2" value={h[idKey] ?? ''} onChange={e => {
+          const a = custAddresses.find((x: any) => x.id === e.target.value)
+          set({ [idKey]: e.target.value || null, ...(a ? { [textKey]: a.address } : {}) })
+        }}>
+          <option value="">— Pick a saved address —</option>
+          {custAddresses.map((a: any) => (
+            <option key={a.id} value={a.id}>{[a.label, a.address_type].filter(Boolean).join(' · ') || 'Address'}{a.is_default ? ' (default)' : ''}</option>
+          ))}
+        </SelectBox>
+      )}
+      <Input value={h[textKey] ?? ''} onChange={e => set({ [idKey]: null, [textKey]: e.target.value })}
+        placeholder={custAddresses.length ? 'Or type / edit the address' : 'Auto-filled from customer — or type here'} />
+    </Field>
+  )
   const posted = !!record?.posted_at
   const mode: 'transport' | 'courier' = h.delivery_method === 'courier' ? 'courier' : 'transport'
   const locked = !!lockSo && !record   // creating a new challan from a specific order
   const [vehs, setVehs] = useState<any[]>(vehicles)
   const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
   const tVendorItems = transportVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
+  const driverItems = drivers.map((d: any) => ({ id: d.id, label: d.name, sublabel: d.phone || d.driver_code }))
   const courierItems = couriers.map((v: any) => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
 
   // Courier rate card: per-piece rate by product category, falling back to the
@@ -384,6 +430,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         delivery_method: mode, delivery_cost: h.delivery_cost === '' || h.delivery_cost == null ? null : Number(h.delivery_cost),
         // transport details
         vehicle_id: mode === 'transport' ? (h.vehicle_id || null) : null,
+        driver_id: mode === 'transport' ? (h.driver_id || null) : null,
         driver_name: mode === 'transport' ? (h.driver_name || null) : null,
         driver_phone: mode === 'transport' ? (h.driver_phone || null) : null,
         transporter_id: mode === 'transport' ? (h.transporter_id || null) : null,
@@ -396,7 +443,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         // optional extras
         dispatch_time: h.dispatch_time || null, prepared_by: h.prepared_by || null,
         receiver_name: h.receiver_name || null, receiver_phone: h.receiver_phone || null,
-        unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null, ship_to_address: h.ship_to_address || null,
+        unloading_point: h.unloading_point || null,
+        bill_to_address: h.bill_to_address || null, bill_to_address_id: h.bill_to_address_id || null,
+        ship_to_address: h.ship_to_address || null, ship_to_address_id: h.ship_to_address_id || null,
         status: h.status || 'draft', remarks: h.remarks || null,
         print_note: (h.print_note ?? rememberedNote) || null
       }
@@ -494,7 +543,12 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
               <Field label="Vehicle">
                 <CreatableCombobox items={vehItems} value={h.vehicle_id ?? ''} onChange={(id: string) => set({ vehicle_id: id })} onCreate={createVehicle} noun="vehicle" placeholder="DM TA 00-0000" format={formatVehicleNo} />
               </Field>
-              <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_name: e.target.value })} /></Field>
+              <Field label="Driver">
+                <Combobox items={driverItems} value={h.driver_id ?? ''}
+                  onChange={(id: string) => { const d = drivers.find((x: any) => x.id === id); set({ driver_id: id, driver_name: d?.name || h.driver_name, driver_phone: d?.phone || h.driver_phone }) }}
+                  placeholder="Pick a saved driver" />
+              </Field>
+              <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_id: null, driver_name: e.target.value })} placeholder="Or type — ad-hoc / vendor driver" /></Field>
               <Field label="Driver Phone"><Input value={h.driver_phone ?? ''} onChange={e => set({ driver_phone: e.target.value })} /></Field>
               <Field label="Transport Vendor">
                 <Combobox items={tVendorItems} value={h.transporter_id ?? ''}
@@ -552,12 +606,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
             <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>
             <Field label="Unloading Point"><Input value={h.unloading_point ?? ''} onChange={e => set({ unloading_point: e.target.value })} /></Field>
-            <Field label="Bill-To Address" className="sm:col-span-2">
-              <Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} placeholder="Auto-filled from customer master — edit if this delivery differs" />
-            </Field>
-            <Field label="Ship-To Address" className="sm:col-span-2">
-              <Input value={h.ship_to_address ?? ''} onChange={e => set({ ship_to_address: e.target.value })} placeholder="Where goods are delivered — auto-filled from customer, edit if different from billing" />
-            </Field>
+            {renderAddr('Bill-To Address', 'bill_to_address_id', 'bill_to_address')}
+            {renderAddr('Ship-To Address', 'ship_to_address_id', 'ship_to_address')}
           </div>
         )}
 
@@ -620,20 +670,11 @@ function ChallanOverview({ challan, customerName, vehicles, products, transportV
           <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge>{challan.posted_at && <Badge tone="positive">Stock out</Badge>}</div>} />
         </div>
 
-        <Section title="Linked documents">
-          <div className="overflow-hidden rounded-xl border border-surface-line">
-            {[
-              ...(so ? [{ key: 'so', icon: 'shopping_cart', label: `Sales Order · ${so.so_no}`, meta: `${so.status}${so.reference_no ? ' · PO ' + so.reference_no : ''}` }] : []),
-              ...gatePasses.map((g: any) => ({ key: g.gate_pass_no, icon: 'door_front', label: `Gate Pass · ${g.gate_pass_no}`, meta: `${g.status} · ${formatDate(g.gate_out_date)}` }))
-            ].map((row, i) => (
-              <div key={row.key} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
-                <span className="flex min-w-0 items-center gap-2 text-ink"><Icon name={row.icon} className="shrink-0 text-[18px] text-ink-faint" /> <span className="truncate">{row.label}</span></span>
-                <span className="shrink-0 text-ink-soft">{row.meta}</span>
-              </div>
-            ))}
-            {!so && gatePasses.length === 0 && <p className="p-3.5 text-sm text-ink-faint">No linked documents yet.</p>}
-          </div>
-        </Section>
+        <DocumentFlow nodes={[
+          so ? { icon: 'shopping_cart', type: 'Sales Order', number: so.so_no, status: so.status, to: `/outbound/sales-order?q=${encodeURIComponent(so.so_no)}` } : null,
+          { icon: 'local_shipping', type: 'Delivery Challan', number: challan.challan_no, status: statusLabel(challan.status), tone: tone(challan.status), current: true },
+          ...gatePasses.map((g: any) => ({ icon: 'door_front', type: 'Gate Pass', number: g.gate_pass_no, status: g.status, to: `/outbound/gate-pass?q=${encodeURIComponent(g.gate_pass_no)}` }))
+        ]} />
 
         <Section title="Items">
           <div className="overflow-hidden rounded-xl border border-surface-line">

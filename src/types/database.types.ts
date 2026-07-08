@@ -962,6 +962,8 @@ export type Database = {
       delivery_challans: {
         Row: {
           bill_to_address: string | null
+          bill_to_address_id: string | null
+          ship_to_address_id: string | null
           challan_date: string
           challan_no: string
           client_id: string
@@ -1001,6 +1003,8 @@ export type Database = {
         }
         Insert: {
           bill_to_address?: string | null
+          bill_to_address_id?: string | null
+          ship_to_address_id?: string | null
           challan_date?: string
           challan_no: string
           client_id: string
@@ -1040,6 +1044,8 @@ export type Database = {
         }
         Update: {
           bill_to_address?: string | null
+          bill_to_address_id?: string | null
+          ship_to_address_id?: string | null
           challan_date?: string
           challan_no?: string
           client_id?: string
@@ -1757,6 +1763,12 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          code: string | null
+          is_active: boolean
+          voucher_mode: string
+          default_line_signature: boolean
+          default_sign_labels: string | null
+          owner_copy_required: boolean
           updated_at: string
         }
         Insert: {
@@ -1764,6 +1776,12 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          code?: string | null
+          is_active?: boolean
+          voucher_mode?: string
+          default_line_signature?: boolean
+          default_sign_labels?: string | null
+          owner_copy_required?: boolean
           updated_at?: string
         }
         Update: {
@@ -1771,6 +1789,12 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          code?: string | null
+          is_active?: boolean
+          voucher_mode?: string
+          default_line_signature?: boolean
+          default_sign_labels?: string | null
+          owner_copy_required?: boolean
           updated_at?: string
         }
         Relationships: [

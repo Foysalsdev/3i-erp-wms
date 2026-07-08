@@ -10,7 +10,7 @@ import { StockMovementReport } from '../components/StockMovementReport'
 import { TransportReport } from '../components/TransportReport'
 import { StockAgingReport } from '../components/StockAgingReport'
 import { InventoryValuationReport } from '../components/InventoryValuationReport'
-import { InboundReport, AssetReport, FinanceReport, HrReport, DeliveryRegisterReport } from '../components/RegisterReports'
+import { InboundReport, AssetReport, HrReport, DeliveryRegisterReport } from '../components/RegisterReports'
 import { DailyInOutReport } from '../components/DailyInOutReport'
 import { PendingMattersReport } from '../components/PendingMattersReport'
 
@@ -26,7 +26,6 @@ const REPORTS: Record<string, () => JSX.Element> = {
   'inventory-valuation': InventoryValuationReport,
   inbound: InboundReport,
   asset: AssetReport,
-  finance: FinanceReport,
   hr: HrReport
 }
 

@@ -13,7 +13,8 @@ import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
-import { CreatableCombobox, type ComboItem } from '@/components/shared/CreatableCombobox'
+import { Combobox } from '@/components/shared/Combobox'
+import { Link } from 'react-router-dom'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
@@ -22,13 +23,14 @@ import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SIGN_LABELS = 'Prepared By, Verified By, Approved By, Head Office'
+const HANDOVER_SIGN_LABELS = 'Handed Over By, Received By'
 const PAYMENT_MODES = ['Cash', 'Bank', 'bKash', 'Nagad', 'Card', 'Other']
-const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: 0 })
+const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: undefined as number | undefined })
 const signLabelList = (s: string) => (s || DEFAULT_SIGN_LABELS).split(',').map(x => x.trim()).filter(Boolean)
 
 export function Expenses() {
   const { data, loading, refresh } = useCollection('finance_expenses', { order: 'expense_date' })
-  const { data: categories, refresh: refreshCategories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
+  const { data: categories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { currentClientId, can, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
   // Split by DB operation: RLS requires finance.create for new expenses and
@@ -43,15 +45,12 @@ export function Expenses() {
   const [viewing, setViewing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
 
-  const catItems: ComboItem[] = (categories as any[]).map(c => ({ id: c.id, label: c.name }))
+  // Vouchers pick from the active Expense Head master (managed in Finance →
+  // Setup) — not created inline. The code shows as the mono chip, the name as
+  // the description.
+  const catItems = (categories as any[]).filter(c => c.is_active !== false)
+    .map(c => ({ id: c.id, label: c.code || c.name, sublabel: c.code ? c.name : undefined }))
   const catName = (id: string) => (categories as any[]).find(c => c.id === id)?.name ?? '—'
-
-  const createCategory = async (name: string) => {
-    const { data, error } = await supabase.from('finance_expense_categories').insert({ client_id: currentClientId!, name }).select('*').single()
-    if (error) { notify('error', error.message); return null }
-    refreshCategories()
-    return { id: data.id, label: data.name }
-  }
 
   const fetchBills = async (expenseId: string) => {
     const { data: bills } = await supabase.from('finance_expense_bills').select('*').eq('expense_id', expenseId).order('created_at')
@@ -135,7 +134,7 @@ export function Expenses() {
       </Card>
 
       {modal && (
-        <ExpenseForm record={editing} clientId={currentClientId!} catItems={catItems} createCategory={createCategory} notify={notify}
+        <ExpenseForm record={editing} clientId={currentClientId!} catItems={catItems} heads={categories} notify={notify}
           onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
       )}
 
@@ -156,7 +155,7 @@ export function Expenses() {
   )
 }
 
-function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClose, onDone }: any) {
+function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDone }: any) {
   const [rememberedSignLabels, rememberSignLabels] = useRememberedField('sign_labels', DEFAULT_SIGN_LABELS)
   const [h, setH] = useState<any>(record ?? { expense_date: today(), sign_labels: rememberedSignLabels, less_deduction: 0, payment_mode: 'Cash', amount: '' })
   // Line items are OPTIONAL — a small cash purchase is just a single amount, a
@@ -164,7 +163,28 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
   const [bills, setBills] = useState<any[]>(record?.__bills ?? [])
   const [showVoucher, setShowVoucher] = useState(!!record?.bill_ref)
   const [saving, setSaving] = useState(false)
+  // The form auto-adapts to the picked Expense Head's configured behaviour
+  // (Finance → Setup): mode = single | itemised | handover, plus owner-copy.
+  // Every applied value stays user-overridable below.
+  const initHead = record?.category_id ? (heads as any[])?.find((x: any) => x.id === record.category_id) : null
+  const [mode, setMode] = useState<string>(initHead?.voucher_mode || 'single')
+  const [ownerCopy, setOwnerCopy] = useState<boolean>(!!initHead?.owner_copy_required)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+
+  // On head select, apply that head's configured behaviour.
+  const applyHead = (id: string) => {
+    const head = (heads as any[])?.find((x: any) => x.id === id)
+    const m = head?.voucher_mode || 'single'
+    setMode(m)
+    setOwnerCopy(!!head?.owner_copy_required)
+    const patch: any = { category_id: id }
+    if (head?.default_sign_labels) patch.sign_labels = head.default_sign_labels
+    else if (m === 'handover') patch.sign_labels = HANDOVER_SIGN_LABELS
+    if (head?.default_line_signature) patch.show_line_signature = true
+    set(patch)
+    if (m === 'itemised') setBills(bs => bs.length ? bs : [blankBill()])
+    if (m === 'handover' || head?.default_line_signature) setShowVoucher(true)
+  }
   const setBill = (i: number, patch: any) => setBills(bs => bs.map((b, idx) => {
     if (idx !== i) return b
     const next = { ...b, ...patch }
@@ -178,6 +198,9 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
   // directly on the header (the quick single-amount purchase).
   const lineTotal = bills.reduce((s, b) => s + (Number(b.amount) || 0), 0)
   const hasLines = bills.length > 0
+  // Breakdown grid is shown for itemised heads (or when the record already has
+  // lines); single/handover heads keep the clean single-amount form.
+  const showBreakdown = mode === 'itemised' || hasLines
   const total = hasLines ? lineTotal : (Number(h.amount) || 0)
   const net = total - (Number(h.less_deduction) || 0)
 
@@ -226,9 +249,15 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
         <FinancePanel icon="receipt_long" title="Expense Details">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Date" required><Input type="date" value={h.expense_date ?? ''} onChange={e => set({ expense_date: e.target.value })} /></Field>
-            <Field label="Expense Head">
-              <CreatableCombobox items={catItems} value={h.category_id ?? ''} onChange={(id: string) => set({ category_id: id })}
-                onCreate={createCategory} noun="head" placeholder="e.g. Fuel, Stationery, Accommodation Rent, Labour, Repair…" />
+            <Field label="Expense Head" required>
+              {catItems.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-surface-line px-3 py-2 text-xs text-ink-faint">
+                  No expense heads yet. Add them in <Link to="/finance/setup" className="font-medium text-brand-600 hover:underline">Finance → Setup</Link>.
+                </div>
+              ) : (
+                <Combobox items={catItems} value={h.category_id ?? ''} onChange={applyHead}
+                  placeholder="Pick an expense head…" />
+              )}
             </Field>
             <Field label="Paid To"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Shop / vendor / person paid" /></Field>
             <Field label="Payment Mode">
@@ -240,18 +269,20 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
               <Input type="number" value={hasLines ? total : (h.amount ?? '')} onChange={e => set({ amount: e.target.value })}
                 disabled={hasLines} placeholder="Total amount paid" />
             </Field>
-            <Field label="Vendor Bill No"><Input value={h.vendor_bill_no ?? ''} onChange={e => set({ vendor_bill_no: e.target.value })} placeholder="Shop's own bill no — leave blank if none" /></Field>
+            {mode !== 'handover' && <Field label="Vendor Bill No"><Input value={h.vendor_bill_no ?? ''} onChange={e => set({ vendor_bill_no: e.target.value })} placeholder="Shop's own bill no — leave blank if none" /></Field>}
             <Field label="Description / Note" className="sm:col-span-2"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} placeholder="What was this purchase for" /></Field>
           </div>
           {hasLines && <p className="mt-2 text-xs text-ink-faint">Amount is the sum of the itemised breakdown below.</p>}
+          {mode === 'handover' && <p className="mt-2 text-xs text-ink-soft">Handover head — record who handed over and who received on the voucher signatures below (no vendor bill).</p>}
+          {ownerCopy && <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"><Icon name="info" className="text-[15px]" /> Owner copy required — keep a signed copy for the accommodation owner / recipient.</p>}
         </FinancePanel>
 
-        <div>
-          <SectionHeader icon="view_list" title="Itemised breakdown (optional)"
+        {showBreakdown && <div>
+          <SectionHeader icon="view_list" title="Itemised breakdown"
             action={<Button size="sm" variant="secondary" icon="add" onClick={() => setBills(bs => [...bs, blankBill()])}>Add Line</Button>} />
           {!hasLines ? (
             <p className="rounded-xl border border-dashed border-surface-line px-3 py-3 text-sm text-ink-faint">
-              No breakdown — just the single amount above. Add lines only for a detailed purchase (e.g. many items, or labour per unit).
+              No breakdown yet — add lines for a detailed purchase (e.g. many items, or labour per unit), or just type the single amount above.
             </p>
           ) : (
             <div className="overflow-hidden rounded-xl border border-surface-line">
@@ -265,7 +296,7 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
                   <input className="fiori-input" type="number" value={b.qty ?? ''} onChange={e => setBill(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
                   <input className="fiori-input" type="number" value={b.rate ?? ''} onChange={e => setBill(i, { rate: e.target.value === '' ? undefined : Number(e.target.value) })} />
                   <input className="fiori-input" value={b.remarks ?? ''} onChange={e => setBill(i, { remarks: e.target.value })} />
-                  <input className="fiori-input text-right" type="number" value={b.amount ?? ''} onChange={e => setBill(i, { amount: Number(e.target.value) || 0 })} />
+                  <input className="fiori-input text-right" type="number" value={b.amount ?? ''} onChange={e => setBill(i, { amount: e.target.value === '' ? undefined : (Number(e.target.value) || 0) })} placeholder="0.00" />
                   <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad" onClick={() => setBills(bs => bs.filter((_, idx) => idx !== i))}>
                     <Icon name="close" className="text-[18px]" />
                   </button>
@@ -277,7 +308,7 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
             <span className="rounded-lg bg-surface-sunken px-3 py-1.5"><span className="text-ink-faint">Total:&nbsp;</span><span className="font-semibold text-ink">{formatNumber(total, 2)}</span></span>
             <span className="rounded-lg bg-brand-50 px-3 py-1.5 dark:bg-brand-500/15"><span className="text-ink-soft">Net (after deduction):&nbsp;</span><span className="font-bold text-brand-700 dark:text-brand-300">{formatNumber(net, 2)} BDT</span></span>
           </div>
-        </div>
+        </div>}
 
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-ink-soft">

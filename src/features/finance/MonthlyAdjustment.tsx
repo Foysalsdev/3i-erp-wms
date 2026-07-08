@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
@@ -6,6 +7,7 @@ import { useCollection } from '@/hooks/useCollection'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { Icon } from '@/components/ui/Icon'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadMonthlyAdjustmentPDF, SUBMITTED_TO } from '@/pdf/FinancePDF'
 import {
@@ -57,7 +59,10 @@ export function MonthlyAdjustment() {
   // finance.edit) — matched below against whether a snapshot already exists.
   const canCreate = can('finance.create')
   const canEdit = can('finance.edit')
-  const [period, setPeriod] = useState(thisMonth())
+  // A ?period=YYYY-MM deep-link (from the My Tasks "Month to submit" matter)
+  // lands straight on that month.
+  const [params] = useSearchParams()
+  const [period, setPeriod] = useState(/^\d{4}-\d{2}$/.test(params.get('period') || '') ? params.get('period')! : thisMonth())
   const [submitting, setSubmitting] = useState(false)
   const [addingAdjustment, setAddingAdjustment] = useState(false)
 
@@ -206,20 +211,43 @@ export function MonthlyAdjustment() {
     refreshAdj()
   }
 
+  // Reopen a submitted month: clears submitted_at, which lifts the DB period
+  // lock so its receipts/expenses/adjustments can be edited again.
+  const reopen = async () => {
+    if (!existing) return
+    if (!window.confirm(`Reopen ${monthLabel(period)}? Its transactions become editable again and you'll need to re-submit afterwards.`)) return
+    setSubmitting(true)
+    const { error } = await supabase.from('finance_monthly_adjustments').update({ submitted_at: null }).eq('id', existing.id)
+    setSubmitting(false)
+    if (error) { notify('error', error.message); return }
+    notify('success', `${monthLabel(period)} reopened — now editable`)
+    refreshAdj()
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <input type="month" className="fiori-input w-48" value={period} onChange={e => setPeriod(e.target.value)} />
         {existing?.submitted_at && (
           <Badge tone={submittedDrift ? 'critical' : 'positive'}>
-            Submitted {formatDateTime(existing.submitted_at)}{submittedDrift ? ' · figures changed since' : ''}
+            <Icon name="lock" className="text-[13px]" /> Submitted {formatDateTime(existing.submitted_at)}{submittedDrift ? ' · figures changed since' : ''}
           </Badge>
         )}
         <div className="ml-auto flex gap-2">
           <Button variant="secondary" icon="picture_as_pdf" onClick={exportPDF}>Export PDF</Button>
-          {(existing ? canEdit : canCreate) && <Button icon="task_alt" loading={submitting} onClick={markSubmitted}>{existing?.submitted_at ? 'Re-submit' : 'Mark Submitted'}</Button>}
+          {existing?.submitted_at
+            ? <>
+                {canEdit && <Button variant="secondary" icon="lock_open" loading={submitting} onClick={reopen}>Reopen</Button>}
+                {canEdit && <Button icon="task_alt" loading={submitting} onClick={markSubmitted}>Re-submit</Button>}
+              </>
+            : (existing ? canEdit : canCreate) && <Button icon="task_alt" loading={submitting} onClick={markSubmitted}>Mark Submitted</Button>}
         </div>
       </div>
+      {existing?.submitted_at && !submittedDrift && (
+        <p className="rounded-lg bg-ok/10 px-3 py-2 text-sm text-ok">
+          <Icon name="lock" className="text-[14px]" /> This month is submitted &amp; locked — its receipts, expenses and balance adjustments can't be changed. Use Reopen to edit, then re-submit.
+        </p>
+      )}
       {submittedDrift && (
         <p className="rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">
           This month's receipts/expenses were edited after it was submitted — the figures shown no longer match what was sent to Head Office

@@ -109,49 +109,6 @@ export function AssetReport() {
   )
 }
 
-// ---- Finance (Customer Billing) -------------------------------------------
-export function FinanceReport() {
-  const { rows, loading, currentClientId } = useClientRows('billing_invoices')
-  const [customers, setCustomers] = useState<Record<string, string>>({})
-  useEffect(() => {
-    if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId).then(({ data }) => {
-      const m: Record<string, string> = {}; (data ?? []).forEach((c: any) => { m[c.id] = `${c.customer_code} — ${c.name}` }); setCustomers(m)
-    })
-  }, [currentClientId])
-  const data = useMemo(() => rows.map(r => ({
-    invoice_no: r.invoice_no ?? '', customer: customers[r.customer_id] ?? '—', invoice_date: formatDate(r.invoice_date),
-    total: n(r.total), status: r.status ?? '—'
-  })), [rows, customers])
-  const cols: RepCol[] = [
-    { key: 'invoice_no', header: 'Invoice No', width: '18%' }, { key: 'customer', header: 'Customer', width: '38%' },
-    { key: 'invoice_date', header: 'Date', width: '15%' }, { key: 'total', header: 'Total', align: 'right', width: '15%' },
-    { key: 'status', header: 'Status', width: '14%' }
-  ]
-  const csv = useMemo(() => data.map(r => ({ ...r, total: r.total.toFixed(2) })), [data])
-  const tableCols = [
-    { key: 'invoice_no', header: 'Invoice No', accessor: (r: any) => r.invoice_no, className: 'font-medium' },
-    { key: 'customer', header: 'Customer', accessor: (r: any) => r.customer },
-    { key: 'invoice_date', header: 'Date', accessor: (r: any) => r.invoice_date },
-    { key: 'total', header: 'Total', className: 'text-right', accessor: (r: any) => formatNumber(r.total, 2) },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={r.status === 'paid' ? 'positive' : r.status === 'cancelled' ? 'negative' : 'info'}>{r.status}</Badge> }
-  ]
-  if (loading) return <Spinner label="Loading…" />
-  const billed = data.reduce((s, r) => s + r.total, 0)
-  const paid = data.filter(r => r.status === 'paid').reduce((s, r) => s + r.total, 0)
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <ReportToolbar count={data.length} onCSV={() => downloadCSV('Finance Report', cols, csv)} onPDF={() => downloadReportPDF('Finance (Billing) Report', `Billed ${formatNumber(billed, 2)} · Paid ${formatNumber(paid, 2)}`, cols, csv)} />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard label="Invoices" value={formatNumber(data.length)} />
-        <StatCard label="Total Billed" value={formatNumber(billed, 2)} />
-        <StatCard label="Outstanding" value={formatNumber(billed - paid, 2)} />
-      </div>
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><DataTable fill columns={tableCols} rows={data} rowKey={(r: any) => r.invoice_no} emptyTitle="No invoices" /></Card>
-    </div>
-  )
-}
-
 // ---- HR (Employees) --------------------------------------------------------
 export function HrReport() {
   const { rows, loading } = useClientRows('employees')

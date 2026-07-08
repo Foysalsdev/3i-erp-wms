@@ -104,9 +104,8 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
     if (can('transport.create')) {
       Object.values(OPERATIONS).filter(d => d.module === 'transport').forEach(d => out.push({ cat: 'Create', icon: d.icon, label: `New ${d.singular}`, sub: 'Transport', path: `/transport/${d.key}?new=1` }))
     }
-    if (can('finance.create')) {
-      Object.values(OPERATIONS).filter(d => d.module === 'finance').forEach(d => out.push({ cat: 'Create', icon: d.icon, label: `New ${d.singular}`, sub: 'Finance', path: `/finance/${d.key}?new=1` }))
-    }
+    // Finance is a separate, secret module — it is reached only from inside
+    // /finance, never surfaced on the shared global command palette.
     return out
   }, [can])
 

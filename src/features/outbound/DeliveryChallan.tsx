@@ -303,6 +303,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       }
     })
   }, [h.customer_id])
+  // Driver master for the picker; ad-hoc vendor drivers can still be typed free.
+  const [drivers, setDrivers] = useState<any[]>([])
+  useEffect(() => { supabase.from('drivers').select('id,name,phone,driver_code').order('name').then(({ data }) => setDrivers(data ?? [])) }, [])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [more, setMore] = useState(false)
@@ -333,6 +336,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const [vehs, setVehs] = useState<any[]>(vehicles)
   const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
   const tVendorItems = transportVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
+  const driverItems = drivers.map((d: any) => ({ id: d.id, label: d.name, sublabel: d.phone || d.driver_code }))
   const courierItems = couriers.map((v: any) => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
 
   // Courier rate card: per-piece rate by product category, falling back to the
@@ -425,6 +429,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         delivery_method: mode, delivery_cost: h.delivery_cost === '' || h.delivery_cost == null ? null : Number(h.delivery_cost),
         // transport details
         vehicle_id: mode === 'transport' ? (h.vehicle_id || null) : null,
+        driver_id: mode === 'transport' ? (h.driver_id || null) : null,
         driver_name: mode === 'transport' ? (h.driver_name || null) : null,
         driver_phone: mode === 'transport' ? (h.driver_phone || null) : null,
         transporter_id: mode === 'transport' ? (h.transporter_id || null) : null,
@@ -537,7 +542,12 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
               <Field label="Vehicle">
                 <CreatableCombobox items={vehItems} value={h.vehicle_id ?? ''} onChange={(id: string) => set({ vehicle_id: id })} onCreate={createVehicle} noun="vehicle" placeholder="DM TA 00-0000" format={formatVehicleNo} />
               </Field>
-              <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_name: e.target.value })} /></Field>
+              <Field label="Driver">
+                <Combobox items={driverItems} value={h.driver_id ?? ''}
+                  onChange={(id: string) => { const d = drivers.find((x: any) => x.id === id); set({ driver_id: id, driver_name: d?.name || h.driver_name, driver_phone: d?.phone || h.driver_phone }) }}
+                  placeholder="Pick a saved driver" />
+              </Field>
+              <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_id: null, driver_name: e.target.value })} placeholder="Or type — ad-hoc / vendor driver" /></Field>
               <Field label="Driver Phone"><Input value={h.driver_phone ?? ''} onChange={e => set({ driver_phone: e.target.value })} /></Field>
               <Field label="Transport Vendor">
                 <Combobox items={tVendorItems} value={h.transporter_id ?? ''}

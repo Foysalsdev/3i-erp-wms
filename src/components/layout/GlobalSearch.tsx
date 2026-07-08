@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Icon } from '@/components/ui/Icon'
+import { LoadingRing } from '@/components/ui/LoadingRing'
 import { MODULES } from '@/lib/constants'
 import { MASTERS, MASTER_ORDER } from '@/features/masters/registry'
 import { OPERATIONS } from '@/features/operations/registry'
@@ -203,7 +204,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
               else if (e.key === 'Enter') { e.preventDefault(); if (combined[hi]) choose(combined[hi]) }
               else if (e.key === 'Escape') onClose()
             }} />
-          {loading && <Icon name="progress_activity" className="animate-spin text-brand-500" />}
+          {loading && <LoadingRing className="h-5 w-5 text-brand-500" />}
         </div>
         <div className="max-h-[50vh] overflow-y-auto p-2">
           {combined.length === 0 && q && !loading && <p className="px-3 py-6 text-center text-sm text-horizon-muted">No matches</p>}

@@ -9,6 +9,7 @@ import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
+import { LoadingRing } from '@/components/ui/LoadingRing'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -68,7 +69,7 @@ export function OrderLinesPreview({ so, products, onView }: { so: any; products:
 
   if (items === null) return (
     <div className="flex items-center gap-2 py-1 text-sm text-ink-faint">
-      <Icon name="progress_activity" className="animate-spin text-[16px]" /> Loading lines…
+      <LoadingRing className="h-4 w-4" /> Loading lines…
     </div>
   )
   if (!items.length) return <p className="py-1 text-sm text-ink-faint">No line items yet.</p>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Icon } from '@/components/ui/Icon'
+import { LoadingRing } from '@/components/ui/LoadingRing'
 import { OPERATIONS } from '@/features/operations/registry'
 import { workflowState } from '@/features/outbound/workflow'
 import { loadSettings, type NotificationSettings } from '@/lib/settings'
@@ -171,7 +172,7 @@ export function NotificationBell() {
             <div className="max-h-[60vh] overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-ink-soft">
-                  <Icon name="progress_activity" className="animate-spin text-[18px] text-brand-500" /> Loading…
+                  <LoadingRing className="h-[18px] w-[18px] text-brand-500" /> Loading…
                 </div>
               ) : notices.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">

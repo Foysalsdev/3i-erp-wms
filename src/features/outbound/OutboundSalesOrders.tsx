@@ -30,6 +30,7 @@ import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel, NotesPanel } from '@/features/masters/components/Panels'
 import { DocVersions } from '@/components/shared/DocVersions'
 import { WorkflowPanel } from './WorkflowPanel'
+import { DocumentFlow } from '@/components/shared/DocumentFlow'
 import { workflowState } from './workflow'
 import { OrderTimeline } from './OrderTimeline'
 import { downloadChallanPdfFor } from './challanPdf'
@@ -674,6 +675,11 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
             <p className="mt-0.5 text-sm text-ink">{so.rejection_reason}</p>
           </div>
         )}
+
+        <DocumentFlow nodes={[
+          { icon: 'shopping_cart', type: 'Sales Order', number: so.so_no, status: so.status, tone: tone(so.status), current: true },
+          ...deliveries.map((d: any) => ({ icon: 'local_shipping', type: 'Delivery Challan', number: d.challan_no, status: d.status, to: `/outbound/delivery-challan?q=${encodeURIComponent(d.challan_no)}` }))
+        ]} />
 
         <Section title="Workflow">
           <WorkflowPanel order={so} responsibleName={ownerName} />

@@ -33,6 +33,10 @@ export function LineGrid({
 }) {
   const gridRef = useRef<HTMLDivElement>(null)
   const template = `40px ${columns.map(c => c.width).join(' ')} 36px`
+  // On a phone the fixed-px + 1fr tracks would squash; give the grid a minimum
+  // width (fixed cols as-is, flexible cols ~140px) so it scrolls sideways
+  // instead. Each '1fr'/'auto' column counts as 140.
+  const minWidth = 40 + 36 + columns.reduce((s, c) => s + (c.width.endsWith('px') ? parseInt(c.width) || 120 : 140), 0)
   const totalIndex = columns.findIndex(c => c.key === totalKey)
   const total = rows.reduce((s, r) => s + (Number(r[totalKey]) || 0), 0)
 
@@ -54,7 +58,8 @@ export function LineGrid({
   }
 
   return (
-    <div ref={gridRef} className="overflow-hidden rounded-xl border border-surface-line">
+    <div ref={gridRef} className="overflow-x-auto rounded-xl border border-surface-line">
+      <div style={{ minWidth }}>
       {/* header */}
       <div className="grid divide-x divide-surface-line border-b border-surface-line bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-ink-soft" style={{ gridTemplateColumns: template }}>
         <span className="px-2 py-1.5 text-center">#</span>
@@ -97,6 +102,7 @@ export function LineGrid({
           {footerExtra(total)}
         </div>
       )}
+      </div>
     </div>
   )
 }

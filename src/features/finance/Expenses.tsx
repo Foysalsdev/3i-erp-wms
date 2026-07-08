@@ -26,7 +26,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SIGN_LABELS = 'Prepared By, Verified By, Approved By, Head Office'
 const HANDOVER_SIGN_LABELS = 'Handed Over By, Received By'
 const PAYMENT_MODES = ['Cash', 'Bank', 'bKash', 'Nagad', 'Card', 'Other']
-const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: undefined as number | undefined })
+const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: undefined as number | undefined, vendor_name: '', memo_no: '' })
 const BILL_COLUMNS: LineColumn[] = [
   { key: 'bill_ref', label: 'Particulars', width: '1fr', required: true, placeholder: 'e.g. Dinner for all staff' },
   { key: 'unit', label: 'Unit', width: '80px', placeholder: 'Person' },
@@ -34,6 +34,14 @@ const BILL_COLUMNS: LineColumn[] = [
   { key: 'rate', label: 'Rate', width: '80px', type: 'number' },
   { key: 'remarks', label: 'Remarks', width: '1fr' },
   { key: 'amount', label: 'Amount (BDT)', width: '110px', type: 'number', align: 'right', required: true }
+]
+// Purchase vouchers: each line is a shop memo — what was bought, which shop,
+// that shop's memo/bill no (both optional), and the amount. No qty/rate.
+const PURCHASE_COLUMNS: LineColumn[] = [
+  { key: 'bill_ref', label: 'Particulars', width: '1fr', required: true, placeholder: 'e.g. Safety gloves, packaging tape' },
+  { key: 'vendor_name', label: 'Shop / Vendor', width: '150px', placeholder: 'Shop name (optional)' },
+  { key: 'memo_no', label: 'Memo No', width: '110px', placeholder: 'Optional' },
+  { key: 'amount', label: 'Amount (BDT)', width: '120px', type: 'number', align: 'right', required: true }
 ]
 // Qty × Rate auto-fills Amount (dinner @ rate/head, labour @ rate/unit) —
 // still overridable by typing directly into Amount.
@@ -86,7 +94,8 @@ export function Expenses() {
         ? bills.map((b: any) => ({
             particulars: b.bill_ref || '—', unit: b.unit || undefined,
             qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined,
-            remarks: b.remarks || undefined, amount: Number(b.amount) || 0
+            remarks: b.remarks || undefined, amount: Number(b.amount) || 0,
+            vendor: b.vendor_name || undefined, memoNo: b.memo_no || undefined
           }))
         : [{ particulars: r.description || catName(r.category_id) || 'Expense', amount: Number(r.amount) || 0 }]
       await downloadBillVoucherPDF({
@@ -196,7 +205,7 @@ function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDon
     else if (m === 'handover') patch.sign_labels = HANDOVER_SIGN_LABELS
     if (head?.default_line_signature) patch.show_line_signature = true
     set(patch)
-    if (m === 'itemised') setBills(bs => bs.length ? bs : [blankBill()])
+    if (m === 'itemised' || m === 'purchase') setBills(bs => bs.length ? bs : [blankBill()])
     if (m === 'handover' || head?.default_line_signature) setShowVoucher(true)
   }
 
@@ -204,9 +213,10 @@ function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDon
   // directly on the header (the quick single-amount purchase).
   const lineTotal = bills.reduce((s, b) => s + (Number(b.amount) || 0), 0)
   const hasLines = bills.length > 0
-  // Breakdown grid is shown for itemised heads (or when the record already has
-  // lines); single/handover heads keep the clean single-amount form.
-  const showBreakdown = mode === 'itemised' || hasLines
+  // Breakdown grid is shown for itemised/purchase heads (or when the record
+  // already has lines); single/handover heads keep the clean single-amount form.
+  const showBreakdown = mode === 'itemised' || mode === 'purchase' || hasLines
+  const isPurchase = mode === 'purchase'
   const total = hasLines ? lineTotal : (Number(h.amount) || 0)
   const net = total - (Number(h.less_deduction) || 0)
 
@@ -234,7 +244,8 @@ function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDon
       await supabase.from('finance_expense_bills').delete().eq('expense_id', expId)
       const payload = bills.filter(b => Number(b.amount) > 0).map(b => ({
         client_id: clientId, expense_id: expId, bill_ref: b.bill_ref || null, amount: Number(b.amount) || 0,
-        unit: b.unit || null, qty: b.qty ? Number(b.qty) : null, rate: b.rate ? Number(b.rate) : null, remarks: b.remarks || null
+        unit: b.unit || null, qty: b.qty ? Number(b.qty) : null, rate: b.rate ? Number(b.rate) : null, remarks: b.remarks || null,
+        vendor_name: b.vendor_name || null, memo_no: b.memo_no || null
       }))
       if (payload.length) {
         const { error: billErr } = await supabase.from('finance_expense_bills').insert(payload)
@@ -265,7 +276,7 @@ function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDon
                   placeholder="Pick an expense head…" />
               )}
             </Field>
-            <Field label="Paid To"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Shop / vendor / person paid" /></Field>
+            {!isPurchase && <Field label="Paid To"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Shop / vendor / person paid" /></Field>}
             <Field label="Payment Mode">
               <Select value={h.payment_mode ?? 'Cash'} onChange={e => set({ payment_mode: e.target.value })}>
                 {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
@@ -275,21 +286,29 @@ function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDon
               <Input type="number" value={hasLines ? total : (h.amount ?? '')} onChange={e => set({ amount: e.target.value })}
                 disabled={hasLines} placeholder="Total amount paid" />
             </Field>
-            {mode !== 'handover' && <Field label="Vendor Bill No"><Input value={h.vendor_bill_no ?? ''} onChange={e => set({ vendor_bill_no: e.target.value })} placeholder="Shop's own bill no — leave blank if none" /></Field>}
+            {mode !== 'handover' && !isPurchase && <Field label="Vendor Bill No"><Input value={h.vendor_bill_no ?? ''} onChange={e => set({ vendor_bill_no: e.target.value })} placeholder="Shop's own bill no — leave blank if none" /></Field>}
             <Field label="Description / Note" className="sm:col-span-2"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} placeholder="What was this purchase for" /></Field>
           </div>
-          {hasLines && <p className="mt-2 text-xs text-ink-faint">Amount is the sum of the itemised breakdown below.</p>}
+          {hasLines && <p className="mt-2 text-xs text-ink-faint">Amount is the sum of the items below.</p>}
           {mode === 'handover' && <p className="mt-2 text-xs text-ink-soft">Handover head — record who handed over and who received on the voucher signatures below (no vendor bill).</p>}
           {ownerCopy && <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"><Icon name="info" className="text-[15px]" /> Owner copy required — keep a signed copy for the accommodation owner / recipient.</p>}
         </FinancePanel>
 
-        {showBreakdown && <div>
-          <SectionHeader icon="view_list" title="Itemised breakdown"
+        {showBreakdown ? <div>
+          <SectionHeader icon={isPurchase ? 'storefront' : 'view_list'} title={isPurchase ? 'Purchase items (shop memos)' : 'Items / Purchases'}
             action={<Button size="sm" variant="secondary" icon="add" onClick={() => setBills(bs => [...bs, blankBill()])}>Add Line</Button>} />
-          <LineGrid columns={BILL_COLUMNS} rows={bills} onChange={setBills} blank={blankBill} recompute={recomputeBill}
+          <LineGrid columns={isPurchase ? PURCHASE_COLUMNS : BILL_COLUMNS} rows={bills} onChange={setBills} blank={blankBill} recompute={isPurchase ? undefined : recomputeBill}
             totalKey="amount" footerLabel="Total" minRows={0}
             footerExtra={() => <span><span className="text-ink-soft">Net (after deduction):&nbsp;</span><span className="font-bold tabular-nums text-brand-700 dark:text-brand-300">{formatNumber(net, 2)} BDT</span></span>} />
-        </div>}
+        </div> : mode !== 'handover' && (
+          // Any voucher can list several small purchases on one slip — for petty
+          // day-to-day buys (tea, sugar, stationery…) where the single amount
+          // above isn't enough. One click reveals the item grid.
+          <button type="button" onClick={() => setBills([blankBill()])}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-surface-line py-2.5 text-sm font-medium text-ink-soft transition-colors hover:border-brand-400 hover:text-brand-600">
+            <Icon name="add_shopping_cart" className="text-[18px]" /> Bought several small things on one voucher? Add items
+          </button>
+        )}
 
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-ink-soft">
@@ -344,7 +363,10 @@ function ExpenseOverview({ exp, catName, canEdit, onEdit, onPrintBill, onClose }
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {bills.map((b, i) => (
               <div key={b.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
-                <span className="text-ink">{b.bill_ref || '—'}{b.qty || b.rate ? <span className="text-ink-faint"> · {b.qty ?? ''} {b.unit ?? ''} × {b.rate ?? ''}</span> : null}</span>
+                <span className="text-ink">{b.bill_ref || '—'}
+                  {b.qty || b.rate ? <span className="text-ink-faint"> · {b.qty ?? ''} {b.unit ?? ''} × {b.rate ?? ''}</span> : null}
+                  {b.vendor_name || b.memo_no ? <span className="text-ink-faint"> · {b.vendor_name || '—'}{b.memo_no ? ` (memo ${b.memo_no})` : ''}</span> : null}
+                </span>
                 <span className="font-semibold text-ink">{formatNumber(b.amount, 2)}</span>
               </div>
             ))}

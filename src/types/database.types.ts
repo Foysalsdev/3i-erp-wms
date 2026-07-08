@@ -1796,6 +1796,8 @@ export type Database = {
           id: string
           less_deduction: number
           payee_name: string | null
+          payment_mode: string | null
+          vendor_bill_no: string | null
           show_line_signature: boolean
           sign_labels: string | null
           updated_at: string
@@ -1812,6 +1814,8 @@ export type Database = {
           id?: string
           less_deduction?: number
           payee_name?: string | null
+          payment_mode?: string | null
+          vendor_bill_no?: string | null
           show_line_signature?: boolean
           sign_labels?: string | null
           updated_at?: string
@@ -1828,6 +1832,8 @@ export type Database = {
           id?: string
           less_deduction?: number
           payee_name?: string | null
+          payment_mode?: string | null
+          vendor_bill_no?: string | null
           show_line_signature?: boolean
           sign_labels?: string | null
           updated_at?: string

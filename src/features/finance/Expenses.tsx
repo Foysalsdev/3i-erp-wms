@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Field, Input } from '@/components/ui/Field'
+import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { CreatableCombobox, type ComboItem } from '@/components/shared/CreatableCombobox'
 import { formatNumber, formatDate } from '@/lib/utils'
@@ -22,6 +22,7 @@ import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SIGN_LABELS = 'Prepared By, Verified By, Approved By, Head Office'
+const PAYMENT_MODES = ['Cash', 'Bank', 'bKash', 'Nagad', 'Card', 'Other']
 const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: 0 })
 const signLabelList = (s: string) => (s || DEFAULT_SIGN_LABELS).split(',').map(x => x.trim()).filter(Boolean)
 
@@ -66,17 +67,22 @@ export function Expenses() {
   const printBill = async (r: any) => {
     try {
       const bills = await fetchBills(r.id)
+      // A quick single-amount expense has no breakdown lines — synthesise one
+      // row from the expense itself so the voucher still has a body.
+      const lines = bills.length
+        ? bills.map((b: any) => ({
+            particulars: b.bill_ref || '—', unit: b.unit || undefined,
+            qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined,
+            remarks: b.remarks || undefined, amount: Number(b.amount) || 0
+          }))
+        : [{ particulars: r.description || catName(r.category_id) || 'Expense', amount: Number(r.amount) || 0 }]
       await downloadBillVoucherPDF({
         title: catName(r.category_id) === '—' ? 'Expense Voucher' : catName(r.category_id),
         billRef: r.bill_ref || r.id.slice(0, 8).toUpperCase(),
         date: formatDate(r.expense_date),
         payee: r.payee_name || undefined,
         purpose: r.description || undefined,
-        lines: bills.map((b: any) => ({
-          particulars: b.bill_ref || '—', unit: b.unit || undefined,
-          qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined,
-          remarks: b.remarks || undefined, amount: Number(b.amount) || 0
-        })),
+        lines,
         lessDeduction: Number(r.less_deduction) || 0,
         signLabels: signLabelList(r.sign_labels),
         showLineSignature: !!r.show_line_signature
@@ -95,8 +101,9 @@ export function Expenses() {
 
   const columns = [
     { key: 'expense_date', header: 'Date', render: (r: any) => formatDate(r.expense_date), sortable: true },
-    { key: 'category', header: 'Category / Bill', render: (r: any) => catName(r.category_id) },
-    { key: 'payee_name', header: 'Payee', render: (r: any) => r.payee_name || '—' },
+    { key: 'category', header: 'Expense Head', render: (r: any) => catName(r.category_id) },
+    { key: 'payee_name', header: 'Paid To', render: (r: any) => r.payee_name || '—' },
+    { key: 'payment_mode', header: 'Mode', render: (r: any) => r.payment_mode || '—' },
     { key: 'description', header: 'Description', render: (r: any) => <span className="truncate">{r.description || '—'}</span> },
     { key: 'amount', header: 'Amount', accessor: (r: any) => formatNumber(r.amount, 2), className: 'text-right' },
     {
@@ -151,8 +158,11 @@ export function Expenses() {
 
 function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClose, onDone }: any) {
   const [rememberedSignLabels, rememberSignLabels] = useRememberedField('sign_labels', DEFAULT_SIGN_LABELS)
-  const [h, setH] = useState<any>(record ?? { expense_date: today(), sign_labels: rememberedSignLabels, less_deduction: 0 })
-  const [bills, setBills] = useState<any[]>(record?.__bills?.length ? record.__bills : [blankBill()])
+  const [h, setH] = useState<any>(record ?? { expense_date: today(), sign_labels: rememberedSignLabels, less_deduction: 0, payment_mode: 'Cash', amount: '' })
+  // Line items are OPTIONAL — a small cash purchase is just a single amount, a
+  // larger one an itemised breakdown. So start with none.
+  const [bills, setBills] = useState<any[]>(record?.__bills ?? [])
+  const [showVoucher, setShowVoucher] = useState(!!record?.bill_ref)
   const [saving, setSaving] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
   const setBill = (i: number, patch: any) => setBills(bs => bs.map((b, idx) => {
@@ -164,22 +174,22 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
     return next
   }))
 
-  useEffect(() => {
-    if (!record) nextDocNumber(clientId, 'BILL').then(no => { if (no) set({ bill_ref: no }) })
-  }, [])
-
-  const total = bills.reduce((s, b) => s + (Number(b.amount) || 0), 0)
+  // When a breakdown is present the amount is its sum; otherwise it's typed
+  // directly on the header (the quick single-amount purchase).
+  const lineTotal = bills.reduce((s, b) => s + (Number(b.amount) || 0), 0)
+  const hasLines = bills.length > 0
+  const total = hasLines ? lineTotal : (Number(h.amount) || 0)
   const net = total - (Number(h.less_deduction) || 0)
 
   const save = async () => {
-    const valid = bills.filter(b => Number(b.amount) > 0)
-    if (!valid.length) { notify('error', 'Add at least one bill line with an amount'); return }
+    if (!(total > 0)) { notify('error', 'Enter the expense amount (or add a breakdown line with an amount)'); return }
     if (h.sign_labels) rememberSignLabels(h.sign_labels)
     setSaving(true)
     try {
       const header = {
         client_id: clientId, expense_date: h.expense_date || today(), category_id: h.category_id || null,
         payee_name: h.payee_name || null, description: h.description || null, amount: total,
+        payment_mode: h.payment_mode || null, vendor_bill_no: h.vendor_bill_no || null,
         bill_ref: h.bill_ref || null, less_deduction: Number(h.less_deduction) || 0,
         sign_labels: h.sign_labels || null, show_line_signature: !!h.show_line_signature
       }
@@ -193,12 +203,14 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
         expId = data.id
       }
       await supabase.from('finance_expense_bills').delete().eq('expense_id', expId)
-      const payload = valid.map(b => ({
+      const payload = bills.filter(b => Number(b.amount) > 0).map(b => ({
         client_id: clientId, expense_id: expId, bill_ref: b.bill_ref || null, amount: Number(b.amount) || 0,
         unit: b.unit || null, qty: b.qty ? Number(b.qty) : null, rate: b.rate ? Number(b.rate) : null, remarks: b.remarks || null
       }))
-      const { error: billErr } = await supabase.from('finance_expense_bills').insert(payload)
-      if (billErr) throw billErr
+      if (payload.length) {
+        const { error: billErr } = await supabase.from('finance_expense_bills').insert(payload)
+        if (billErr) throw billErr
+      }
       notify('success', `Expense ${record ? 'updated' : 'recorded'}`)
       onDone()
     } catch (e: any) {
@@ -214,54 +226,82 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
         <FinancePanel icon="receipt_long" title="Expense Details">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Date" required><Input type="date" value={h.expense_date ?? ''} onChange={e => set({ expense_date: e.target.value })} /></Field>
-            <Field label="Category (also the bill's printed title)">
+            <Field label="Expense Head">
               <CreatableCombobox items={catItems} value={h.category_id ?? ''} onChange={(id: string) => set({ category_id: id })}
-                onCreate={createCategory} noun="category" placeholder="e.g. Dinner Bill, Labour Bill, Accommodation Rent…" />
+                onCreate={createCategory} noun="head" placeholder="e.g. Fuel, Stationery, Accommodation Rent, Labour, Repair…" />
             </Field>
-            <Field label="Payee"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Who was paid" /></Field>
-            <Field label="Description"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} /></Field>
-          </div>
-        </FinancePanel>
-
-        <FinancePanel icon="edit_note" tone="warn" title="Bill / Voucher print details">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Bill Reference No"><Input value={h.bill_ref ?? ''} onChange={e => set({ bill_ref: e.target.value })} placeholder="e.g. WBL/30JUN/D-001" /></Field>
-            <Field label="Less: Advance / Deduction (BDT)"><Input type="number" value={h.less_deduction ?? 0} onChange={e => set({ less_deduction: Number(e.target.value) || 0 })} /></Field>
-            <Field label="Signature Labels (comma separated)">
-              <Input value={h.sign_labels ?? ''} onChange={e => set({ sign_labels: e.target.value })} placeholder={DEFAULT_SIGN_LABELS} />
+            <Field label="Paid To"><Input value={h.payee_name ?? ''} onChange={e => set({ payee_name: e.target.value })} placeholder="Shop / vendor / person paid" /></Field>
+            <Field label="Payment Mode">
+              <Select value={h.payment_mode ?? 'Cash'} onChange={e => set({ payment_mode: e.target.value })}>
+                {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+              </Select>
             </Field>
+            <Field label="Amount (BDT)" required>
+              <Input type="number" value={hasLines ? total : (h.amount ?? '')} onChange={e => set({ amount: e.target.value })}
+                disabled={hasLines} placeholder="Total amount paid" />
+            </Field>
+            <Field label="Vendor Bill No"><Input value={h.vendor_bill_no ?? ''} onChange={e => set({ vendor_bill_no: e.target.value })} placeholder="Shop's own bill no — leave blank if none" /></Field>
+            <Field label="Description / Note" className="sm:col-span-2"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} placeholder="What was this purchase for" /></Field>
           </div>
-          <label className="mt-3 flex items-center gap-2 text-sm text-ink-soft">
-            <input type="checkbox" checked={!!h.show_line_signature} onChange={e => set({ show_line_signature: e.target.checked })} />
-            Add a blank signature column per line (for multiple workers to sign individually)
-          </label>
+          {hasLines && <p className="mt-2 text-xs text-ink-faint">Amount is the sum of the itemised breakdown below.</p>}
         </FinancePanel>
 
         <div>
-          <SectionHeader icon="view_list" title="Bill Lines"
+          <SectionHeader icon="view_list" title="Itemised breakdown (optional)"
             action={<Button size="sm" variant="secondary" icon="add" onClick={() => setBills(bs => [...bs, blankBill()])}>Add Line</Button>} />
-          <div className="overflow-hidden rounded-xl border border-surface-line">
-            <div className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] gap-2 border-b border-surface-line bg-surface-sunken px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-              <span>Particulars *</span><span>Unit</span><span>Qty</span><span>Rate</span><span>Remarks</span><span className="text-right">Amount (BDT) *</span><span />
-            </div>
-            {bills.map((b, i) => (
-              <div key={i} className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0 odd:bg-surface even:bg-surface-sunken/25">
-                <input className="fiori-input" value={b.bill_ref ?? ''} onChange={e => setBill(i, { bill_ref: e.target.value })} placeholder="e.g. Dinner for all staff" />
-                <input className="fiori-input" value={b.unit ?? ''} onChange={e => setBill(i, { unit: e.target.value })} placeholder="Person" />
-                <input className="fiori-input" type="number" value={b.qty ?? ''} onChange={e => setBill(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                <input className="fiori-input" type="number" value={b.rate ?? ''} onChange={e => setBill(i, { rate: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                <input className="fiori-input" value={b.remarks ?? ''} onChange={e => setBill(i, { remarks: e.target.value })} />
-                <input className="fiori-input text-right" type="number" value={b.amount ?? ''} onChange={e => setBill(i, { amount: Number(e.target.value) || 0 })} />
-                <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad" onClick={() => setBills(bs => bs.length > 1 ? bs.filter((_, idx) => idx !== i) : bs)}>
-                  <Icon name="close" className="text-[18px]" />
-                </button>
+          {!hasLines ? (
+            <p className="rounded-xl border border-dashed border-surface-line px-3 py-3 text-sm text-ink-faint">
+              No breakdown — just the single amount above. Add lines only for a detailed purchase (e.g. many items, or labour per unit).
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-surface-line">
+              <div className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] gap-2 border-b border-surface-line bg-surface-sunken px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+                <span>Particulars *</span><span>Unit</span><span>Qty</span><span>Rate</span><span>Remarks</span><span className="text-right">Amount (BDT) *</span><span />
               </div>
-            ))}
-          </div>
+              {bills.map((b, i) => (
+                <div key={i} className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0 odd:bg-surface even:bg-surface-sunken/25">
+                  <input className="fiori-input" value={b.bill_ref ?? ''} onChange={e => setBill(i, { bill_ref: e.target.value })} placeholder="e.g. Dinner for all staff" />
+                  <input className="fiori-input" value={b.unit ?? ''} onChange={e => setBill(i, { unit: e.target.value })} placeholder="Person" />
+                  <input className="fiori-input" type="number" value={b.qty ?? ''} onChange={e => setBill(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                  <input className="fiori-input" type="number" value={b.rate ?? ''} onChange={e => setBill(i, { rate: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                  <input className="fiori-input" value={b.remarks ?? ''} onChange={e => setBill(i, { remarks: e.target.value })} />
+                  <input className="fiori-input text-right" type="number" value={b.amount ?? ''} onChange={e => setBill(i, { amount: Number(e.target.value) || 0 })} />
+                  <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad" onClick={() => setBills(bs => bs.filter((_, idx) => idx !== i))}>
+                    <Icon name="close" className="text-[18px]" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-2 flex justify-end gap-2 text-sm">
             <span className="rounded-lg bg-surface-sunken px-3 py-1.5"><span className="text-ink-faint">Total:&nbsp;</span><span className="font-semibold text-ink">{formatNumber(total, 2)}</span></span>
             <span className="rounded-lg bg-brand-50 px-3 py-1.5 dark:bg-brand-500/15"><span className="text-ink-soft">Net (after deduction):&nbsp;</span><span className="font-bold text-brand-700 dark:text-brand-300">{formatNumber(net, 2)} BDT</span></span>
           </div>
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2 text-sm font-medium text-ink-soft">
+            <input type="checkbox" checked={showVoucher} onChange={e => {
+              const on = e.target.checked; setShowVoucher(on)
+              if (on && !h.bill_ref) nextDocNumber(clientId, 'BILL').then(no => { if (no) set({ bill_ref: no }) })
+            }} />
+            Generate a self-voucher / receipt for this expense (signature slip — for cash payments with no vendor bill, or when a signed voucher is still needed)
+          </label>
+          {showVoucher && (
+            <FinancePanel icon="edit_note" tone="warn" title="Voucher / Receipt print details">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Voucher Reference No"><Input value={h.bill_ref ?? ''} onChange={e => set({ bill_ref: e.target.value })} placeholder="Auto-generated — editable" /></Field>
+                <Field label="Less: Advance / Deduction (BDT)"><Input type="number" value={h.less_deduction ?? 0} onChange={e => set({ less_deduction: Number(e.target.value) || 0 })} /></Field>
+                <Field label="Signature Labels (comma separated)">
+                  <Input value={h.sign_labels ?? ''} onChange={e => set({ sign_labels: e.target.value })} placeholder={DEFAULT_SIGN_LABELS} />
+                </Field>
+              </div>
+              <label className="mt-3 flex items-center gap-2 text-sm text-ink-soft">
+                <input type="checkbox" checked={!!h.show_line_signature} onChange={e => set({ show_line_signature: e.target.checked })} />
+                Add a blank signature column per line (for multiple workers to sign individually)
+              </label>
+            </FinancePanel>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
@@ -280,28 +320,27 @@ function ExpenseOverview({ exp, catName, canEdit, onEdit, onPrintBill, onClose }
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatCard icon="calendar_month" label="Date" value={formatDate(exp.expense_date)} />
-          <StatCard icon="sell" label="Category / Bill" value={catName} />
-          <StatCard icon="person" label="Payee" value={exp.payee_name || '—'} />
-          <StatCard icon="tag" label="Bill Ref" value={exp.bill_ref || '—'} />
+          <StatCard icon="sell" label="Expense Head" value={catName} />
+          <StatCard icon="person" label="Paid To" value={exp.payee_name || '—'} />
+          <StatCard icon="account_balance" label="Payment Mode" value={exp.payment_mode || '—'} />
+          <StatCard icon="receipt" label="Vendor Bill No" value={exp.vendor_bill_no || '—'} />
           <StatCard icon="payments" tone="bad" label="Amount" value={`${formatNumber(exp.amount, 2)} BDT`} />
-          <StatCard icon="account_balance_wallet" tone="bad" label="Net (after deduction)" value={`${formatNumber((Number(exp.amount) || 0) - (Number(exp.less_deduction) || 0), 2)} BDT`} />
         </div>
-        {exp.description && <div><SectionHeader icon="notes" title="Description" /><p className="-mt-1 text-sm text-ink-soft">{exp.description}</p></div>}
-        <div>
-          <SectionHeader icon="view_list" title="Bill Lines" />
+        {exp.description && <div><SectionHeader icon="notes" title="Description / Note" /><p className="-mt-1 text-sm text-ink-soft">{exp.description}</p></div>}
+        {bills.length > 0 && <div>
+          <SectionHeader icon="view_list" title="Itemised breakdown" />
           <div className="overflow-hidden rounded-xl border border-surface-line">
-            {bills.length === 0 ? <p className="p-3 text-sm text-ink-faint">No bill lines</p> :
-              bills.map((b, i) => (
-                <div key={b.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
-                  <span className="text-ink">{b.bill_ref || '—'}{b.qty || b.rate ? <span className="text-ink-faint"> · {b.qty ?? ''} {b.unit ?? ''} × {b.rate ?? ''}</span> : null}</span>
-                  <span className="font-semibold text-ink">{formatNumber(b.amount, 2)}</span>
-                </div>
-              ))}
+            {bills.map((b, i) => (
+              <div key={b.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                <span className="text-ink">{b.bill_ref || '—'}{b.qty || b.rate ? <span className="text-ink-faint"> · {b.qty ?? ''} {b.unit ?? ''} × {b.rate ?? ''}</span> : null}</span>
+                <span className="font-semibold text-ink">{formatNumber(b.amount, 2)}</span>
+              </div>
+            ))}
           </div>
-        </div>
+        </div>}
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>
-          <Button variant="secondary" icon="receipt_long" onClick={onPrintBill}>Generate Bill / Voucher</Button>
+          <Button variant="secondary" icon="receipt_long" onClick={onPrintBill}>Generate Voucher / Receipt</Button>
           {canEdit && <Button icon="edit" onClick={onEdit}>Edit</Button>}
         </div>
       </div>

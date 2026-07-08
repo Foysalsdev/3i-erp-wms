@@ -20,6 +20,7 @@ import { downloadCSV } from '@/lib/csv'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { MasterForm } from './MasterForm'
 import { MasterProfile } from './MasterProfile'
+import { CustomerAddresses } from './CustomerAddresses'
 
 export function MasterList({ def }: { def: MasterDef }) {
   const { data, loading, refresh } = useCollection(def.table, { order: 'created_at' })
@@ -35,6 +36,7 @@ export function MasterList({ def }: { def: MasterDef }) {
   const [editing, setEditing] = useState<any>(null)
   const [selected, setSelected] = useState<{ row: any; tab: string } | null>(null)
   const [deleting, setDeleting] = useState<any>(null)
+  const [addressesFor, setAddressesFor] = useState<any>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
@@ -112,6 +114,7 @@ export function MasterList({ def }: { def: MasterDef }) {
   const rowActions = (row: any): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => setSelected({ row, tab: 'details' }) },
     ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(row); setModal(true) } }] : []),
+    ...(def.key === 'customers' ? [{ icon: 'location_on', label: 'Addresses', onClick: () => setAddressesFor(row) }] : []),
     { icon: 'print', label: 'Print', onClick: () => printRecord(row) },
     { icon: 'comment', label: 'Comment', onClick: () => setSelected({ row, tab: 'notes' }) },
     // Delete is restricted to platform admins only.
@@ -195,6 +198,8 @@ export function MasterList({ def }: { def: MasterDef }) {
       )}
 
       {editModal}
+
+      {addressesFor && <CustomerAddresses customer={addressesFor} onClose={() => setAddressesFor(null)} />}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${def.singular} · ${deleting[def.nameField]}` : undefined}

@@ -282,10 +282,51 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       setStockMap(m)
     })
   }, [clientId, h.sales_order_id])
+  // Saved Bill-To / Ship-To addresses for the chosen customer (customer master
+  // → Addresses). A customer can have many; the challan picks from them.
+  const [custAddresses, setCustAddresses] = useState<any[]>([])
+  useEffect(() => {
+    if (!h.customer_id) { setCustAddresses([]); return }
+    supabase.from('customer_addresses').select('*').eq('customer_id', h.customer_id).then(({ data }) => {
+      const list = data ?? []
+      setCustAddresses(list)
+      // On a NEW challan, prefill from the customer's saved addresses: a
+      // Billing-type for Bill-To, a Shipping-type for Ship-To, else the default.
+      if (!record && list.length) {
+        const def = list.find((a: any) => a.is_default)
+        const bill = list.find((a: any) => a.address_type === 'Billing' || a.address_type === 'Both') || def || list[0]
+        const ship = list.find((a: any) => a.address_type === 'Shipping' || a.address_type === 'Both') || def || list[0]
+        set({
+          bill_to_address_id: bill?.id ?? null, bill_to_address: bill?.address ?? h.bill_to_address,
+          ship_to_address_id: ship?.id ?? null, ship_to_address: ship?.address ?? h.ship_to_address
+        })
+      }
+    })
+  }, [h.customer_id])
   const [locations, setLocations] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [more, setMore] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+
+  // Bill-To / Ship-To: pick a saved customer address (sets the link + copies
+  // the text as a snapshot), still fully editable as free text below.
+  const renderAddr = (label: string, idKey: string, textKey: string) => (
+    <Field label={label} className="sm:col-span-2">
+      {custAddresses.length > 0 && (
+        <SelectBox className="mb-2" value={h[idKey] ?? ''} onChange={e => {
+          const a = custAddresses.find((x: any) => x.id === e.target.value)
+          set({ [idKey]: e.target.value || null, ...(a ? { [textKey]: a.address } : {}) })
+        }}>
+          <option value="">— Pick a saved address —</option>
+          {custAddresses.map((a: any) => (
+            <option key={a.id} value={a.id}>{[a.label, a.address_type].filter(Boolean).join(' · ') || 'Address'}{a.is_default ? ' (default)' : ''}</option>
+          ))}
+        </SelectBox>
+      )}
+      <Input value={h[textKey] ?? ''} onChange={e => set({ [idKey]: null, [textKey]: e.target.value })}
+        placeholder={custAddresses.length ? 'Or type / edit the address' : 'Auto-filled from customer — or type here'} />
+    </Field>
+  )
   const posted = !!record?.posted_at
   const mode: 'transport' | 'courier' = h.delivery_method === 'courier' ? 'courier' : 'transport'
   const locked = !!lockSo && !record   // creating a new challan from a specific order
@@ -396,7 +437,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         // optional extras
         dispatch_time: h.dispatch_time || null, prepared_by: h.prepared_by || null,
         receiver_name: h.receiver_name || null, receiver_phone: h.receiver_phone || null,
-        unloading_point: h.unloading_point || null, bill_to_address: h.bill_to_address || null, ship_to_address: h.ship_to_address || null,
+        unloading_point: h.unloading_point || null,
+        bill_to_address: h.bill_to_address || null, bill_to_address_id: h.bill_to_address_id || null,
+        ship_to_address: h.ship_to_address || null, ship_to_address_id: h.ship_to_address_id || null,
         status: h.status || 'draft', remarks: h.remarks || null,
         print_note: (h.print_note ?? rememberedNote) || null
       }
@@ -552,12 +595,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
             <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>
             <Field label="Unloading Point"><Input value={h.unloading_point ?? ''} onChange={e => set({ unloading_point: e.target.value })} /></Field>
-            <Field label="Bill-To Address" className="sm:col-span-2">
-              <Input value={h.bill_to_address ?? ''} onChange={e => set({ bill_to_address: e.target.value })} placeholder="Auto-filled from customer master — edit if this delivery differs" />
-            </Field>
-            <Field label="Ship-To Address" className="sm:col-span-2">
-              <Input value={h.ship_to_address ?? ''} onChange={e => set({ ship_to_address: e.target.value })} placeholder="Where goods are delivered — auto-filled from customer, edit if different from billing" />
-            </Field>
+            {renderAddr('Bill-To Address', 'bill_to_address_id', 'bill_to_address')}
+            {renderAddr('Ship-To Address', 'ship_to_address_id', 'ship_to_address')}
           </div>
         )}
 

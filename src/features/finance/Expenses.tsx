@@ -23,7 +23,7 @@ import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SIGN_LABELS = 'Prepared By, Verified By, Approved By, Head Office'
 const PAYMENT_MODES = ['Cash', 'Bank', 'bKash', 'Nagad', 'Card', 'Other']
-const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: 0 })
+const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: undefined as number | undefined })
 const signLabelList = (s: string) => (s || DEFAULT_SIGN_LABELS).split(',').map(x => x.trim()).filter(Boolean)
 
 export function Expenses() {
@@ -265,7 +265,7 @@ function ExpenseForm({ record, clientId, catItems, createCategory, notify, onClo
                   <input className="fiori-input" type="number" value={b.qty ?? ''} onChange={e => setBill(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
                   <input className="fiori-input" type="number" value={b.rate ?? ''} onChange={e => setBill(i, { rate: e.target.value === '' ? undefined : Number(e.target.value) })} />
                   <input className="fiori-input" value={b.remarks ?? ''} onChange={e => setBill(i, { remarks: e.target.value })} />
-                  <input className="fiori-input text-right" type="number" value={b.amount ?? ''} onChange={e => setBill(i, { amount: Number(e.target.value) || 0 })} />
+                  <input className="fiori-input text-right" type="number" value={b.amount ?? ''} onChange={e => setBill(i, { amount: e.target.value === '' ? undefined : (Number(e.target.value) || 0) })} placeholder="0.00" />
                   <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad" onClick={() => setBills(bs => bs.filter((_, idx) => idx !== i))}>
                     <Icon name="close" className="text-[18px]" />
                   </button>

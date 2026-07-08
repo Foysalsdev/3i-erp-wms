@@ -47,7 +47,7 @@ const s = StyleSheet.create({
 // Ledger column widths — kept in one place so header and body rows can never drift.
 const LW = { date: '11%', part: '38%', ref: '15%', dr: '12%', cr: '12%', bal: '12%' }
 
-const money = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const money = (n?: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 // This warehouse is funded by and reports to 3i Logistics — every one of
 // these documents is prepared here (on this Settings → Company letterhead)
@@ -127,7 +127,7 @@ function Footer({ docNo }: { docNo: string }) {
 // ---------------------------------------------------------------------------
 // 1. Operating Cost Requisition — Purpose / Unit / Qty / Remarks / Amount.
 // ---------------------------------------------------------------------------
-export interface ReqLine { purpose: string; unit?: string; qty?: number; remarks?: string; amount: number }
+export interface ReqLine { purpose: string; unit?: string; qty?: number; remarks?: string; amount?: number }
 
 function RequisitionDoc({ docNo, meta, lines, grandTotal }: { docNo: string; meta: DocMeta[]; lines: ReqLine[]; grandTotal: number }) {
   return (

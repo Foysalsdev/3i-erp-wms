@@ -12,15 +12,22 @@ import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Input, Textarea } from '@/components/ui/Field'
-import { Icon } from '@/components/ui/Icon'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadRequisitionPDF, SUBMITTED_TO, type ReqLine } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
 import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
+import { LineGrid, type LineColumn } from './components/LineGrid'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remarks: '', amount: undefined })
+const REQ_COLUMNS: LineColumn[] = [
+  { key: 'purpose', label: 'Purpose', width: '1fr', required: true, placeholder: 'e.g. Fuel for delivery vehicle' },
+  { key: 'unit', label: 'Unit', width: '90px', placeholder: 'Ltr' },
+  { key: 'qty', label: 'Qty', width: '70px', type: 'number' },
+  { key: 'remarks', label: 'Note', width: '1fr' },
+  { key: 'amount', label: 'Amount (BDT)', width: '120px', type: 'number', align: 'right', required: true }
+]
 
 export function Requisitions() {
   const { data, loading, refresh } = useCollection('finance_requisitions', { order: 'created_at' })
@@ -140,7 +147,6 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
   const [lines, setLines] = useState<ReqLine[]>(record?.__lines?.length ? record.__lines : [blankLine()])
   const [saving, setSaving] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
-  const setLine = (i: number, patch: Partial<ReqLine>) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l))
   const grandTotal = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0)
 
   const save = async () => {
@@ -192,28 +198,8 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
         <div>
           <SectionHeader icon="list_alt" title="Cost Purpose Lines"
             action={<Button size="sm" variant="secondary" icon="add" onClick={() => setLines(ls => [...ls, blankLine()])}>Add Line</Button>} />
-          <div className="overflow-hidden rounded-xl border border-surface-line">
-            <div className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] gap-2 border-b border-surface-line bg-surface-sunken px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-              <span>Purpose *</span><span>Unit</span><span>Qty</span><span>Note</span><span className="text-right">Amount (BDT) *</span><span />
-            </div>
-            {lines.map((l, i) => (
-              <div key={i} className="grid grid-cols-[1fr_90px_70px_1fr_120px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0 odd:bg-surface even:bg-surface-sunken/25">
-                <input className="fiori-input" value={l.purpose} onChange={e => setLine(i, { purpose: e.target.value })} placeholder="e.g. Fuel for delivery vehicle" />
-                <input className="fiori-input" value={l.unit ?? ''} onChange={e => setLine(i, { unit: e.target.value })} placeholder="Ltr" />
-                <input className="fiori-input" type="number" value={l.qty ?? ''} onChange={e => setLine(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                <input className="fiori-input" value={l.remarks ?? ''} onChange={e => setLine(i, { remarks: e.target.value })} />
-                <input className="fiori-input text-right" type="number" value={l.amount ?? ''} onChange={e => setLine(i, { amount: e.target.value === '' ? undefined : (Number(e.target.value) || 0) })} placeholder="0.00" />
-                <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad" onClick={() => setLines(ls => ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls)}>
-                  <Icon name="close" className="text-[18px]" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex justify-end">
-            <span className="rounded-lg bg-brand-50 px-3 py-1.5 text-sm dark:bg-brand-500/15">
-              <span className="text-ink-soft">Grand Total:&nbsp;</span><span className="font-bold text-brand-700 dark:text-brand-300">{formatNumber(grandTotal, 2)} BDT</span>
-            </span>
-          </div>
+          <LineGrid columns={REQ_COLUMNS} rows={lines} onChange={ls => setLines(ls as ReqLine[])} blank={blankLine}
+            totalKey="amount" footerLabel="Grand Total (BDT)" minRows={1} />
         </div>
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">

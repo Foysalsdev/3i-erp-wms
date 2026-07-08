@@ -1,7 +1,8 @@
 import { Icon } from './Icon'
+import { LoadingRing } from './LoadingRing'
 export const Spinner = ({ label }: { label?: string }) => (
   <div className="flex flex-col items-center justify-center gap-2 py-16 text-horizon-muted">
-    <Icon name="progress_activity" className="animate-spin text-[28px] text-brand-500" />
+    <LoadingRing className="h-7 w-7 border-[3px] text-brand-500" />
     {label && <span className="text-sm">{label}</span>}
   </div>
 )

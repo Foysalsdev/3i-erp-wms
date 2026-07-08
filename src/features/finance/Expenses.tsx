@@ -20,12 +20,26 @@ import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
 import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
+import { LineGrid, type LineColumn } from './components/LineGrid'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SIGN_LABELS = 'Prepared By, Verified By, Approved By, Head Office'
 const HANDOVER_SIGN_LABELS = 'Handed Over By, Received By'
 const PAYMENT_MODES = ['Cash', 'Bank', 'bKash', 'Nagad', 'Card', 'Other']
 const blankBill = () => ({ bill_ref: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined, remarks: '', amount: undefined as number | undefined })
+const BILL_COLUMNS: LineColumn[] = [
+  { key: 'bill_ref', label: 'Particulars', width: '1fr', required: true, placeholder: 'e.g. Dinner for all staff' },
+  { key: 'unit', label: 'Unit', width: '80px', placeholder: 'Person' },
+  { key: 'qty', label: 'Qty', width: '70px', type: 'number' },
+  { key: 'rate', label: 'Rate', width: '80px', type: 'number' },
+  { key: 'remarks', label: 'Remarks', width: '1fr' },
+  { key: 'amount', label: 'Amount (BDT)', width: '110px', type: 'number', align: 'right', required: true }
+]
+// Qty × Rate auto-fills Amount (dinner @ rate/head, labour @ rate/unit) —
+// still overridable by typing directly into Amount.
+const recomputeBill = (row: any, patch: any) =>
+  (('qty' in patch || 'rate' in patch) && Number(row.qty) > 0 && Number(row.rate) > 0)
+    ? { ...row, amount: Number(row.qty) * Number(row.rate) } : row
 const signLabelList = (s: string) => (s || DEFAULT_SIGN_LABELS).split(',').map(x => x.trim()).filter(Boolean)
 
 export function Expenses() {
@@ -185,14 +199,6 @@ function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDon
     if (m === 'itemised') setBills(bs => bs.length ? bs : [blankBill()])
     if (m === 'handover' || head?.default_line_signature) setShowVoucher(true)
   }
-  const setBill = (i: number, patch: any) => setBills(bs => bs.map((b, idx) => {
-    if (idx !== i) return b
-    const next = { ...b, ...patch }
-    // Qty × Rate auto-fills Amount (matches how these bills are actually
-    // priced — dinner @ rate/head, labour @ rate/unit) — still overridable.
-    if (('qty' in patch || 'rate' in patch) && Number(next.qty) > 0 && Number(next.rate) > 0) next.amount = Number(next.qty) * Number(next.rate)
-    return next
-  }))
 
   // When a breakdown is present the amount is its sum; otherwise it's typed
   // directly on the header (the quick single-amount purchase).
@@ -280,34 +286,9 @@ function ExpenseForm({ record, clientId, catItems, heads, notify, onClose, onDon
         {showBreakdown && <div>
           <SectionHeader icon="view_list" title="Itemised breakdown"
             action={<Button size="sm" variant="secondary" icon="add" onClick={() => setBills(bs => [...bs, blankBill()])}>Add Line</Button>} />
-          {!hasLines ? (
-            <p className="rounded-xl border border-dashed border-surface-line px-3 py-3 text-sm text-ink-faint">
-              No breakdown yet — add lines for a detailed purchase (e.g. many items, or labour per unit), or just type the single amount above.
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-surface-line">
-              <div className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] gap-2 border-b border-surface-line bg-surface-sunken px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                <span>Particulars *</span><span>Unit</span><span>Qty</span><span>Rate</span><span>Remarks</span><span className="text-right">Amount (BDT) *</span><span />
-              </div>
-              {bills.map((b, i) => (
-                <div key={i} className="grid grid-cols-[1fr_80px_70px_80px_1fr_110px_32px] items-center gap-2 border-b border-surface-line px-2 py-1.5 last:border-b-0 odd:bg-surface even:bg-surface-sunken/25">
-                  <input className="fiori-input" value={b.bill_ref ?? ''} onChange={e => setBill(i, { bill_ref: e.target.value })} placeholder="e.g. Dinner for all staff" />
-                  <input className="fiori-input" value={b.unit ?? ''} onChange={e => setBill(i, { unit: e.target.value })} placeholder="Person" />
-                  <input className="fiori-input" type="number" value={b.qty ?? ''} onChange={e => setBill(i, { qty: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                  <input className="fiori-input" type="number" value={b.rate ?? ''} onChange={e => setBill(i, { rate: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                  <input className="fiori-input" value={b.remarks ?? ''} onChange={e => setBill(i, { remarks: e.target.value })} />
-                  <input className="fiori-input text-right" type="number" value={b.amount ?? ''} onChange={e => setBill(i, { amount: e.target.value === '' ? undefined : (Number(e.target.value) || 0) })} placeholder="0.00" />
-                  <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad" onClick={() => setBills(bs => bs.filter((_, idx) => idx !== i))}>
-                    <Icon name="close" className="text-[18px]" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-2 flex justify-end gap-2 text-sm">
-            <span className="rounded-lg bg-surface-sunken px-3 py-1.5"><span className="text-ink-faint">Total:&nbsp;</span><span className="font-semibold text-ink">{formatNumber(total, 2)}</span></span>
-            <span className="rounded-lg bg-brand-50 px-3 py-1.5 dark:bg-brand-500/15"><span className="text-ink-soft">Net (after deduction):&nbsp;</span><span className="font-bold text-brand-700 dark:text-brand-300">{formatNumber(net, 2)} BDT</span></span>
-          </div>
+          <LineGrid columns={BILL_COLUMNS} rows={bills} onChange={setBills} blank={blankBill} recompute={recomputeBill}
+            totalKey="amount" footerLabel="Total" minRows={0}
+            footerExtra={() => <span><span className="text-ink-soft">Net (after deduction):&nbsp;</span><span className="font-bold tabular-nums text-brand-700 dark:text-brand-300">{formatNumber(net, 2)} BDT</span></span>} />
         </div>}
 
         <div>

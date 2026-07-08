@@ -7,6 +7,7 @@ import { Requisitions } from '../Requisitions'
 import { Expenses } from '../Expenses'
 import { MonthlyAdjustment } from '../MonthlyAdjustment'
 import { FinanceRegister } from '../FinanceRegister'
+import { FinanceSetup } from '../FinanceSetup'
 
 export default function FinancePage() {
   const { tab } = useParams()
@@ -22,7 +23,8 @@ export default function FinancePage() {
         : active === 'requisition' ? <Requisitions />
         : active === 'voucher' ? <Expenses />
         : active === 'cash-book' ? <MonthlyAdjustment />
-        : <FinanceRegister />}
+        : active === 'register' ? <FinanceRegister />
+        : <FinanceSetup />}
     </div>
   )
 }

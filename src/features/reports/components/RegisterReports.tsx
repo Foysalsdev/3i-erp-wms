@@ -110,44 +110,47 @@ export function AssetReport() {
 }
 
 // ---- Finance (Customer Billing) -------------------------------------------
+// Expense Register — every operating-cost expense (the "all purchasing" spend
+// log): date, head, who was paid, how, and the amount, with CSV/PDF export.
 export function FinanceReport() {
-  const { rows, loading, currentClientId } = useClientRows('billing_invoices')
-  const [customers, setCustomers] = useState<Record<string, string>>({})
+  const { rows, loading, currentClientId } = useClientRows('finance_expenses')
+  const [cats, setCats] = useState<Record<string, string>>({})
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId).then(({ data }) => {
-      const m: Record<string, string> = {}; (data ?? []).forEach((c: any) => { m[c.id] = `${c.customer_code} — ${c.name}` }); setCustomers(m)
+    supabase.from('finance_expense_categories').select('id,name').eq('client_id', currentClientId).then(({ data }) => {
+      const m: Record<string, string> = {}; (data ?? []).forEach((c: any) => { m[c.id] = c.name }); setCats(m)
     })
   }, [currentClientId])
   const data = useMemo(() => rows.map(r => ({
-    invoice_no: r.invoice_no ?? '', customer: customers[r.customer_id] ?? '—', invoice_date: formatDate(r.invoice_date),
-    total: n(r.total), status: r.status ?? '—'
-  })), [rows, customers])
+    id: r.id, expense_date: formatDate(r.expense_date), head: cats[r.category_id] ?? 'Uncategorized',
+    payee: r.payee_name ?? '—', mode: r.payment_mode ?? '—', vendor_bill: r.vendor_bill_no ?? '—', amount: n(r.amount)
+  })), [rows, cats])
   const cols: RepCol[] = [
-    { key: 'invoice_no', header: 'Invoice No', width: '18%' }, { key: 'customer', header: 'Customer', width: '38%' },
-    { key: 'invoice_date', header: 'Date', width: '15%' }, { key: 'total', header: 'Total', align: 'right', width: '15%' },
-    { key: 'status', header: 'Status', width: '14%' }
+    { key: 'expense_date', header: 'Date', width: '13%' }, { key: 'head', header: 'Expense Head', width: '24%' },
+    { key: 'payee', header: 'Paid To', width: '21%' }, { key: 'mode', header: 'Mode', width: '11%' },
+    { key: 'vendor_bill', header: 'Vendor Bill', width: '14%' }, { key: 'amount', header: 'Amount (BDT)', align: 'right', width: '15%' }
   ]
-  const csv = useMemo(() => data.map(r => ({ ...r, total: r.total.toFixed(2) })), [data])
+  const csv = useMemo(() => data.map(({ id, ...r }) => ({ ...r, amount: r.amount.toFixed(2) })), [data])
   const tableCols = [
-    { key: 'invoice_no', header: 'Invoice No', accessor: (r: any) => r.invoice_no, className: 'font-medium' },
-    { key: 'customer', header: 'Customer', accessor: (r: any) => r.customer },
-    { key: 'invoice_date', header: 'Date', accessor: (r: any) => r.invoice_date },
-    { key: 'total', header: 'Total', className: 'text-right', accessor: (r: any) => formatNumber(r.total, 2) },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={r.status === 'paid' ? 'positive' : r.status === 'cancelled' ? 'negative' : 'info'}>{r.status}</Badge> }
+    { key: 'expense_date', header: 'Date', accessor: (r: any) => r.expense_date },
+    { key: 'head', header: 'Expense Head', accessor: (r: any) => r.head, className: 'font-medium' },
+    { key: 'payee', header: 'Paid To', accessor: (r: any) => r.payee },
+    { key: 'mode', header: 'Mode', render: (r: any) => r.mode === '—' ? '—' : <Badge tone="neutral">{r.mode}</Badge> },
+    { key: 'vendor_bill', header: 'Vendor Bill', accessor: (r: any) => r.vendor_bill },
+    { key: 'amount', header: 'Amount', className: 'text-right', accessor: (r: any) => formatNumber(r.amount, 2) }
   ]
   if (loading) return <Spinner label="Loading…" />
-  const billed = data.reduce((s, r) => s + r.total, 0)
-  const paid = data.filter(r => r.status === 'paid').reduce((s, r) => s + r.total, 0)
+  const total = data.reduce((s, r) => s + r.amount, 0)
+  const heads = new Set(data.map(d => d.head)).size
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <ReportToolbar count={data.length} onCSV={() => downloadCSV('Finance Report', cols, csv)} onPDF={() => downloadReportPDF('Finance (Billing) Report', `Billed ${formatNumber(billed, 2)} · Paid ${formatNumber(paid, 2)}`, cols, csv)} />
+      <ReportToolbar count={data.length} onCSV={() => downloadCSV('Expense Register', cols, csv)} onPDF={() => downloadReportPDF('Expense Register', `Total spend ${formatNumber(total, 2)} BDT · ${data.length} entries`, cols, csv)} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard label="Invoices" value={formatNumber(data.length)} />
-        <StatCard label="Total Billed" value={formatNumber(billed, 2)} />
-        <StatCard label="Outstanding" value={formatNumber(billed - paid, 2)} />
+        <StatCard label="Entries" value={formatNumber(data.length)} />
+        <StatCard label="Total Spend" value={`${formatNumber(total, 2)} BDT`} />
+        <StatCard label="Expense Heads" value={formatNumber(heads)} />
       </div>
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><DataTable fill columns={tableCols} rows={data} rowKey={(r: any) => r.invoice_no} emptyTitle="No invoices" /></Card>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><DataTable fill columns={tableCols} rows={data} rowKey={(r: any) => r.id} emptyTitle="No expenses" /></Card>
     </div>
   )
 }

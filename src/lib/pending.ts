@@ -114,6 +114,31 @@ export const PENDING_RULES: PendingRule[] = [
     route: () => '/inbound/receive', ageFrom: r => r.order_date
   },
   {
+    // The previous calendar month, once it has any finance activity, is due for
+    // submission to Head Office. Surfaces one matter until that month's
+    // statement is submitted (which also locks it — see the period-lock trigger).
+    key: 'fin-month-close', icon: 'event_available', label: 'Month to submit', owner: 'Finance', perms: ['finance.create', 'finance.edit'], slaDays: 5,
+    fetch: async c => {
+      const now = new Date()
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const cur = new Date(now.getFullYear(), now.getMonth(), 1)
+      const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+      const start = fmt(prev), endExcl = fmt(cur)
+      const py = prev.getFullYear(), pm = prev.getMonth() + 1
+      const [{ count: rc }, { count: ec }, { data: adj }] = await Promise.all([
+        supabase.from('finance_fund_receipts').select('id', { count: 'exact', head: true }).eq('client_id', c).gte('receipt_date', start).lt('receipt_date', endExcl),
+        supabase.from('finance_expenses').select('id', { count: 'exact', head: true }).eq('client_id', c).gte('expense_date', start).lt('expense_date', endExcl),
+        supabase.from('finance_monthly_adjustments').select('submitted_at').eq('client_id', c).eq('year', py).eq('month', pm)
+      ])
+      const hasActivity = (rc ?? 0) > 0 || (ec ?? 0) > 0
+      const submitted = (adj ?? []).some((a: any) => a.submitted_at)
+      if (!hasActivity || submitted) return []
+      return [{ ym: `${py}-${String(pm).padStart(2, '0')}`, label: prev.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }), start }]
+    },
+    docNo: (r: any) => r.label, matter: () => 'Submit this month’s statement to Head Office',
+    route: (r: any) => `/finance/monthly-adjustment?period=${r.ym}`, ageFrom: (r: any) => r.start
+  },
+  {
     key: 'count-draft', icon: 'fact_check', label: 'Counts to post', owner: 'Inventory Officer', perms: ['inventory.adjust'], slaDays: 2,
     fetch: c => (supabase as any).from('stock_counts').select('doc_no,count_date,count_type').eq('client_id', c)
       .eq('status', 'draft').order('count_date').limit(50).then(({ data }: any) => data ?? []),

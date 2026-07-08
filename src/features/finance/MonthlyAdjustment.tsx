@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
@@ -58,7 +59,10 @@ export function MonthlyAdjustment() {
   // finance.edit) — matched below against whether a snapshot already exists.
   const canCreate = can('finance.create')
   const canEdit = can('finance.edit')
-  const [period, setPeriod] = useState(thisMonth())
+  // A ?period=YYYY-MM deep-link (from the My Tasks "Month to submit" matter)
+  // lands straight on that month.
+  const [params] = useSearchParams()
+  const [period, setPeriod] = useState(/^\d{4}-\d{2}$/.test(params.get('period') || '') ? params.get('period')! : thisMonth())
   const [submitting, setSubmitting] = useState(false)
   const [addingAdjustment, setAddingAdjustment] = useState(false)
 

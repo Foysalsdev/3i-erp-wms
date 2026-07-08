@@ -1708,11 +1708,13 @@ export type Database = {
           created_at: string
           expense_id: string
           id: string
+          memo_no: string | null
           qty: number | null
           rate: number | null
           remarks: string | null
           unit: string | null
           updated_at: string
+          vendor_name: string | null
         }
         Insert: {
           amount?: number
@@ -1721,11 +1723,13 @@ export type Database = {
           created_at?: string
           expense_id: string
           id?: string
+          memo_no?: string | null
           qty?: number | null
           rate?: number | null
           remarks?: string | null
           unit?: string | null
           updated_at?: string
+          vendor_name?: string | null
         }
         Update: {
           amount?: number
@@ -1734,11 +1738,13 @@ export type Database = {
           created_at?: string
           expense_id?: string
           id?: string
+          memo_no?: string | null
           qty?: number | null
           rate?: number | null
           remarks?: string | null
           unit?: string | null
           updated_at?: string
+          vendor_name?: string | null
         }
         Relationships: [
           {

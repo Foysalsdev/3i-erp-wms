@@ -19,7 +19,8 @@ const today = () => new Date().toISOString().slice(0, 10)
 // Expenses.tsx `applyHead`.
 const MODES: { value: string; label: string; hint: string }[] = [
   { value: 'single', label: 'Single amount', hint: 'One amount, no breakdown (Fuel, Stationery, Rent).' },
-  { value: 'itemised', label: 'Itemised', hint: 'Primes a line-item breakdown grid (Dinner per head, bulk purchase).' },
+  { value: 'purchase', label: 'Store / Consumables Purchase', hint: 'Several items bought across shops; each line is a shop memo (shop + memo no + amount). No qty/rate, no single vendor bill.' },
+  { value: 'itemised', label: 'Itemised (qty × rate)', hint: 'Primes a qty × rate breakdown grid (Dinner per head, labour per unit).' },
   { value: 'handover', label: 'Fund handover', hint: 'Single amount, no vendor bill, handed-over/received signatures (Courier handover).' }
 ]
 

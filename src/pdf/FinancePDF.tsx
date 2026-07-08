@@ -172,7 +172,7 @@ export async function downloadRequisitionPDF(opts: { docNo: string; meta: DocMet
 //    Unit / Qty / Rate / Remarks / Amount lines, summation, in-words, and a
 //    configurable signature row (blank per-line signature column optional).
 // ---------------------------------------------------------------------------
-export interface BillLine { particulars: string; unit?: string; qty?: number; rate?: number; remarks?: string; amount: number }
+export interface BillLine { particulars: string; unit?: string; qty?: number; rate?: number; remarks?: string; amount: number; vendor?: string; memoNo?: string }
 export interface BillVoucherOpts {
   title: string
   billRef: string
@@ -191,9 +191,11 @@ function BillVoucherDoc(o: BillVoucherOpts) {
   const hasUnit = o.lines.some(l => l.unit)
   const hasQty = o.lines.some(l => l.qty)
   const hasRemarks = o.lines.some(l => l.remarks)
+  const hasVendor = o.lines.some(l => l.vendor)
+  const hasMemo = o.lines.some(l => l.memoNo)
   // Particulars gets whatever's left after the other columns' actual (not
   // approximated) widths, so the row can never sum past 100% of the page.
-  const wPart = `${Math.max(100 - 6 - (hasUnit ? 14 : 0) - (hasQty ? 10 : 0) - (hasRemarks ? 18 : 0) - 16 - (o.showLineSignature ? 16 : 0), 20)}%`
+  const wPart = `${Math.max(100 - 6 - (hasVendor ? 20 : 0) - (hasMemo ? 12 : 0) - (hasUnit ? 14 : 0) - (hasQty ? 10 : 0) - (hasRemarks ? 18 : 0) - 16 - (o.showLineSignature ? 16 : 0), 18)}%`
   // Bill Reference No already sits under the title (top right); the meta
   // strip instead names who the money was actually paid to, so the document
   // answers "paid to whom, and why" at a glance, not just "how much".
@@ -211,6 +213,8 @@ function BillVoucherDoc(o: BillVoucherOpts) {
         <View style={pdfLayout.tHead}>
           <Text style={[pdfLayout.th, { width: '6%' }]}>SL No.</Text>
           <Text style={[pdfLayout.th, { width: wPart }]}>Particulars</Text>
+          {hasVendor && <Text style={[pdfLayout.th, { width: '20%' }]}>Shop / Vendor</Text>}
+          {hasMemo && <Text style={[pdfLayout.th, { width: '12%' }]}>Memo No</Text>}
           {hasUnit && <Text style={[pdfLayout.th, { width: '14%' }]}>Unit</Text>}
           {hasQty && <Text style={[pdfLayout.th, { width: '10%', textAlign: 'right' }]}>Qty</Text>}
           {hasRemarks && <Text style={[pdfLayout.th, { width: '18%' }]}>Remarks</Text>}
@@ -221,6 +225,8 @@ function BillVoucherDoc(o: BillVoucherOpts) {
           <View key={i} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
             <Text style={[pdfLayout.td, { width: '6%' }]}>{i + 1}</Text>
             <Text style={[pdfLayout.td, { width: wPart }]}>{l.particulars}</Text>
+            {hasVendor && <Text style={[pdfLayout.td, { width: '20%' }]}>{l.vendor || '-'}</Text>}
+            {hasMemo && <Text style={[pdfLayout.td, { width: '12%' }]}>{l.memoNo || '-'}</Text>}
             {hasUnit && <Text style={[pdfLayout.td, { width: '14%' }]}>{l.unit || '-'}</Text>}
             {hasQty && <Text style={[pdfLayout.td, { width: '10%', textAlign: 'right' }]}>{l.qty ? l.qty.toLocaleString() : '-'}</Text>}
             {hasRemarks && <Text style={[pdfLayout.td, { width: '18%' }]}>{l.remarks || '-'}</Text>}

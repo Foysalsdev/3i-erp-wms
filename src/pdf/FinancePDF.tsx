@@ -380,3 +380,70 @@ export async function downloadMonthlyAdjustmentPDF(opts: AdjustmentOpts) {
   const blob = await pdf(<MonthlyAdjustmentDoc {...opts} />).toBlob()
   downloadBlob(blob, `Statement_of_Account_${opts.period.replace(/[^\w]+/g, '_')}.pdf`)
 }
+
+// ---------------------------------------------------------------------------
+// 4. HO Submission Cover Sheet — vouchers grouped by category, each group
+//    printing its own "Category (Total Voucher: N)" header, but the Sl. No
+//    column runs continuously across the whole batch (never resets per
+//    category) so the physical voucher bundle can be sorted once, start to
+//    finish, and matched line-by-line against this sheet.
+// ---------------------------------------------------------------------------
+export interface CoverSheetRow { slNo: number; expenseId: string; vendorPayee: string; amount: number; date: string }
+export interface CoverSheetGroup { category: string; rows: CoverSheetRow[] }
+export interface CoverSheetOpts {
+  submissionNo: string
+  submissionDate: string
+  voucherCount: number
+  totalAmount: number
+  groups: CoverSheetGroup[]
+}
+
+const CW = { sl: '8%', id: '20%', vendor: '32%', amount: '20%', date: '20%' }
+
+function CoverSheetDoc(o: CoverSheetOpts) {
+  return (
+    <Document>
+      <Page size="A4" style={pdfLayout.page}>
+        <FinanceHeader title="HO Submission Cover Sheet" barcode={o.submissionNo} meta={[
+          { label: 'Submission No', value: o.submissionNo },
+          { label: 'Date', value: o.submissionDate },
+          { label: 'Voucher Count', value: String(o.voucherCount) },
+          { label: 'Submitted To', value: SUBMITTED_TO }
+        ]} />
+        {o.groups.map((g, gi) => (
+          <View key={gi} wrap={false}>
+            <Text style={s.sectionLabel}>{g.category} (Total Voucher: {g.rows.length})</Text>
+            <View style={pdfLayout.tHead}>
+              <Text style={[pdfLayout.th, { width: CW.sl }]}>Sl. No</Text>
+              <Text style={[pdfLayout.th, { width: CW.id }]}>Expense ID</Text>
+              <Text style={[pdfLayout.th, { width: CW.vendor }]}>Vendor / Payee</Text>
+              <Text style={[pdfLayout.th, { width: CW.amount, textAlign: 'right' }]}>Amount (BDT)</Text>
+              <Text style={[pdfLayout.th, { width: CW.date, borderRightWidth: 0 }]}>Date</Text>
+            </View>
+            {g.rows.map((r, i) => (
+              <View key={r.slNo} style={[pdfLayout.tr, i % 2 === 1 ? s.rowStripe : {}]}>
+                <Text style={[pdfLayout.td, { width: CW.sl }]}>{r.slNo}</Text>
+                <Text style={[pdfLayout.td, { width: CW.id }]}>{r.expenseId}</Text>
+                <Text style={[pdfLayout.td, { width: CW.vendor }]}>{r.vendorPayee || '-'}</Text>
+                <Text style={[pdfLayout.td, { width: CW.amount, textAlign: 'right' }]}>{money(r.amount)}</Text>
+                <Text style={[pdfLayout.td, { width: CW.date, borderRightWidth: 0 }]}>{r.date}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+        <TotalsBox rows={[
+          { label: 'Total Vouchers', value: String(o.voucherCount) },
+          { label: 'Total Amount (BDT)', value: money(o.totalAmount), strong: true }
+        ]} />
+        <View style={s.inWords}><Text><Text style={s.inWordsLabel}>In Words: </Text><Text style={s.inWordsValue}>{amountInWords(o.totalAmount)}</Text></Text></View>
+        <SignRow blocks={[{ label: 'Prepared By' }, { label: 'Handed Over By' }, { label: 'Received By (Head Office)' }]} />
+        <Footer docNo={o.submissionNo} />
+      </Page>
+    </Document>
+  )
+}
+
+export async function downloadCoverSheetPDF(opts: CoverSheetOpts) {
+  const blob = await pdf(<CoverSheetDoc {...opts} />).toBlob()
+  downloadBlob(blob, `${opts.submissionNo.replace(/[^\w]+/g, '_')}_CoverSheet.pdf`)
+}

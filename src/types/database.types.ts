@@ -1669,6 +1669,7 @@ export type Database = {
           id: string
           remarks: string | null
           updated_at: string
+          kind: string
         }
         Insert: {
           adjustment_date?: string
@@ -1679,6 +1680,7 @@ export type Database = {
           id?: string
           remarks?: string | null
           updated_at?: string
+          kind?: string
         }
         Update: {
           adjustment_date?: string
@@ -1689,6 +1691,7 @@ export type Database = {
           id?: string
           remarks?: string | null
           updated_at?: string
+          kind?: string
         }
         Relationships: [
           {
@@ -1757,6 +1760,7 @@ export type Database = {
           remarks: string | null
           updated_at: string
           vendor_id: string | null
+          payee_name: string | null
         }
         Insert: {
           amount?: number
@@ -1770,6 +1774,7 @@ export type Database = {
           remarks?: string | null
           updated_at?: string
           vendor_id?: string | null
+          payee_name?: string | null
         }
         Update: {
           amount?: number
@@ -1783,6 +1788,7 @@ export type Database = {
           remarks?: string | null
           updated_at?: string
           vendor_id?: string | null
+          payee_name?: string | null
         }
         Relationships: [
           {
@@ -2101,6 +2107,14 @@ export type Database = {
           show_line_signature: boolean
           sign_labels: string | null
           updated_at: string
+          expense_type: string
+          details: Json
+          doc_type: string
+          voucher_status: string
+          is_draft: boolean
+          deleted_at: string | null
+          print_count: number
+          submission_id: string | null
         }
         Insert: {
           amount?: number
@@ -2125,6 +2139,14 @@ export type Database = {
           show_line_signature?: boolean
           sign_labels?: string | null
           updated_at?: string
+          expense_type?: string
+          details?: Json
+          doc_type?: string
+          voucher_status?: string
+          is_draft?: boolean
+          deleted_at?: string | null
+          print_count?: number
+          submission_id?: string | null
         }
         Update: {
           amount?: number
@@ -2149,6 +2171,14 @@ export type Database = {
           show_line_signature?: boolean
           sign_labels?: string | null
           updated_at?: string
+          expense_type?: string
+          details?: Json
+          doc_type?: string
+          voucher_status?: string
+          is_draft?: boolean
+          deleted_at?: string | null
+          print_count?: number
+          submission_id?: string | null
         }
         Relationships: [
           {
@@ -2160,6 +2190,149 @@ export type Database = {
           },
           {
             foreignKeyName: "finance_expenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_ho_submissions: {
+        Row: {
+          id: string
+          client_id: string
+          submission_no: string
+          submission_date: string
+          voucher_count: number
+          total_amount: number
+          remarks: string | null
+          category_order: Json
+          status: string
+          verified_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          submission_no: string
+          submission_date?: string
+          voucher_count?: number
+          total_amount?: number
+          remarks?: string | null
+          category_order?: Json
+          status?: string
+          verified_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          submission_no?: string
+          submission_date?: string
+          voucher_count?: number
+          total_amount?: number
+          remarks?: string | null
+          category_order?: Json
+          status?: string
+          verified_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_ho_submissions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_ho_submission_vouchers: {
+        Row: {
+          id: string
+          client_id: string
+          submission_id: string
+          expense_id: string
+          sl_no: number
+          category_label: string
+          returned_at: string | null
+          return_note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          submission_id: string
+          expense_id: string
+          sl_no: number
+          category_label: string
+          returned_at?: string | null
+          return_note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          submission_id?: string
+          expense_id?: string
+          sl_no?: number
+          category_label?: string
+          returned_at?: string | null
+          return_note?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_ho_submission_vouchers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ho_submission_vouchers_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "finance_ho_submissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ho_submission_vouchers_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "finance_expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_document_sequences: {
+        Row: {
+          client_id: string
+          prefix: string
+          year_month: string
+          next_number: number
+        }
+        Insert: {
+          client_id: string
+          prefix: string
+          year_month: string
+          next_number?: number
+        }
+        Update: {
+          client_id?: string
+          prefix?: string
+          year_month?: string
+          next_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_document_sequences_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"

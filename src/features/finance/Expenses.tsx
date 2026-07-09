@@ -17,16 +17,17 @@ import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { StatCard, SectionHeader } from './components/FinanceUI'
-import { ProcurementForm } from './ProcurementForm'
+import { ExpenseForm, EXPENSE_TYPES } from './ExpenseForm'
+import { VOUCHER_STATUS_LABEL, VOUCHER_STATUS_TONE, fetchExpenseLines } from './financeCash'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
 
-// Finance → Procurement: daily-operation purchases. Each row is one bill/vendor
-// with its items; the fast entry form lives in ProcurementForm.
+// Finance → Expenses (was "Procurement"): every operational expense type,
+// one dynamic entry form (ExpenseForm). Each row is one expense; Procurement
+// rows also carry an item grid (finance_expense_bills).
 export function Expenses() {
-  const { data, loading, refresh } = useCollection('finance_expenses', { order: 'created_at', ascending: false })
-  const { data: vendors, refresh: refreshVendors } = useCollection('finance_vendors', { order: 'name', ascending: true })
+  const { data: raw, loading, refresh } = useCollection('finance_expenses', { order: 'created_at', ascending: false })
   const { data: items, refresh: refreshItems } = useCollection('finance_items', { order: 'name', ascending: true })
   const { data: categories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { currentClientId, can, isPlatformAdmin } = useAuth()
@@ -34,51 +35,78 @@ export function Expenses() {
   const canCreate = can('finance.create'), canEdit = can('finance.edit')
   const [q, setQ] = useState('')
   const [month, setMonth] = useState('')
-  const [head, setHead] = useState('')
-  const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  useAutoOpen(() => { setEditing(null); setModal(true) })
+  const [type, setType] = useState('')
+  const [modal, setModal] = useState<{ record: any; quick?: boolean } | null>(null)
+  useAutoOpen(() => setModal({ record: null }))
   const [viewing, setViewing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
 
-  const vendorName = (id?: string) => (vendors as any[]).find(v => v.id === id)?.name
-  const refreshMasters = () => { refreshVendors(); refreshItems() }
+  const data = useMemo(() => (raw as any[]).filter(e => !e.deleted_at), [raw])
+  const refreshMasters = () => refreshItems()
+  const recentPayees = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const e of data) {
+      const p = (e.payee_name || '').trim()
+      if (p && !seen.has(p.toLowerCase())) { seen.add(p.toLowerCase()); out.push(p) }
+      if (out.length >= 20) break
+    }
+    return out
+  }, [data])
 
-  const fetchLines = async (expId: string) => {
-    const [{ data: bills }, { data: extra }] = await Promise.all([
-      supabase.from('finance_expense_bills').select('*').eq('expense_id', expId).order('created_at'),
-      supabase.from('finance_additional_expenses').select('*').eq('expense_id', expId).order('created_at')
-    ])
-    const __items = (bills ?? []).map((b: any) => ({ item_id: b.item_id || '', name: b.bill_ref || '', category_id: b.category_id || '', unit: b.unit || '', qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined }))
-    const __addl = (extra ?? []).map((a: any) => ({ expense_type: a.expense_type || '', amount: a.amount != null ? Number(a.amount) : undefined }))
-    return { __items, __addl }
+  // Frequently used expense combos (type + description), ranked by recency-weighted
+  // frequency across the last 200 entries — one click opens a prefilled entry.
+  const frequentExpenses = useMemo(() => {
+    const counts = new Map<string, { expense_type: string; description: string; department?: string; payment_mode?: string; count: number }>()
+    for (const e of data.slice(0, 200)) {
+      if (e.expense_type === 'Procurement') continue
+      const key = `${e.expense_type}::${(e.description || '').trim().toLowerCase()}`
+      const cur = counts.get(key)
+      if (cur) cur.count++
+      else counts.set(key, { expense_type: e.expense_type, description: e.description || '', department: e.department, payment_mode: e.payment_mode, count: 1 })
+    }
+    return [...counts.values()].filter(c => c.count > 1).sort((a, b) => b.count - a.count).slice(0, 6)
+  }, [data])
+
+  const fetchLines = fetchExpenseLines
+
+  const openView = async (r: any) => setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchLines(r.id)) } : r)
+  const openEdit = async (r: any) => {
+    if (r.submission_id) { notify('error', 'This voucher is submitted to Head Office (locked). Unlock it from Voucher Register first.'); return }
+    const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id) : {}
+    setModal({ record: { ...r, ...extra } })
   }
-
-  const openView = async (r: any) => setViewing({ ...r, ...(await fetchLines(r.id)) })
-  const openEdit = async (r: any) => { setEditing({ ...r, ...(await fetchLines(r.id)) }); setModal(true) }
   const duplicate = async (r: any) => {
-    const { __items, __addl } = await fetchLines(r.id)
-    setEditing({ procurement_type: r.procurement_type, department: r.department, payment_mode: r.payment_mode, vendor_id: r.vendor_id, expense_date: today(), __items, __addl })
-    setModal(true)
+    const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id) : {}
+    setModal({
+      record: {
+        expense_type: r.expense_type, department: r.department, payment_mode: r.payment_mode,
+        payee_name: r.payee_name, doc_type: r.doc_type, details: r.details, expense_date: today(), ...extra
+      }
+    })
   }
+  const openFrequent = (f: any) => setModal({
+    record: { expense_type: f.expense_type, description: f.description, department: f.department, payment_mode: f.payment_mode || 'Cash', expense_date: today() }
+  })
 
   const printBill = async (r: any) => {
     try {
-      const { __items, __addl } = await fetchLines(r.id)
+      const { __items, __addl } = r.expense_type === 'Procurement' ? await fetchLines(r.id) : { __items: [], __addl: [] }
       const lines = [
         ...__items.map((it: any) => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
         ...__addl.map((a: any) => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
       ]
       await downloadBillVoucherPDF({
-        title: r.procurement_type || 'Procurement',
-        billRef: r.doc_no || r.id.slice(0, 8).toUpperCase(),
+        title: r.expense_type || 'Expense',
+        billRef: r.doc_no || r.vendor_bill_no || r.id.slice(0, 8).toUpperCase(),
         date: formatDate(r.expense_date),
-        payee: vendorName(r.vendor_id) || r.payee_name || undefined,
+        payee: r.payee_name || undefined,
         purpose: [r.department, r.description].filter(Boolean).join(' · ') || undefined,
-        lines: lines.length ? lines : [{ particulars: 'Procurement', amount: Number(r.amount) || 0 }],
+        lines: lines.length ? lines : [{ particulars: r.expense_type || 'Expense', amount: Number(r.amount) || 0 }],
         lessDeduction: 0,
         signLabels: ['Prepared By', 'Verified By', 'Approved By', 'Head Office']
       })
+      if (r.doc_type === 'internal_voucher') await supabase.from('finance_expenses').update({ print_count: (r.print_count || 0) + 1 }).eq('id', r.id).then(() => refresh())
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate the PDF')
     }
@@ -86,39 +114,38 @@ export function Expenses() {
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return (data as any[]).filter(r =>
+    return data.filter(r =>
       (!month || monthOf(r.expense_date) === month) &&
-      (!head || r.category_id === head) &&
+      (!type || r.expense_type === type) &&
       (!t ||
         String(r.doc_no ?? '').toLowerCase().includes(t) ||
-        String(vendorName(r.vendor_id) ?? r.payee_name ?? '').toLowerCase().includes(t) ||
+        String(r.payee_name ?? '').toLowerCase().includes(t) ||
         String(r.department ?? '').toLowerCase().includes(t) ||
-        String(r.procurement_type ?? '').toLowerCase().includes(t)))
-  }, [data, q, month, head, vendors])
+        String(r.expense_type ?? '').toLowerCase().includes(t)))
+  }, [data, q, month, type])
 
-  // Filtered rows also drive the CSV / letterhead-PDF export (merged from the
-  // old Registers tab).
   const exportCols: RepCol[] = [
-    { key: 'no', header: 'Procurement No', width: '16%' }, { key: 'date', header: 'Date', width: '12%' },
-    { key: 'type', header: 'Type', width: '15%' }, { key: 'vendor', header: 'Vendor', width: '19%' },
-    { key: 'dept', header: 'Department', width: '13%' }, { key: 'pay', header: 'Payment', width: '10%' },
-    { key: 'amount', header: 'Total (BDT)', align: 'right', width: '15%' }
+    { key: 'no', header: 'Expense ID', width: '14%' }, { key: 'date', header: 'Date', width: '10%' },
+    { key: 'type', header: 'Type', width: '13%' }, { key: 'vendor', header: 'Vendor/Payee', width: '17%' },
+    { key: 'dept', header: 'Department', width: '12%' }, { key: 'pay', header: 'Payment', width: '9%' },
+    { key: 'status', header: 'Voucher Status', width: '13%' }, { key: 'amount', header: 'Total (BDT)', align: 'right', width: '12%' }
   ]
   const exportRows = useMemo(() => rows.map(r => ({
-    no: r.doc_no || '—', date: formatDate(r.expense_date), type: r.procurement_type || '—',
-    vendor: vendorName(r.vendor_id) || r.payee_name || '—', dept: r.department || '—',
-    pay: r.payment_mode || '—', amount: (Number(r.amount) || 0).toFixed(2)
-  })), [rows, vendors])
+    no: r.doc_no || (r.is_draft ? 'Draft' : '—'), date: formatDate(r.expense_date), type: r.expense_type || '—',
+    vendor: r.payee_name || '—', dept: r.department || '—', pay: r.payment_mode || '—',
+    status: VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status || '—', amount: (Number(r.amount) || 0).toFixed(2)
+  })), [rows])
   const exportTotal = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   const exportSubtitle = `Total spend ${formatNumber(exportTotal, 2)} BDT · ${rows.length} entries${month ? ` · ${month}` : ''}`
 
   const columns = [
-    { key: 'doc_no', header: 'Procurement No', render: (r: any) => <span className="font-medium">{r.doc_no || '—'}</span> },
+    { key: 'doc_no', header: 'Expense ID', render: (r: any) => <span className="font-medium">{r.doc_no || (r.is_draft ? <Badge tone="neutral">Draft</Badge> : '—')}</span> },
     { key: 'expense_date', header: 'Date', render: (r: any) => formatDate(r.expense_date), sortable: true },
-    { key: 'procurement_type', header: 'Type', render: (r: any) => r.procurement_type || '—' },
-    { key: 'vendor', header: 'Vendor', render: (r: any) => vendorName(r.vendor_id) || r.payee_name || '—' },
+    { key: 'expense_type', header: 'Type', render: (r: any) => r.expense_type || '—' },
+    { key: 'vendor', header: 'Vendor/Payee', render: (r: any) => r.payee_name || '—' },
     { key: 'department', header: 'Department', render: (r: any) => r.department || '—' },
     { key: 'payment_mode', header: 'Payment', render: (r: any) => r.payment_mode || '—' },
+    { key: 'voucher_status', header: 'Voucher Status', render: (r: any) => <Badge tone={VOUCHER_STATUS_TONE[r.voucher_status] || 'neutral'}>{VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status}</Badge> },
     { key: 'amount', header: 'Total (BDT)', accessor: (r: any) => formatNumber(r.amount, 2), className: 'text-right' },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
@@ -128,8 +155,8 @@ export function Expenses() {
             { icon: 'visibility', label: 'View', onClick: () => openView(r) },
             { icon: 'receipt_long', label: 'Generate PDF', onClick: () => printBill(r) },
             ...(canCreate ? [{ icon: 'content_copy', label: 'Duplicate', onClick: () => duplicate(r) }] : []),
-            ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
-            ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
+            ...(canEdit && !r.submission_id ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
+            ...(isPlatformAdmin && !r.submission_id ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
         </div>
       )
@@ -138,38 +165,51 @@ export function Expenses() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {frequentExpenses.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-ink-faint">Frequently used:</span>
+          {frequentExpenses.map((f, i) => (
+            <button key={i} type="button" onClick={() => openFrequent(f)}
+              className="rounded-full border border-surface-line px-3 py-1 text-xs font-medium text-ink-soft transition-colors hover:border-brand-400 hover:text-brand-600">
+              + {f.expense_type}{f.description ? ` · ${f.description}` : ''}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-60"><SearchBar value={q} onChange={setQ} placeholder="Search procurement no, vendor…" /></div>
+        <div className="w-full sm:w-60"><SearchBar value={q} onChange={setQ} placeholder="Search expense ID, vendor…" /></div>
         <input type="month" className="fiori-input w-40" value={month} onChange={e => setMonth(e.target.value)} />
         {month && <button onClick={() => setMonth('')} className="text-xs text-ink-faint hover:text-ink">Clear</button>}
-        <SelectBox className="w-48" value={head} onChange={e => setHead(e.target.value)}>
-          <option value="">All heads</option>
-          {(categories as any[]).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <SelectBox className="w-48" value={type} onChange={e => setType(e.target.value)}>
+          <option value="">All types</option>
+          {EXPENSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </SelectBox>
-        <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Procurement Register', exportCols, exportRows)} onPDF={() => downloadReportPDF('Procurement Register', exportSubtitle, exportCols, exportRows)} />
-        {canCreate && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Procurement</Button>}
+        <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Expense Register', exportCols, exportRows)} onPDF={() => downloadReportPDF('Expense Register', exportSubtitle, exportCols, exportRows)} />
+        {canCreate && <Button variant="secondary" icon="bolt" onClick={() => setModal({ record: null, quick: true })}>Quick Entry</Button>}
+        {canCreate && <Button className="ml-auto" icon="add" onClick={() => setModal({ record: null })}>New Expense</Button>}
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={canEdit ? openEdit : openView} emptyTitle="No procurement recorded yet" />
+          onRowClick={canEdit ? openEdit : openView} emptyTitle="No expenses recorded yet" />
       </Card>
 
       {modal && (
-        <ProcurementForm record={editing} clientId={currentClientId!} vendors={vendors} items={items} categories={categories}
-          onMastersChanged={refreshMasters} notify={notify} onClose={() => setModal(false)} onDone={() => { setModal(false); refresh() }} />
+        <ExpenseForm record={modal.record} quick={modal.quick} clientId={currentClientId!} items={items} categories={categories} recentPayees={recentPayees}
+          onMastersChanged={refreshMasters} notify={notify} onClose={() => setModal(null)} onDone={() => { setModal(null); refresh() }} />
       )}
 
       {viewing && (
-        <ProcurementOverview p={viewing} vendorName={vendorName(viewing.vendor_id) || viewing.payee_name} canEdit={canEdit}
+        <ExpenseOverview p={viewing} canEdit={canEdit}
           onEdit={() => { const r = viewing; setViewing(null); openEdit(r) }}
           onPrint={() => printBill(viewing)} onClose={() => setViewing(null)} />
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
-        name={deleting ? `Procurement · ${deleting.doc_no || formatDate(deleting.expense_date)}` : undefined}
+        name={deleting ? `Expense · ${deleting.doc_no || formatDate(deleting.expense_date)}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from('finance_expenses').delete().eq('id', deleting.id)
+          // Soft delete — data stays for reconciliation, just hidden everywhere.
+          const res = await supabase.from('finance_expenses').update({ deleted_at: new Date().toISOString() }).eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }} />
@@ -177,23 +217,37 @@ export function Expenses() {
   )
 }
 
-function ProcurementOverview({ p, vendorName, canEdit, onEdit, onPrint, onClose }: any) {
+export function ExpenseOverview({ p, canEdit, onEdit, onPrint, onClose }: any) {
   const items: any[] = p.__items ?? []
   const addl: any[] = p.__addl ?? []
+  const isProcurement = p.expense_type === 'Procurement'
   const subtotal = items.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0)
   const addlTotal = addl.reduce((s, a) => s + (Number(a.amount) || 0), 0)
+  const details = p.details ?? {}
   return (
-    <Modal open onClose={onClose} title={`Procurement — ${p.doc_no || ''}`} size="lg">
+    <Modal open onClose={onClose} title={`Expense — ${p.doc_no || (p.is_draft ? 'Draft' : '')}`} size="lg">
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatCard icon="calendar_month" label="Date" value={formatDate(p.expense_date)} />
-          <StatCard icon="local_shipping" label="Vendor" value={vendorName || '—'} />
-          <StatCard icon="sell" label="Type" value={p.procurement_type || '—'} />
+          <StatCard icon="local_shipping" label="Vendor/Payee" value={p.payee_name || '—'} />
+          <StatCard icon="sell" label="Type" value={p.expense_type || '—'} />
           <StatCard icon="account_balance" label="Payment" value={p.payment_mode || '—'} />
           <StatCard icon="apartment" label="Department" value={p.department || '—'} />
           <StatCard icon="payments" tone="bad" label="Total" value={`${formatNumber(p.amount, 2)} BDT`} />
         </div>
-        <div>
+        {!isProcurement && Object.keys(details).length > 0 && (
+          <div>
+            <SectionHeader icon="tune" title={`${p.expense_type} Details`} />
+            <div className="overflow-hidden rounded-xl border border-surface-line">
+              {Object.entries(details).filter(([, v]) => v !== '' && v != null).map(([k, v], i) => (
+                <div key={k} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                  <span className="capitalize text-ink-faint">{k.replace(/_/g, ' ')}</span><span className="text-ink">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {isProcurement && <div>
           <SectionHeader icon="inventory_2" title="Items" />
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> : items.map((it, i) => (
@@ -203,7 +257,7 @@ function ProcurementOverview({ p, vendorName, canEdit, onEdit, onPrint, onClose 
               </div>
             ))}
           </div>
-        </div>
+        </div>}
         {addl.length > 0 && <div>
           <SectionHeader icon="add_card" title="Additional Expenses" />
           <div className="overflow-hidden rounded-xl border border-surface-line">
@@ -214,16 +268,16 @@ function ProcurementOverview({ p, vendorName, canEdit, onEdit, onPrint, onClose 
             ))}
           </div>
         </div>}
-        <div className="flex flex-col items-end gap-1 text-sm">
+        {isProcurement && <div className="flex flex-col items-end gap-1 text-sm">
           <div className="flex w-full max-w-xs justify-between"><span className="text-ink-soft">Subtotal</span><span className="tabular-nums">{formatNumber(subtotal, 2)}</span></div>
           <div className="flex w-full max-w-xs justify-between"><span className="text-ink-soft">Additional</span><span className="tabular-nums">{formatNumber(addlTotal, 2)}</span></div>
           <div className="flex w-full max-w-xs justify-between border-t border-surface-line pt-1"><span className="font-semibold">Grand Total</span><span className="font-bold tabular-nums text-brand-700 dark:text-brand-300">{formatNumber(p.amount, 2)} BDT</span></div>
-        </div>
+        </div>}
         {p.description && <p className="text-sm text-ink-soft"><span className="text-ink-faint">Remarks: </span>{p.description}</p>}
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Close</Button>
           <Button variant="secondary" icon="receipt_long" onClick={onPrint}>Generate PDF</Button>
-          {canEdit && <Button icon="edit" onClick={onEdit}>Edit</Button>}
+          {canEdit && !p.submission_id && <Button icon="edit" onClick={onEdit}>Edit</Button>}
         </div>
       </div>
     </Modal>

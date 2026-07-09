@@ -8,6 +8,16 @@ export async function nextDocNumber(clientId: string, docType: string): Promise<
   return data as string
 }
 
+// Finance-only monthly-reset numbering (EXP-YYYYMM-00001, IV-YYYYMM-00001,
+// HOS-YYYYMM-00001) — a separate sequence from the daily-reset one above.
+export async function nextFinanceDocNumber(clientId: string, prefix: 'EXP' | 'IV' | 'HOS'): Promise<string | null> {
+  const { data, error } = await (supabase as any).rpc('next_finance_document_number', {
+    p_client: clientId, p_prefix: prefix
+  })
+  if (error) { console.error(error); return null }
+  return data as string
+}
+
 // Composite delivery-challan number: last 5 digits of the invoice + this
 // challan's ordinal within that invoice (2-digit) + the client's running
 // all-time challan serial (5-digit), e.g. "055050100147". Invoice is required.

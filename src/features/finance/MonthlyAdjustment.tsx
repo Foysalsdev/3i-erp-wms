@@ -50,7 +50,6 @@ const lastNMonths = (n: number) => {
 export function MonthlyAdjustment() {
   const { data: receipts, loading: l1 } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
   const { data: expenses, loading: l2 } = useCollection('finance_expenses', { order: 'expense_date' })
-  const { data: categories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { data: adjustments, refresh: refreshAdj } = useCollection('finance_monthly_adjustments', { order: 'year' })
   const { data: balanceAdjustments, refresh: refreshBalanceAdj } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
   const { data: payments } = useCollection('finance_vendor_payments', { order: 'payment_date' })
@@ -69,7 +68,7 @@ export function MonthlyAdjustment() {
   const [submitting, setSubmitting] = useState(false)
   const [addingAdjustment, setAddingAdjustment] = useState(false)
 
-  const catName = (id: string) => (categories as any[]).find(c => c.id === id)?.name ?? 'Uncategorized'
+  const catName = (e: any) => e.expense_type || 'Uncategorized'
   const [year, month] = period.split('-').map(Number)
 
   const monthReceipts = useMemo(() => (receipts as any[]).filter(r => inMonth(r.receipt_date, period)), [receipts, period])
@@ -102,9 +101,9 @@ export function MonthlyAdjustment() {
 
   const categoryTotals = useMemo(() => {
     const m = new Map<string, number>()
-    for (const e of monthExpenses) { const k = catName(e.category_id); m.set(k, (m.get(k) ?? 0) + (Number(e.amount) || 0)) }
+    for (const e of monthExpenses) { const k = catName(e); m.set(k, (m.get(k) ?? 0) + (Number(e.amount) || 0)) }
     return Array.from(m.entries()).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount)
-  }, [monthExpenses, categories])
+  }, [monthExpenses])
 
   const existing = (adjustments as any[]).find(a => a.year === year && a.month === month)
   // Submitting only snapshots the figures at that moment — it doesn't lock
@@ -138,7 +137,7 @@ export function MonthlyAdjustment() {
     const totals = new Map<string, number>()
     for (const e of expenses as any[]) {
       if (!trendMonths.includes(monthKey(e.expense_date))) continue
-      const k = catName(e.category_id)
+      const k = catName(e)
       totals.set(k, (totals.get(k) ?? 0) + (Number(e.amount) || 0))
     }
     const ranked = Array.from(totals.entries()).sort((a, b) => b[1] - a[1])
@@ -151,14 +150,14 @@ export function MonthlyAdjustment() {
       if (hasOther) row['Other'] = 0
       for (const e of expenses as any[]) {
         if (monthKey(e.expense_date) !== ym) continue
-        const cat = catName(e.category_id)
+        const cat = catName(e)
         const key = top.includes(cat) ? cat : (hasOther ? 'Other' : cat)
         row[key] = (row[key] ?? 0) + (Number(e.amount) || 0)
       }
       return row
     })
     return { topCats: hasOther ? [...top, 'Other'] : top, categoryTrend: byMonth }
-  }, [trendMonths, expenses, categories])
+  }, [trendMonths, expenses])
 
   const exportPDF = async () => {
     try {
@@ -173,7 +172,7 @@ export function MonthlyAdjustment() {
         // Credit purchases don't move cash — they land in Dues, not the cash book.
         ...monthExpenses.filter(e => !isCredit(e)).map(e => ({
           raw: e.expense_date as string,
-          particulars: catName(e.category_id) + (e.payee_name ? ` — ${e.payee_name}` : '') + (e.description ? ` (${e.description})` : ''),
+          particulars: catName(e) + (e.payee_name ? ` — ${e.payee_name}` : '') + (e.description ? ` (${e.description})` : ''),
           ref: e.doc_no || e.bill_ref || undefined,
           delta: -(Number(e.amount) || 0)
         })),
@@ -332,7 +331,7 @@ export function MonthlyAdjustment() {
             monthExpenses.map((e, i) => (
               <div key={e.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                 <div className="min-w-0">
-                  <span className="text-ink">{formatDate(e.expense_date)} · {catName(e.category_id)}</span>
+                  <span className="text-ink">{formatDate(e.expense_date)} · {catName(e)}</span>
                   <p className="truncate text-xs text-ink-faint">{e.payee_name || '—'}{e.description ? ` — ${e.description}` : ''}</p>
                 </div>
                 <span className="flex shrink-0 items-center gap-2 font-semibold text-ink">{isCredit(e) && <Badge tone="critical">Credit (unpaid)</Badge>}{formatNumber(e.amount, 2)}</span>

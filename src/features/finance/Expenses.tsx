@@ -18,15 +18,10 @@ import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/fe
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { StatCard, SectionHeader } from './components/FinanceUI'
 import { ExpenseForm, EXPENSE_TYPES } from './ExpenseForm'
+import { VOUCHER_STATUS_LABEL, VOUCHER_STATUS_TONE, fetchExpenseLines } from './financeCash'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
-const VOUCHER_STATUS_LABEL: Record<string, string> = {
-  pending_collection: 'Pending Collection', collected: 'Collected', lost: 'Lost', submitted: 'Submitted', verified: 'Verified'
-}
-const VOUCHER_STATUS_TONE: Record<string, 'positive' | 'critical' | 'neutral' | 'brand' | 'negative' | 'info'> = {
-  pending_collection: 'critical', collected: 'info', lost: 'negative', submitted: 'brand', verified: 'positive'
-}
 
 // Finance → Expenses (was "Procurement"): every operational expense type,
 // one dynamic entry form (ExpenseForm). Each row is one expense; Procurement
@@ -73,15 +68,7 @@ export function Expenses() {
     return [...counts.values()].filter(c => c.count > 1).sort((a, b) => b.count - a.count).slice(0, 6)
   }, [data])
 
-  const fetchLines = async (expId: string) => {
-    const [{ data: bills }, { data: extra }] = await Promise.all([
-      supabase.from('finance_expense_bills').select('*').eq('expense_id', expId).order('created_at'),
-      supabase.from('finance_additional_expenses').select('*').eq('expense_id', expId).order('created_at')
-    ])
-    const __items = (bills ?? []).map((b: any) => ({ item_id: b.item_id || '', name: b.bill_ref || '', category_id: b.category_id || '', unit: b.unit || '', qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined }))
-    const __addl = (extra ?? []).map((a: any) => ({ expense_type: a.expense_type || '', amount: a.amount != null ? Number(a.amount) : undefined }))
-    return { __items, __addl }
-  }
+  const fetchLines = fetchExpenseLines
 
   const openView = async (r: any) => setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchLines(r.id)) } : r)
   const openEdit = async (r: any) => {
@@ -230,7 +217,7 @@ export function Expenses() {
   )
 }
 
-function ExpenseOverview({ p, canEdit, onEdit, onPrint, onClose }: any) {
+export function ExpenseOverview({ p, canEdit, onEdit, onPrint, onClose }: any) {
   const items: any[] = p.__items ?? []
   const addl: any[] = p.__addl ?? []
   const isProcurement = p.expense_type === 'Procurement'

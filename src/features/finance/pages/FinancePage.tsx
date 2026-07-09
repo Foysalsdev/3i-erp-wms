@@ -5,9 +5,11 @@ import { MODULES } from '@/lib/constants'
 import { FinanceDashboard } from '../FinanceDashboard'
 import { Requisitions } from '../Requisitions'
 import { Expenses } from '../Expenses'
+import { VoucherRegister } from '../VoucherRegister'
 import { MonthlyAdjustment } from '../MonthlyAdjustment'
 import { FinanceSetup } from '../FinanceSetup'
 import { VendorDues } from '../VendorDues'
+import { HOSubmission } from '../HOSubmission'
 
 export default function FinancePage() {
   const { tab } = useParams()
@@ -17,13 +19,15 @@ export default function FinancePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <PageHeader icon="payments" title="Finance" subtitle="Warehouse fund, requisitions, procurement & cash book" />
+      <PageHeader icon="payments" title="Finance" subtitle="Warehouse fund, requisitions, expenses & cash book" />
       <Tabs tabs={tabs} active={active} onChange={k => nav(`/finance/${k}`)} />
       {active === 'dashboard' ? <FinanceDashboard />
         : active === 'requisition' ? <Requisitions />
         : active === 'voucher' ? <Expenses />
+        : active === 'voucher-register' ? <VoucherRegister />
         : active === 'cash-book' ? <MonthlyAdjustment />
         : active === 'dues' ? <VendorDues />
+        : active === 'ho-submission' ? <HOSubmission />
         : <FinanceSetup />}
     </div>
   )

@@ -61,7 +61,7 @@ export const MODULES: NavModule[] = [
   { key: 'finance', label: 'Finance', icon: 'payments', path: '/finance', permission: 'finance.view', tabs: [
     { key: 'dashboard', label: 'Dashboard' }, { key: 'requisition', label: 'Requisitions' },
     { key: 'voucher', label: 'Procurement' }, { key: 'cash-book', label: 'Cash Book' },
-    { key: 'register', label: 'Registers' }, { key: 'setup', label: 'Setup' }
+    { key: 'dues', label: 'Dues' }, { key: 'setup', label: 'Setup' }
   ]},
   { key: 'hr', label: 'HR & Administration', icon: 'groups', path: '/hr', permission: 'hr.view', tabs: [
     { key: 'employee', label: 'Employee Master' }, { key: 'department', label: 'Department Master' },

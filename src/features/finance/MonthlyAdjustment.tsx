@@ -14,6 +14,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid
 } from 'recharts'
 import { SectionHeader, StatCard } from './components/FinanceUI'
+import { cashOut, isCredit } from './financeCash'
 
 // Same fixed categorical order used on the main Dashboard (green/gold/orange/red/gray) —
 // kept identical here so color meaning stays consistent across the app.
@@ -52,6 +53,8 @@ export function MonthlyAdjustment() {
   const { data: categories } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
   const { data: adjustments, refresh: refreshAdj } = useCollection('finance_monthly_adjustments', { order: 'year' })
   const { data: balanceAdjustments, refresh: refreshBalanceAdj } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
+  const { data: payments } = useCollection('finance_vendor_payments', { order: 'payment_date' })
+  const { data: vendors } = useCollection('finance_vendors', {})
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   // Marking a month submitted is an insert the first time (needs
@@ -71,9 +74,14 @@ export function MonthlyAdjustment() {
 
   const monthReceipts = useMemo(() => (receipts as any[]).filter(r => inMonth(r.receipt_date, period)), [receipts, period])
   const monthExpenses = useMemo(() => (expenses as any[]).filter(e => inMonth(e.expense_date, period)), [expenses, period])
+  const monthPayments = useMemo(() => (payments as any[]).filter(p => inMonth(p.payment_date, period)), [payments, period])
   const monthBalanceAdjustments = useMemo(() => (balanceAdjustments as any[]).filter(a => inMonth(a.adjustment_date, period)), [balanceAdjustments, period])
+  const vendorName = (id?: string) => (vendors as any[]).find(v => v.id === id)?.name || 'vendor'
   const totalReceivedMonth = monthReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  // Accrual spend (all purchases) — feeds the category analysis + the submitted snapshot.
   const totalExpenseMonth = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  // Cash actually paid out this month = non-credit purchases + vendor payments.
+  const monthCashPaid = monthExpenses.reduce((s, e) => s + cashOut(e), 0) + monthPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
   const totalAdjustmentMonth = monthBalanceAdjustments.reduce((s, a) => s + (Number(a.amount) || 0), 0)
 
   // Ledger-style carry-forward: this month's opening balance (B/D, "brought
@@ -87,9 +95,10 @@ export function MonthlyAdjustment() {
   const prevYear = month === 1 ? year - 1 : year
   const prevMonthEndDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${lastDayOfMonth(prevYear, prevMonth)}`
   const openingBalance = (receipts as any[]).filter(r => r.receipt_date <= prevMonthEndDate).reduce((s, r) => s + (Number(r.amount) || 0), 0)
-    - (expenses as any[]).filter(e => e.expense_date <= prevMonthEndDate).reduce((s, e) => s + (Number(e.amount) || 0), 0)
+    - (expenses as any[]).filter(e => e.expense_date <= prevMonthEndDate).reduce((s, e) => s + cashOut(e), 0)
+    - (payments as any[]).filter(p => p.payment_date <= prevMonthEndDate).reduce((s, p) => s + (Number(p.amount) || 0), 0)
     + (balanceAdjustments as any[]).filter(a => a.adjustment_date <= prevMonthEndDate).reduce((s, a) => s + (Number(a.amount) || 0), 0)
-  const closingBalance = openingBalance + totalReceivedMonth - totalExpenseMonth + totalAdjustmentMonth
+  const closingBalance = openingBalance + totalReceivedMonth - monthCashPaid + totalAdjustmentMonth
 
   const categoryTotals = useMemo(() => {
     const m = new Map<string, number>()
@@ -117,11 +126,12 @@ export function MonthlyAdjustment() {
       const [y, m] = ym.split('-').map(Number)
       const cutoff = `${y}-${String(m).padStart(2, '0')}-${lastDayOfMonth(y, m)}`
       const received = (receipts as any[]).filter(r => r.receipt_date <= cutoff).reduce((s, r) => s + (Number(r.amount) || 0), 0)
-      const spent = (expenses as any[]).filter(e => e.expense_date <= cutoff).reduce((s, e) => s + (Number(e.amount) || 0), 0)
+      const spent = (expenses as any[]).filter(e => e.expense_date <= cutoff).reduce((s, e) => s + cashOut(e), 0)
+        + (payments as any[]).filter(p => p.payment_date <= cutoff).reduce((s, p) => s + (Number(p.amount) || 0), 0)
       const adjusted = (balanceAdjustments as any[]).filter(a => a.adjustment_date <= cutoff).reduce((s, a) => s + (Number(a.amount) || 0), 0)
       return { label: monthShortLabel(ym), balance: received - spent + adjusted }
     })
-  }, [trendMonths, receipts, expenses, balanceAdjustments])
+  }, [trendMonths, receipts, expenses, payments, balanceAdjustments])
 
   // Top categories by spend within the trend window; the rest fold into "Other".
   const { topCats, categoryTrend } = useMemo(() => {
@@ -160,11 +170,17 @@ export function MonthlyAdjustment() {
       const postings: Posting[] = [
         ...monthReceipts.map(r => ({ raw: r.receipt_date as string, particulars: `Fund received from ${SUBMITTED_TO}`, delta: Number(r.amount) || 0 })),
         ...monthBalanceAdjustments.map((a: any) => ({ raw: a.adjustment_date as string, particulars: `Balance adjustment${a.remarks ? ` — ${a.remarks}` : ''}`, delta: Number(a.amount) || 0 })),
-        ...monthExpenses.map(e => ({
+        // Credit purchases don't move cash — they land in Dues, not the cash book.
+        ...monthExpenses.filter(e => !isCredit(e)).map(e => ({
           raw: e.expense_date as string,
           particulars: catName(e.category_id) + (e.payee_name ? ` — ${e.payee_name}` : '') + (e.description ? ` (${e.description})` : ''),
-          ref: e.bill_ref || undefined,
+          ref: e.doc_no || e.bill_ref || undefined,
           delta: -(Number(e.amount) || 0)
+        })),
+        ...monthPayments.map((p: any) => ({
+          raw: p.payment_date as string,
+          particulars: `Paid to ${vendorName(p.vendor_id)}${p.remarks ? ` — ${p.remarks}` : ''}`,
+          delta: -(Number(p.amount) || 0)
         }))
       ].sort((a, b) => a.raw < b.raw ? -1 : a.raw > b.raw ? 1 : 0)
 
@@ -259,7 +275,7 @@ export function MonthlyAdjustment() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard icon="account_balance" tone={openingBalance < 0 ? 'bad' : 'brand'} label="Balance B/D" value={`${formatNumber(openingBalance, 2)} BDT`} />
         <StatCard icon="payments" tone="ok" label="Fund Received (Month)" value={`${formatNumber(totalReceivedMonth, 2)} BDT`} />
-        <StatCard icon="shopping_cart" tone="bad" label="Expense (Month)" value={`${formatNumber(totalExpenseMonth, 2)} BDT`} />
+        <StatCard icon="shopping_cart" tone="bad" label="Cash Paid (Month)" value={`${formatNumber(monthCashPaid, 2)} BDT`} />
         <StatCard icon="account_balance_wallet" tone={closingBalance < 0 ? 'bad' : 'brand'} label="Balance C/D" value={`${formatNumber(closingBalance, 2)} BDT`} />
       </div>
 
@@ -319,7 +335,7 @@ export function MonthlyAdjustment() {
                   <span className="text-ink">{formatDate(e.expense_date)} · {catName(e.category_id)}</span>
                   <p className="truncate text-xs text-ink-faint">{e.payee_name || '—'}{e.description ? ` — ${e.description}` : ''}</p>
                 </div>
-                <span className="shrink-0 font-semibold text-ink">{formatNumber(e.amount, 2)}</span>
+                <span className="flex shrink-0 items-center gap-2 font-semibold text-ink">{isCredit(e) && <Badge tone="critical">Credit (unpaid)</Badge>}{formatNumber(e.amount, 2)}</span>
               </div>
             ))}
         </div>

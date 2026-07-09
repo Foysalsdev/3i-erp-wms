@@ -14,12 +14,14 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadRequisitionPDF, SUBMITTED_TO, type ReqLine } from '@/pdf/FinancePDF'
+import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
 import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 import { LineGrid, type LineColumn } from './components/LineGrid'
 
 const today = () => new Date().toISOString().slice(0, 10)
+const monthOf = (d: string) => (d ?? '').slice(0, 7)
 const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remarks: '', amount: undefined })
 const REQ_COLUMNS: LineColumn[] = [
   { key: 'purpose', label: 'Purpose', width: '1fr', required: true, placeholder: 'e.g. Fuel for delivery vehicle' },
@@ -40,6 +42,7 @@ export function Requisitions() {
   const canCreate = can('finance.create')
   const canEdit = can('finance.edit')
   const [q, setQ] = useState('')
+  const [month, setMonth] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
@@ -79,9 +82,24 @@ export function Requisitions() {
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    const list = !t ? (data as any[]) : (data as any[]).filter(r => String(r.req_no ?? '').toLowerCase().includes(t) || String(r.sender_name ?? '').toLowerCase().includes(t))
-    return list
-  }, [data, q])
+    return (data as any[]).filter(r =>
+      (!month || monthOf(r.req_date) === month) &&
+      (!t || String(r.req_no ?? '').toLowerCase().includes(t) || String(r.sender_name ?? '').toLowerCase().includes(t)))
+  }, [data, q, month])
+
+  // Filtered rows also drive the CSV / letterhead-PDF export (merged from the
+  // old Registers tab).
+  const exportCols: RepCol[] = [
+    { key: 'no', header: 'Requisition No', width: '24%' }, { key: 'date', header: 'Date', width: '16%' },
+    { key: 'sender', header: 'Sent By', width: '28%' }, { key: 'requested', header: 'Requested (BDT)', align: 'right', width: '16%' },
+    { key: 'received', header: 'Received (BDT)', align: 'right', width: '16%' }
+  ]
+  const exportRows = useMemo(() => rows.map(r => ({
+    no: r.req_no, date: formatDate(r.req_date), sender: r.sender_name || '—',
+    requested: (Number(r.grand_total) || 0).toFixed(2), received: receivedTotal(r.id).toFixed(2)
+  })), [rows, allReceipts])
+  const exportTotal = rows.reduce((s, r) => s + (Number(r.grand_total) || 0), 0)
+  const exportSubtitle = `Total requested ${formatNumber(exportTotal, 2)} BDT · ${rows.length} entries${month ? ` · ${month}` : ''}`
 
   const columns = [
     { key: 'req_no', header: 'Requisition No', accessor: (r: any) => r.req_no, sortable: true, className: 'font-medium' },
@@ -107,8 +125,10 @@ export function Requisitions() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search requisition…" /></div>
-        <span className="text-sm text-ink-soft">{rows.length} records</span>
+        <div className="w-full sm:w-60"><SearchBar value={q} onChange={setQ} placeholder="Search requisition…" /></div>
+        <input type="month" className="fiori-input w-40" value={month} onChange={e => setMonth(e.target.value)} />
+        {month && <button onClick={() => setMonth('')} className="text-xs text-ink-faint hover:text-ink">Clear</button>}
+        <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Requisition Register', exportCols, exportRows)} onPDF={() => downloadReportPDF('Requisition Register', exportSubtitle, exportCols, exportRows)} />
         {canCreate && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Requisition</Button>}
       </div>
 

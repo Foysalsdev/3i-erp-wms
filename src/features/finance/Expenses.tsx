@@ -11,13 +11,16 @@ import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
+import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { StatCard, SectionHeader } from './components/FinanceUI'
 import { ProcurementForm } from './ProcurementForm'
 
 const today = () => new Date().toISOString().slice(0, 10)
+const monthOf = (d: string) => (d ?? '').slice(0, 7)
 
 // Finance → Procurement: daily-operation purchases. Each row is one bill/vendor
 // with its items; the fast entry form lives in ProcurementForm.
@@ -30,6 +33,8 @@ export function Expenses() {
   const notify = useUI(s => s.notify)
   const canCreate = can('finance.create'), canEdit = can('finance.edit')
   const [q, setQ] = useState('')
+  const [month, setMonth] = useState('')
+  const [head, setHead] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
@@ -81,13 +86,31 @@ export function Expenses() {
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    if (!t) return data as any[]
     return (data as any[]).filter(r =>
-      String(r.doc_no ?? '').toLowerCase().includes(t) ||
-      String(vendorName(r.vendor_id) ?? r.payee_name ?? '').toLowerCase().includes(t) ||
-      String(r.department ?? '').toLowerCase().includes(t) ||
-      String(r.procurement_type ?? '').toLowerCase().includes(t))
-  }, [data, q, vendors])
+      (!month || monthOf(r.expense_date) === month) &&
+      (!head || r.category_id === head) &&
+      (!t ||
+        String(r.doc_no ?? '').toLowerCase().includes(t) ||
+        String(vendorName(r.vendor_id) ?? r.payee_name ?? '').toLowerCase().includes(t) ||
+        String(r.department ?? '').toLowerCase().includes(t) ||
+        String(r.procurement_type ?? '').toLowerCase().includes(t)))
+  }, [data, q, month, head, vendors])
+
+  // Filtered rows also drive the CSV / letterhead-PDF export (merged from the
+  // old Registers tab).
+  const exportCols: RepCol[] = [
+    { key: 'no', header: 'Procurement No', width: '16%' }, { key: 'date', header: 'Date', width: '12%' },
+    { key: 'type', header: 'Type', width: '15%' }, { key: 'vendor', header: 'Vendor', width: '19%' },
+    { key: 'dept', header: 'Department', width: '13%' }, { key: 'pay', header: 'Payment', width: '10%' },
+    { key: 'amount', header: 'Total (BDT)', align: 'right', width: '15%' }
+  ]
+  const exportRows = useMemo(() => rows.map(r => ({
+    no: r.doc_no || '—', date: formatDate(r.expense_date), type: r.procurement_type || '—',
+    vendor: vendorName(r.vendor_id) || r.payee_name || '—', dept: r.department || '—',
+    pay: r.payment_mode || '—', amount: (Number(r.amount) || 0).toFixed(2)
+  })), [rows, vendors])
+  const exportTotal = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  const exportSubtitle = `Total spend ${formatNumber(exportTotal, 2)} BDT · ${rows.length} entries${month ? ` · ${month}` : ''}`
 
   const columns = [
     { key: 'doc_no', header: 'Procurement No', render: (r: any) => <span className="font-medium">{r.doc_no || '—'}</span> },
@@ -116,8 +139,14 @@ export function Expenses() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search procurement no, vendor, department…" /></div>
-        <span className="text-sm text-ink-soft">{rows.length} records</span>
+        <div className="w-full sm:w-60"><SearchBar value={q} onChange={setQ} placeholder="Search procurement no, vendor…" /></div>
+        <input type="month" className="fiori-input w-40" value={month} onChange={e => setMonth(e.target.value)} />
+        {month && <button onClick={() => setMonth('')} className="text-xs text-ink-faint hover:text-ink">Clear</button>}
+        <SelectBox className="w-48" value={head} onChange={e => setHead(e.target.value)}>
+          <option value="">All heads</option>
+          {(categories as any[]).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </SelectBox>
+        <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Procurement Register', exportCols, exportRows)} onPDF={() => downloadReportPDF('Procurement Register', exportSubtitle, exportCols, exportRows)} />
         {canCreate && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Procurement</Button>}
       </div>
 

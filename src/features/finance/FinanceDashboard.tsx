@@ -98,7 +98,7 @@ export function FinanceDashboard() {
         <Card className="p-4">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">This month by head</p>
-            <Link to="/finance/register" className="text-xs font-medium text-brand-700 hover:underline">Registers →</Link>
+            <Link to="/finance/voucher" className="text-xs font-medium text-brand-700 hover:underline">Procurement →</Link>
           </div>
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {monthByHead.length === 0 ? <p className="p-3 text-sm text-ink-faint">No spend this month</p> :

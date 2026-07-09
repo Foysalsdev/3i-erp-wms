@@ -30,7 +30,10 @@ const monthShortLabel = (ym: string) => new Date(`${ym}-01T00:00:00`).toLocaleDa
 
 export function FinanceDashboard() {
   const { data: receipts } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
-  const { data: expenses } = useCollection('finance_expenses', { order: 'expense_date' })
+  const { data: rawExpenses } = useCollection('finance_expenses', { order: 'expense_date' })
+  // Drafts aren't real yet and soft-deleted rows are hidden everywhere — both
+  // stay out of every money figure and count on this page.
+  const expenses = useMemo(() => (rawExpenses as any[]).filter(e => !e.is_draft && !e.deleted_at), [rawExpenses])
   const { data: adjustments } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
   const { data: payments } = useCollection('finance_vendor_payments', { order: 'payment_date' })
   const { data: budgets } = useCollection('finance_budgets', {})

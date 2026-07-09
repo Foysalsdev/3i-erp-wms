@@ -12,20 +12,21 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { SectionHeader } from './components/FinanceUI'
-import { DEPARTMENTS } from './ProcurementForm'
+import { DEPARTMENTS } from './ExpenseForm'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const BUDGET_DEPTS = ['All', ...DEPARTMENTS]
 const monthLabel = (y: number, m: number) => new Date(`${y}-${String(m).padStart(2, '0')}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 
-// Finance master data for procurement: Categories (expense heads), Vendors,
-// Items (with remembered unit/last price), and the cash-book opening balance.
+// Finance master data: Categories (expense heads), Items (with remembered
+// unit/last price, used by Procurement's item grid), Monthly Budgets and the
+// cash-book opening balance. Vendor/Payee is free text everywhere — no
+// vendor master here by design.
 export function FinanceSetup() {
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   const canCreate = can('finance.create'), canEdit = can('finance.edit'), canDelete = can('finance.delete')
   const { data: cats, refresh: refreshCats } = useCollection('finance_expense_categories', { order: 'name', ascending: true })
-  const { data: vendors, refresh: refreshVendors } = useCollection('finance_vendors', { order: 'name', ascending: true })
   const { data: items, refresh: refreshItems } = useCollection('finance_items', { order: 'name', ascending: true })
   const { data: openings, refresh: refreshOpenings } = useCollection('finance_balance_adjustments', { order: 'adjustment_date', ascending: true })
   const { data: budgets, refresh: refreshBudgets } = useCollection('finance_budgets', { order: 'year', ascending: false })
@@ -51,15 +52,8 @@ export function FinanceSetup() {
         onDelete={(r: any) => setDel({ table: 'finance_expense_categories', rec: r, label: `Category · ${r.name}` })}
         cols={[{ h: 'Code', w: '110px', render: (r: any) => <span className="font-mono text-xs text-ink-soft">{r.code || '—'}</span> }, { h: 'Name', w: '1fr', render: (r: any) => r.name }]} />
 
-      {/* Vendors */}
-      <MasterCard icon="local_shipping" title="Vendors" hint="Shops / suppliers you buy from. New vendors can also be added straight from the procurement form."
-        rows={vendors as any[]} perms={perms} onNew={() => setEdit({ kind: 'vendor', rec: { name: '', contact_number: '', is_active: true } })}
-        onEdit={(r: any) => setEdit({ kind: 'vendor', rec: r })} onToggle={(r: any) => toggleActive('finance_vendors', r, refreshVendors)}
-        onDelete={(r: any) => setDel({ table: 'finance_vendors', rec: r, label: `Vendor · ${r.name}` })}
-        cols={[{ h: 'Name', w: '1fr', render: (r: any) => r.name }, { h: 'Contact', w: '150px', render: (r: any) => <span className="text-ink-soft">{r.contact_number || '—'}</span> }]} />
-
       {/* Items */}
-      <MasterCard icon="inventory_2" title="Items" hint="Reusable items with remembered unit & last price. New items can be added from the procurement form too."
+      <MasterCard icon="inventory_2" title="Items" hint="Reusable items with remembered unit & last price, used by the Procurement expense type's item grid. New items can be added from the entry form too."
         rows={items as any[]} perms={perms} onNew={() => setEdit({ kind: 'item', rec: { name: '', category_id: '', unit: '', is_active: true } })}
         onEdit={(r: any) => setEdit({ kind: 'item', rec: r })} onToggle={(r: any) => toggleActive('finance_items', r, refreshItems)}
         onDelete={(r: any) => setDel({ table: 'finance_items', rec: r, label: `Item · ${r.name}` })}
@@ -118,14 +112,14 @@ export function FinanceSetup() {
       </Card>
 
       {edit && <MasterForm kind={edit.kind} rec={edit.rec} clientId={currentClientId!} cats={cats as any[]} notify={notify}
-        onClose={() => setEdit(null)} onDone={() => { setEdit(null); refreshCats(); refreshVendors(); refreshItems() }} />}
+        onClose={() => setEdit(null)} onDone={() => { setEdit(null); refreshCats(); refreshItems() }} />}
       {budgetEdit && <BudgetForm rec={budgetEdit} clientId={currentClientId!} notify={notify}
         onClose={() => setBudgetEdit(null)} onDone={() => { setBudgetEdit(null); refreshBudgets() }} />}
       {opening && <OpeningBalanceForm clientId={currentClientId!} notify={notify} onClose={() => setOpening(false)} onDone={() => { setOpening(false); refreshOpenings() }} />}
       <ConfirmDelete open={!!del} onClose={() => setDel(null)} name={del?.label}
         onConfirm={async () => {
           const res = await supabase.from(del!.table as any).delete().eq('id', del!.rec.id)
-          if (!res.error) { setDel(null); refreshCats(); refreshVendors(); refreshItems(); refreshBudgets() }
+          if (!res.error) { setDel(null); refreshCats(); refreshItems(); refreshBudgets() }
           return res
         }} />
     </div>
@@ -161,8 +155,8 @@ function MasterCard({ icon, title, hint, rows, perms, cols, onNew, onEdit, onTog
   )
 }
 
-const TABLES: Record<string, string> = { category: 'finance_expense_categories', vendor: 'finance_vendors', item: 'finance_items' }
-const TITLES: Record<string, string> = { category: 'Category', vendor: 'Vendor', item: 'Item' }
+const TABLES: Record<string, string> = { category: 'finance_expense_categories', item: 'finance_items' }
+const TITLES: Record<string, string> = { category: 'Category', item: 'Item' }
 
 function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: any) {
   const [r, setR] = useState<any>(rec)
@@ -173,7 +167,6 @@ function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: any)
     setSaving(true)
     const base: any = { client_id: clientId, name: r.name.trim(), is_active: r.is_active ?? true }
     if (kind === 'category') base.code = r.code?.trim() || null
-    if (kind === 'vendor') base.contact_number = r.contact_number?.trim() || null
     if (kind === 'item') { base.category_id = r.category_id || null; base.unit = r.unit?.trim() || null }
     const table = TABLES[kind]
     const res = r.id ? await supabase.from(table as any).update(base).eq('id', r.id) : await supabase.from(table as any).insert(base)
@@ -187,7 +180,6 @@ function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: any)
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {kind === 'category' && <Field label="Code"><Input value={r.code ?? ''} onChange={e => set({ code: e.target.value })} placeholder="e.g. FUEL" /></Field>}
           <Field label="Name" required className={kind === 'category' ? '' : 'sm:col-span-2'}><Input value={r.name ?? ''} onChange={e => set({ name: e.target.value })} /></Field>
-          {kind === 'vendor' && <Field label="Contact Number" className="sm:col-span-2"><Input value={r.contact_number ?? ''} onChange={e => set({ contact_number: e.target.value })} placeholder="Optional" /></Field>}
           {kind === 'item' && <>
             <Field label="Category"><Select value={r.category_id ?? ''} onChange={e => set({ category_id: e.target.value })}><option value="">—</option>{(cats as any[]).filter(c => c.is_active !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
             <Field label="Unit"><Input value={r.unit ?? ''} onChange={e => set({ unit: e.target.value })} placeholder="pcs, Ltr, kg…" /></Field>

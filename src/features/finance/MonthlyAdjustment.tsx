@@ -49,11 +49,12 @@ const lastNMonths = (n: number) => {
 
 export function MonthlyAdjustment() {
   const { data: receipts, loading: l1 } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
-  const { data: expenses, loading: l2 } = useCollection('finance_expenses', { order: 'expense_date' })
+  const { data: rawExpenses, loading: l2 } = useCollection('finance_expenses', { order: 'expense_date' })
+  // Drafts aren't real yet and soft-deleted rows are hidden everywhere.
+  const expenses = useMemo(() => (rawExpenses as any[]).filter(e => !e.is_draft && !e.deleted_at), [rawExpenses])
   const { data: adjustments, refresh: refreshAdj } = useCollection('finance_monthly_adjustments', { order: 'year' })
   const { data: balanceAdjustments, refresh: refreshBalanceAdj } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
   const { data: payments } = useCollection('finance_vendor_payments', { order: 'payment_date' })
-  const { data: vendors } = useCollection('finance_vendors', {})
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   // Marking a month submitted is an insert the first time (needs
@@ -66,7 +67,7 @@ export function MonthlyAdjustment() {
   const [params] = useSearchParams()
   const [period, setPeriod] = useState(/^\d{4}-\d{2}$/.test(params.get('period') || '') ? params.get('period')! : thisMonth())
   const [submitting, setSubmitting] = useState(false)
-  const [addingAdjustment, setAddingAdjustment] = useState(false)
+  const [addingAdjustment, setAddingAdjustment] = useState<'correction' | 'topup' | false>(false)
 
   const catName = (e: any) => e.expense_type || 'Uncategorized'
   const [year, month] = period.split('-').map(Number)
@@ -75,7 +76,6 @@ export function MonthlyAdjustment() {
   const monthExpenses = useMemo(() => (expenses as any[]).filter(e => inMonth(e.expense_date, period)), [expenses, period])
   const monthPayments = useMemo(() => (payments as any[]).filter(p => inMonth(p.payment_date, period)), [payments, period])
   const monthBalanceAdjustments = useMemo(() => (balanceAdjustments as any[]).filter(a => inMonth(a.adjustment_date, period)), [balanceAdjustments, period])
-  const vendorName = (id?: string) => (vendors as any[]).find(v => v.id === id)?.name || 'vendor'
   const totalReceivedMonth = monthReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   // Accrual spend (all purchases) — feeds the category analysis + the submitted snapshot.
   const totalExpenseMonth = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
@@ -159,44 +159,48 @@ export function MonthlyAdjustment() {
     return { topCats: hasOther ? [...top, 'Other'] : top, categoryTrend: byMonth }
   }, [trendMonths, expenses])
 
+  // Fold receipts, manual balance adjustments (opening/top-up/correction) and
+  // expenses into one date-ordered cash book, carrying a running balance from
+  // the opening B/D — a signed adjustment lands in Receipt (Dr) if positive,
+  // Payment (Cr) if negative, so the running balance stays exact either way.
+  // Shared by the on-screen Cash Ledger panel and the PDF export.
+  const monthLedger = useMemo(() => {
+    type Posting = { raw: string; particulars: string; ref?: string; delta: number }
+    const adjLabel = (a: any) => a.kind === 'topup' ? 'Top-up / Replenishment' : a.kind === 'opening' ? 'Opening Balance' : 'Balance adjustment'
+    const postings: Posting[] = [
+      ...monthReceipts.map(r => ({ raw: r.receipt_date as string, particulars: `Fund received from ${SUBMITTED_TO}`, delta: Number(r.amount) || 0 })),
+      ...monthBalanceAdjustments.map((a: any) => ({ raw: a.adjustment_date as string, particulars: `${adjLabel(a)}${a.remarks ? ` — ${a.remarks}` : ''}`, delta: Number(a.amount) || 0 })),
+      // Credit purchases don't move cash — they land in Dues, not the cash book.
+      ...monthExpenses.filter(e => !isCredit(e)).map(e => ({
+        raw: e.expense_date as string,
+        particulars: catName(e) + (e.payee_name ? ` — ${e.payee_name}` : '') + (e.description ? ` (${e.description})` : ''),
+        ref: e.doc_no || e.bill_ref || undefined,
+        delta: -(Number(e.amount) || 0)
+      })),
+      ...monthPayments.map((p: any) => ({
+        raw: p.payment_date as string,
+        particulars: `Paid to ${p.payee_name || 'vendor'}${p.remarks ? ` — ${p.remarks}` : ''}`,
+        delta: -(Number(p.amount) || 0)
+      }))
+    ].sort((a, b) => a.raw < b.raw ? -1 : a.raw > b.raw ? 1 : 0)
+
+    let running = openingBalance
+    return postings.map(p => {
+      running += p.delta
+      return {
+        date: formatDate(p.raw), particulars: p.particulars, ref: p.ref,
+        receipt: p.delta > 0 ? p.delta : undefined,
+        payment: p.delta < 0 ? -p.delta : undefined,
+        balance: running
+      }
+    })
+  }, [monthReceipts, monthBalanceAdjustments, monthExpenses, monthPayments, openingBalance])
+
   const exportPDF = async () => {
     try {
-      // Fold receipts, manual balance adjustments and expenses into one
-      // date-ordered cash book, carrying a running balance from the opening
-      // B/D — a signed adjustment lands in Receipt (Dr) if positive, Payment
-      // (Cr) if negative, so the running balance stays exact either way.
-      type Posting = { raw: string; particulars: string; ref?: string; delta: number }
-      const postings: Posting[] = [
-        ...monthReceipts.map(r => ({ raw: r.receipt_date as string, particulars: `Fund received from ${SUBMITTED_TO}`, delta: Number(r.amount) || 0 })),
-        ...monthBalanceAdjustments.map((a: any) => ({ raw: a.adjustment_date as string, particulars: `Balance adjustment${a.remarks ? ` — ${a.remarks}` : ''}`, delta: Number(a.amount) || 0 })),
-        // Credit purchases don't move cash — they land in Dues, not the cash book.
-        ...monthExpenses.filter(e => !isCredit(e)).map(e => ({
-          raw: e.expense_date as string,
-          particulars: catName(e) + (e.payee_name ? ` — ${e.payee_name}` : '') + (e.description ? ` (${e.description})` : ''),
-          ref: e.doc_no || e.bill_ref || undefined,
-          delta: -(Number(e.amount) || 0)
-        })),
-        ...monthPayments.map((p: any) => ({
-          raw: p.payment_date as string,
-          particulars: `Paid to ${vendorName(p.vendor_id)}${p.remarks ? ` — ${p.remarks}` : ''}`,
-          delta: -(Number(p.amount) || 0)
-        }))
-      ].sort((a, b) => a.raw < b.raw ? -1 : a.raw > b.raw ? 1 : 0)
-
-      let running = openingBalance
-      const ledger = postings.map(p => {
-        running += p.delta
-        return {
-          date: formatDate(p.raw), particulars: p.particulars, ref: p.ref,
-          receipt: p.delta > 0 ? p.delta : undefined,
-          payment: p.delta < 0 ? -p.delta : undefined,
-          balance: running
-        }
-      })
-
       await downloadMonthlyAdjustmentPDF({
         period: monthLabel(period),
-        openingBalance, closingBalance, ledger, categoryTotals
+        openingBalance, closingBalance, ledger: monthLedger, categoryTotals
       })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate PDF — check the company logo URL in Settings')
@@ -294,16 +298,21 @@ export function MonthlyAdjustment() {
 
         <Card className="flex min-h-0 flex-col overflow-hidden p-4">
           <SectionHeader icon="tune" title={`Balance Adjustments — ${monthLabel(period)}`}
-            action={canCreate && !addingAdjustment && <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingAdjustment(true)}>Add</Button>} />
+            action={canCreate && !addingAdjustment && (
+              <div className="flex gap-1.5">
+                <Button size="sm" variant="secondary" icon="add_card" onClick={() => setAddingAdjustment('topup')}>Top-up</Button>
+                <Button size="sm" variant="secondary" icon="add" onClick={() => setAddingAdjustment('correction')}>Add</Button>
+              </div>
+            )} />
           {addingAdjustment && (
-            <AddBalanceAdjustmentRow clientId={currentClientId!} notify={notify}
+            <AddBalanceAdjustmentRow clientId={currentClientId!} notify={notify} kind={addingAdjustment}
               onDone={() => { setAddingAdjustment(false); refreshBalanceAdj() }} onCancel={() => setAddingAdjustment(false)} />
           )}
           <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-line">
             {monthBalanceAdjustments.length === 0 && !addingAdjustment ? <p className="p-3 text-sm text-ink-faint">No adjustments this month</p> :
               monthBalanceAdjustments.map((a: any, i: number) => (
                 <div key={a.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
-                  <span className="text-ink">{formatDate(a.adjustment_date)}{a.remarks ? <span className="text-ink-faint"> · {a.remarks}</span> : null}</span>
+                  <span className="text-ink">{formatDate(a.adjustment_date)}{a.kind === 'topup' && <Badge tone="positive">Top-up</Badge>}{a.remarks ? <span className="text-ink-faint"> · {a.remarks}</span> : null}</span>
                   <span className={'font-semibold ' + (Number(a.amount) < 0 ? 'text-bad' : 'text-ink')}>{Number(a.amount) > 0 ? '+' : ''}{formatNumber(a.amount, 2)}</span>
                 </div>
               ))}
@@ -337,6 +346,30 @@ export function MonthlyAdjustment() {
                 <span className="flex shrink-0 items-center gap-2 font-semibold text-ink">{isCredit(e) && <Badge tone="critical">Credit (unpaid)</Badge>}{formatNumber(e.amount, 2)}</span>
               </div>
             ))}
+        </div>
+      </Card>
+
+      <Card className="flex min-h-0 flex-col overflow-hidden p-4">
+        <SectionHeader icon="menu_book" title={`Cash Ledger — ${monthLabel(period)}`} />
+        <p className="-mt-1 mb-2 text-xs text-ink-faint">Every cash-in / cash-out this month, chronologically, with a running balance — receipts, top-ups/adjustments, cash expenses and vendor payments.</p>
+        <div className="overflow-x-auto rounded-xl border border-surface-line">
+          <div className="min-w-[640px]">
+            <div className="grid grid-cols-[110px_1fr_110px_110px_120px] gap-2 border-b border-surface-line bg-surface-sunken px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+              <span>Date</span><span>Particulars</span><span className="text-right">Receipt</span><span className="text-right">Payment</span><span className="text-right">Balance</span>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {monthLedger.length === 0 ? <p className="p-3 text-sm text-ink-faint">No cash movement this month</p> :
+                monthLedger.map((r, i) => (
+                  <div key={i} className={'grid grid-cols-[110px_1fr_110px_110px_120px] items-center gap-2 px-3 py-2 text-sm tabular-nums ' + (i ? 'border-t border-surface-line' : '')}>
+                    <span className="text-ink-soft">{r.date}</span>
+                    <span className="min-w-0 truncate text-ink">{r.particulars}</span>
+                    <span className="text-right text-ok">{r.receipt ? formatNumber(r.receipt, 2) : ''}</span>
+                    <span className="text-right text-bad">{r.payment ? formatNumber(r.payment, 2) : ''}</span>
+                    <span className="text-right font-semibold text-ink">{formatNumber(r.balance, 2)}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -386,22 +419,24 @@ export function MonthlyAdjustment() {
 // once, to seed the opening balance this system inherited from whatever
 // tracking (Excel, paper) was used before it, but also available for any
 // later one-off correction (a bank charge, a rounding fix) that isn't a
-// real fund receipt or expense.
-function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel }: any) {
+// real fund receipt or expense. Top-up/Replenishment (HO refilling the cash
+// fund outside of a Requisition) uses the same table with kind='topup'.
+function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel, kind = 'correction' }: any) {
+  const isTopup = kind === 'topup'
   const [date, setDate] = useState(today())
   const [amount, setAmount] = useState('')
-  const [remarks, setRemarks] = useState('')
+  const [remarks, setRemarks] = useState(isTopup ? 'Replenishment from Head Office' : '')
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
-    if (!Number(amount)) { notify('error', 'Enter an adjustment amount (positive to add, negative to subtract)'); return }
+    if (!Number(amount) || (isTopup && Number(amount) <= 0)) { notify('error', isTopup ? 'Enter a top-up amount' : 'Enter an adjustment amount (positive to add, negative to subtract)'); return }
     setSaving(true)
     const { error } = await supabase.from('finance_balance_adjustments').insert({
-      client_id: clientId, adjustment_date: date, amount: Number(amount), remarks: remarks || null
+      client_id: clientId, adjustment_date: date, amount: Number(amount), remarks: remarks || null, kind
     })
     setSaving(false)
     if (error) { notify('error', error.message); return }
-    notify('success', 'Balance adjustment recorded')
+    notify('success', isTopup ? 'Top-up recorded' : 'Balance adjustment recorded')
     onDone()
   }
 
@@ -409,12 +444,12 @@ function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel }: any) {
     <div className="mb-2 rounded-lg border border-surface-line bg-surface-sunken/40 p-2">
       <div className="grid grid-cols-[130px_110px_1fr_auto_auto] items-center gap-2">
         <input className="fiori-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
-        <input className="fiori-input" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="+/- Amount" />
+        <input className="fiori-input" type="number" min={isTopup ? 0 : undefined} value={amount} onChange={e => setAmount(e.target.value)} placeholder={isTopup ? 'Amount' : '+/- Amount'} />
         <input className="fiori-input" value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="e.g. Opening balance carried from manual records" />
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button size="sm" loading={saving} onClick={save}>Save</Button>
       </div>
-      <p className="mt-1.5 text-xs text-ink-faint">Positive adds to the balance, negative subtracts. Dated on or before this month, it also carries into every later month's B/D.</p>
+      {!isTopup && <p className="mt-1.5 text-xs text-ink-faint">Positive adds to the balance, negative subtracts. Dated on or before this month, it also carries into every later month's B/D.</p>}
     </div>
   )
 }

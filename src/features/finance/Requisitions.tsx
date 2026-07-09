@@ -19,6 +19,7 @@ import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
 import { SectionHeader, StatCard, FinancePanel } from './components/FinanceUI'
 import { LineGrid, type LineColumn } from './components/LineGrid'
+import { ExpenseForm } from './ExpenseForm'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
@@ -48,6 +49,7 @@ export function Requisitions() {
   useAutoOpen(() => { setEditing(null); setModal(true) })
   const [viewing, setViewing] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
+  const [converting, setConverting] = useState<{ req: any; line: any } | null>(null)
 
   const receiptsFor = (reqId: string) => (allReceipts as any[]).filter(r => r.requisition_id === reqId)
   const receivedTotal = (reqId: string) => receiptsFor(reqId).reduce((s, r) => s + (Number(r.amount) || 0), 0)
@@ -147,7 +149,18 @@ export function Requisitions() {
           onEdit={() => { const r = viewing; setViewing(null); openEdit(r) }}
           onPrint={() => printReq(viewing)}
           onReceiptAdded={() => { refreshReceipts(); openView(viewing) }}
+          onConvertLine={(l: any) => setConverting({ req: viewing, line: l })}
           onClose={() => setViewing(null)} />
+      )}
+
+      {converting && (
+        <ExpenseForm clientId={currentClientId!} items={[]} categories={[]} recentPayees={[]}
+          record={{
+            expense_type: 'Others', expense_date: today(), payment_mode: 'Cash', department: 'Warehouse',
+            amount: Number(converting.line.amount) || undefined, doc_type: 'vendor_voucher',
+            description: `${converting.line.purpose}${converting.req.req_no ? ` — from Requisition ${converting.req.req_no}` : ''}`
+          }}
+          notify={notify} onClose={() => setConverting(null)} onDone={() => setConverting(null)} />
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
@@ -231,7 +244,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
   )
 }
 
-function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEdit, onPrint, onReceiptAdded, onClose }: any) {
+function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEdit, onPrint, onReceiptAdded, onConvertLine, onClose }: any) {
   const lines: any[] = req.__lines ?? []
   const [addingReceipt, setAddingReceipt] = useState(false)
   const receivedTotal = receipts.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0)
@@ -247,13 +260,17 @@ function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEd
         </div>
 
         <div>
-          <SectionHeader icon="list_alt" title="Cost Purpose Lines" />
+          <SectionHeader icon="list_alt" title="Cost Purpose Lines (pre-planning — nothing here is committed until converted to an Expense)" />
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {lines.length === 0 ? <p className="p-3 text-sm text-ink-faint">No lines</p> :
               lines.map((l, i) => (
                 <div key={l.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{l.purpose}{l.unit || l.qty ? <span className="text-ink-faint"> · {l.qty ?? ''} {l.unit ?? ''}</span> : null}</span>
-                  <span className="shrink-0 font-semibold text-ink">{formatNumber(l.amount, 2)}</span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="font-semibold text-ink">{formatNumber(l.amount, 2)}</span>
+                    {canCreate && <button type="button" onClick={() => onConvertLine(l)}
+                      className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">Convert to Expense</button>}
+                  </span>
                 </div>
               ))}
           </div>

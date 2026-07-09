@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCollection } from '@/hooks/useCollection'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
-import { formatNumber } from '@/lib/utils'
+import { cn, formatNumber } from '@/lib/utils'
 import { FinancePanel, SectionHeader } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -71,6 +72,22 @@ export function ProcurementForm({ record, clientId, vendors, items, categories, 
   const addlTotal = addl.reduce((s, a) => s + (Number(a.amount) || 0), 0)
   const grand = subtotal + addlTotal
   const isCredit = h.payment_mode === 'Credit'
+
+  // Budget monitoring for the selected department + month (dept-specific budget,
+  // falling back to the whole-warehouse 'All' budget).
+  const { data: budgets } = useCollection('finance_budgets', {})
+  const { data: allExpenses } = useCollection('finance_expenses', {})
+  const period = (h.expense_date || today()).slice(0, 7)
+  const [by, bm] = period.split('-').map(Number)
+  const dept = h.department || 'Warehouse'
+  const budgetRow = (budgets as any[]).find(b => b.year === by && b.month === bm && b.department === dept)
+    || (budgets as any[]).find(b => b.year === by && b.month === bm && b.department === 'All')
+  const monthSpentDept = budgetRow ? (allExpenses as any[]).filter(e =>
+    (e.expense_date || '').slice(0, 7) === period && e.id !== record?.id &&
+    (budgetRow.department === 'All' || (e.department || 'Others') === dept)
+  ).reduce((s, e) => s + (Number(e.amount) || 0), 0) : 0
+  const budgetRemaining = budgetRow ? Number(budgetRow.amount) - monthSpentDept - grand : 0
+  const overBudget = !!budgetRow && budgetRemaining < 0
 
   const save = async () => {
     if (!h.vendor_id) { notify('error', 'Select a vendor'); return }
@@ -233,6 +250,20 @@ export function ProcurementForm({ record, clientId, vendors, items, categories, 
         </div>
 
         <Field label="Remarks"><Input value={h.description ?? ''} onChange={e => set({ description: e.target.value })} placeholder="Optional note" /></Field>
+
+        {/* Budget monitoring */}
+        {budgetRow && (
+          <div className={cn('rounded-xl border px-4 py-3 text-sm', overBudget ? 'border-bad/40 bg-bad/5' : 'border-surface-line bg-surface-sunken/40')}>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Budget · {budgetRow.department} · {period}</span>
+              <span className="text-ink-soft">Budget <b className="tabular-nums text-ink">{formatNumber(budgetRow.amount, 2)}</b></span>
+              <span className="text-ink-soft">Spent <b className="tabular-nums text-ink">{formatNumber(monthSpentDept, 2)}</b></span>
+              <span className="text-ink-soft">This entry <b className="tabular-nums text-ink">{formatNumber(grand, 2)}</b></span>
+              <span className={cn('font-semibold', overBudget ? 'text-bad' : 'text-ok')}>Remaining {formatNumber(budgetRemaining, 2)}</span>
+            </div>
+            {overBudget && <p className="mt-1 text-xs font-medium text-bad">This entry exceeds the {budgetRow.department} budget for {period} — you can still save it.</p>}
+          </div>
+        )}
 
         {/* Summary */}
         <div className="flex flex-col items-end gap-1 rounded-xl bg-surface-sunken px-4 py-3 text-sm">

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { StatCard } from './components/FinanceUI'
+import { cashOut, totalDue } from './financeCash'
 
 // Finance module home — the "accounts at a glance". All figures stay inside
 // the finance module (finance.view), never on the shared dashboard.
@@ -16,7 +17,8 @@ export function FinanceDashboard() {
   const { data: receipts } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
   const { data: expenses } = useCollection('finance_expenses', { order: 'expense_date' })
   const { data: adjustments } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
-  const { data: reqs } = useCollection('finance_requisitions', { order: 'req_date' })
+  const { data: payments } = useCollection('finance_vendor_payments', { order: 'payment_date' })
+  const { data: budgets } = useCollection('finance_budgets', {})
   const { data: cats } = useCollection('finance_expense_categories', {})
   const catName = (id: string) => (cats as any[]).find(c => c.id === id)?.name ?? 'Uncategorized'
 
@@ -24,15 +26,32 @@ export function FinanceDashboard() {
   const k = useMemo(() => {
     const amt = (r: any) => Number(r.amount) || 0
     const allRecv = sum(receipts as any[], amt)
-    const allSpent = sum(expenses as any[], amt)
     const allAdj = sum(adjustments as any[], amt)
+    // Cash-in-hand: credit purchases don't count until paid; vendor payments do.
+    const cashSpent = sum(expenses as any[], cashOut) + sum(payments as any[], amt)
     return {
-      balance: allRecv - allSpent + allAdj,
-      monthRecv: sum((receipts as any[]).filter(r => monthOf(r.receipt_date) === m), amt),
+      balance: allRecv - cashSpent + allAdj,
       monthSpent: sum((expenses as any[]).filter(e => monthOf(e.expense_date) === m), amt),
-      reqCount: (reqs as any[]).length
+      dues: totalDue(expenses as any[], payments as any[])
     }
-  }, [receipts, expenses, adjustments, reqs])
+  }, [receipts, expenses, adjustments, payments])
+
+  // Budget vs spend for the current month (per department + overall).
+  const [yy, mm] = m.split('-').map(Number)
+  const budgetRows = useMemo(() => {
+    const monthBudgets = (budgets as any[]).filter(b => b.year === yy && b.month === mm)
+    if (!monthBudgets.length) return []
+    const spentByDept = new Map<string, number>()
+    ;(expenses as any[]).filter(e => monthOf(e.expense_date) === m).forEach(e => {
+      const d = e.department || 'Others'; spentByDept.set(d, (spentByDept.get(d) ?? 0) + (Number(e.amount) || 0))
+    })
+    const totalSpent = [...spentByDept.values()].reduce((s, v) => s + v, 0)
+    return monthBudgets.map(b => {
+      const spent = b.department === 'All' ? totalSpent : (spentByDept.get(b.department) ?? 0)
+      return { department: b.department, budget: Number(b.amount) || 0, spent, remaining: (Number(b.amount) || 0) - spent }
+    }).sort((a, b) => (a.department === 'All' ? -1 : b.department === 'All' ? 1 : a.department.localeCompare(b.department)))
+  }, [budgets, expenses, yy, mm])
+  const overallBudget = budgetRows.find(b => b.department === 'All')
 
   const monthByHead = useMemo(() => {
     const map = new Map<string, number>()
@@ -48,10 +67,32 @@ export function FinanceDashboard() {
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon="account_balance_wallet" tone={k.balance < 0 ? 'bad' : 'brand'} label="Fund Balance (in hand)" value={`${formatNumber(k.balance, 2)} BDT`} />
-        <StatCard icon="payments" tone="ok" label="Received this month" value={`${formatNumber(k.monthRecv, 2)} BDT`} />
         <StatCard icon="shopping_cart" tone="bad" label="Spent this month" value={`${formatNumber(k.monthSpent, 2)} BDT`} />
-        <StatCard icon="assignment" label="Requisitions" value={formatNumber(k.reqCount)} />
+        <StatCard icon="request_quote" tone={k.dues > 0.004 ? 'warn' : 'brand'} label="Vendor Dues (unpaid)" value={`${formatNumber(k.dues, 2)} BDT`} />
+        <StatCard icon="savings" tone={overallBudget && overallBudget.remaining < 0 ? 'bad' : 'brand'} label="Budget Left (month)" value={overallBudget ? `${formatNumber(overallBudget.remaining, 2)} BDT` : '—'} />
       </div>
+
+      {budgetRows.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Budget — this month</p>
+            <Link to="/finance/setup" className="text-xs font-medium text-brand-700 hover:underline">Set budgets →</Link>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-surface-line">
+            <div className="grid grid-cols-[1fr_110px_110px_120px] gap-2 border-b border-surface-line bg-surface-sunken px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+              <span>Department</span><span className="text-right">Budget</span><span className="text-right">Spent</span><span className="text-right">Remaining</span>
+            </div>
+            {budgetRows.map((b, i) => (
+              <div key={b.department} className={'grid grid-cols-[1fr_110px_110px_120px] gap-2 px-3 py-2.5 text-sm tabular-nums ' + (i ? 'border-t border-surface-line' : '')}>
+                <span className="text-ink">{b.department === 'All' ? 'All departments' : b.department}</span>
+                <span className="text-right text-ink-soft">{formatNumber(b.budget, 2)}</span>
+                <span className="text-right text-ink-soft">{formatNumber(b.spent, 2)}</span>
+                <span className={'text-right font-semibold ' + (b.remaining < 0 ? 'text-bad' : 'text-ok')}>{formatNumber(b.remaining, 2)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-4">

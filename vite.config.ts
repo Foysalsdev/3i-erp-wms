@@ -53,10 +53,14 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
+        // No manual chunk for @react-pdf/renderer: every use is behind a
+        // dynamic import, so Rollup already emits it as an on-demand chunk.
+        // Forcing it into a manual chunk made it a home for shared helper
+        // modules too, which dragged the whole 1.4 MB bundle into the static
+        // import graph of every page.
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           charts: ['recharts'],
-          pdf: ['@react-pdf/renderer'],
           supabase: ['@supabase/supabase-js']
         }
       }

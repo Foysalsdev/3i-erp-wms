@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
-import { downloadMonthlyAdjustmentPDF, SUBMITTED_TO } from '@/pdf/FinancePDF'
+import { SUBMITTED_TO } from './financeCash'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid
 } from 'recharts'
@@ -198,6 +198,7 @@ export function MonthlyAdjustment() {
 
   const exportPDF = async () => {
     try {
+      const { downloadMonthlyAdjustmentPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadMonthlyAdjustmentPDF({
         period: monthLabel(period),
         openingBalance, closingBalance, ledger: monthLedger, categoryTotals

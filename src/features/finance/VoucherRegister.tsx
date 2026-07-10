@@ -13,7 +13,6 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
-import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
 import { VOUCHER_STATUS_LABEL, VOUCHER_STATUS_TONE, DOC_TYPE_LABEL, fetchExpenseLines } from './financeCash'
 import { ExpenseForm, EXPENSE_TYPES, PAYMENT_METHODS } from './ExpenseForm'
@@ -87,6 +86,7 @@ export function VoucherRegister() {
         ...(__items ?? []).map((it: any) => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
         ...(__addl ?? []).map((a: any) => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
       ]
+      const { downloadBillVoucherPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadBillVoucherPDF({
         title: r.expense_type || 'Expense', billRef: r.doc_no || r.vendor_bill_no || r.id.slice(0, 8).toUpperCase(),
         date: formatDate(r.expense_date), payee: r.payee_name || undefined,

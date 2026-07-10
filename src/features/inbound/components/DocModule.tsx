@@ -15,8 +15,6 @@ import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { formatDate } from '@/lib/utils'
-import { downloadDocPDF } from '@/pdf/DocumentPDF'
-import { downloadGatePassPDF } from '@/pdf/GatePassPDF'
 
 // `permModule` lets the same document engine power different sidebar modules
 // (inbound, outbound, reverse) while gating actions on that module's RBAC keys.
@@ -120,6 +118,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
 
     if (!docId) {
       hdr.doc_no = await nextDocNumber(clientId!, config.docType)
+      if (!hdr.doc_no) { notify('error', `Could not generate the ${config.singular} number`); setSaving(false); return }
       const { data, error } = await supabase.from(config.table as any).insert(hdr).select('id').single()
       if (error) { notify('error', error.message); setSaving(false); return }
       docId = (data as any).id
@@ -163,8 +162,10 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
       if (config.pdfKind === 'gatepass') {
         const ref = config.source ? sources.find(s => s.id === doc[config.source!.fk])?.doc_no : undefined
         const meta = [...baseMeta.filter(m => m.label !== 'Status'), ...extraMeta, ...(ref ? [{ label: 'Delivery Challan', value: ref }] : [])]
+        const { downloadGatePassPDF } = await import('@/pdf/GatePassPDF')  // lazy: pdf chunk loads on demand
         await downloadGatePassPDF({ client: clientName, docNo: doc.doc_no ?? '', meta, lines })
       } else {
+        const { downloadDocPDF } = await import('@/pdf/DocumentPDF')  // lazy: pdf chunk loads on demand
         await downloadDocPDF({ client: clientName, title: config.title, docNo: doc.doc_no ?? '', meta: [...baseMeta, ...extraMeta], lines, showPrice: config.showPrice })
       }
     } catch (e: any) {

@@ -76,7 +76,7 @@ app.post_stock_movement(
 ) returns bigint  -- ledger id
 ```
 
-Behaviour: validates client access, upserts the matching `inventory_stock` row `FOR UPDATE`, rejects movements that would drive quantity negative, then writes an `inventory_ledger` row with `balance_after`. Stock is split by condition: `good | damaged | quarantine`.
+Behaviour: validates client access, then applies the delta update-first (falling back to `INSERT .. ON CONFLICT` for a new dimension, so concurrent movements can never create duplicate rows — the dimension key is `UNIQUE NULLS NOT DISTINCT`, covering NULL locations). Movements that would drive quantity negative are rejected both in the function and by a `quantity >= 0` table constraint, then an `inventory_ledger` row is written with `balance_after`. Stock is split by condition: `good | damaged | quarantine`.
 
 ## Data model (tables)
 

@@ -200,6 +200,7 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
         await (supabase as any).from(config.itemTable).delete().eq(config.itemFK, record.id)
       } else {
         hdr.doc_no = await nextDocNumber(clientId, config.docType)
+        if (!hdr.doc_no) throw new Error(`Could not generate the ${config.singular} number`)
         const { data, error } = await supabase.from(config.table as any).insert(hdr).select('id').single()
         if (error) throw error
         docId = (data as any).id

@@ -13,7 +13,8 @@ import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate } from '@/lib/utils'
-import { downloadRequisitionPDF, SUBMITTED_TO, type ReqLine } from '@/pdf/FinancePDF'
+import type { ReqLine } from '@/pdf/FinancePDF'
+import { SUBMITTED_TO } from './financeCash'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
@@ -65,6 +66,7 @@ export function Requisitions() {
   const printReq = async (r: any) => {
     try {
       const lines = await fetchLines(r.id)
+      const { downloadRequisitionPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadRequisitionPDF({
         docNo: r.req_no,
         meta: [

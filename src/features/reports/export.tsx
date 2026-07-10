@@ -1,59 +1,15 @@
-import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
-import { getCompanyInfo } from '@/lib/settings'
-import { downloadBlob } from '@/lib/utils'
 import { downloadCSV, type CsvCol } from '@/lib/csv'
 
 export interface RepCol extends CsvCol { align?: 'right' | 'left'; width?: string }
 
 export { downloadCSV }
 
-const s = StyleSheet.create({
-  page: { padding: 26, fontSize: 8, fontFamily: 'Helvetica', color: '#212326' },
-  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  title: { fontSize: 14, fontWeight: 'bold' },
-  sub: { fontSize: 8, color: '#556b82', marginTop: 2 },
-  hr: { borderBottomWidth: 1, borderBottomColor: '#bbb', marginVertical: 6 },
-  tHead: { flexDirection: 'row', alignItems: 'center', borderWidth: 0.7, borderColor: '#333', backgroundColor: '#f2f2f0' },
-  th: { fontSize: 7.5, fontWeight: 'bold', padding: 3, borderRightWidth: 0.5, borderRightColor: '#999' },
-  tr: { flexDirection: 'row', alignItems: 'center', borderWidth: 0.7, borderTopWidth: 0, borderColor: '#333' },
-  td: { fontSize: 7.5, padding: 3, borderRightWidth: 0.5, borderRightColor: '#ccc' },
-  footer: { position: 'absolute', bottom: 16, left: 26, right: 26, fontSize: 7, color: '#888', textAlign: 'center' }
-})
-
-function ReportDoc({ title, subtitle, cols, rows }: { title: string; subtitle?: string; cols: RepCol[]; rows: any[] }) {
-  const w = (c: RepCol) => c.width ?? `${(100 / cols.length).toFixed(2)}%`
-  const company = getCompanyInfo()
-  return (
-    <Document>
-      <Page size="A4" orientation="landscape" style={s.page}>
-        <View style={s.top}>
-          <View>
-            <Image src={company.logoUrl || '/whirlpool-logo.png'} style={{ width: 110, height: 36 }} />
-            <Text style={s.sub}>{company.name}</Text>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={s.title}>{title}</Text>
-            {subtitle ? <Text style={s.sub}>{subtitle}</Text> : null}
-            <Text style={s.sub}>Generated {new Date().toLocaleString('en-GB')}</Text>
-          </View>
-        </View>
-        <View style={s.tHead} fixed>
-          {cols.map(c => <Text key={c.key} style={[s.th, { width: w(c), textAlign: c.align ?? 'left' }]}>{c.header}</Text>)}
-        </View>
-        {rows.map((r, i) => (
-          <View key={i} style={s.tr} wrap={false}>
-            {cols.map(c => <Text key={c.key} style={[s.td, { width: w(c), textAlign: c.align ?? 'left' }]}>{String(r[c.key] ?? '')}</Text>)}
-          </View>
-        ))}
-        <Text style={s.footer} fixed render={({ pageNumber, totalPages }) => `${title} · page ${pageNumber}/${totalPages}`} />
-      </Page>
-    </Document>
-  )
-}
-
+// Lazy wrapper: the react-pdf implementation (reportPdf.tsx) is only fetched
+// when the user clicks PDF, keeping the 1.4 MB pdf chunk off every page that
+// merely shows the export toolbar (reports, finance registers, dashboard).
 export async function downloadReportPDF(title: string, subtitle: string, cols: RepCol[], rows: any[]) {
-  const blob = await pdf(<ReportDoc title={title} subtitle={subtitle} cols={cols} rows={rows} />).toBlob()
-  downloadBlob(blob, `${title.replace(/[^\w]+/g, '_')}.pdf`)
+  const { downloadReportPDF: impl } = await import('./reportPdf')
+  await impl(title, subtitle, cols, rows)
 }
 
 // Shared toolbar: record count + CSV/PDF export buttons.

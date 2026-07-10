@@ -6,6 +6,10 @@ import { supabase } from '@/lib/supabase'
 
 const amt = (r: any) => Number(r?.amount) || 0
 
+// The Head Office entity finance documents are submitted to. Lives here (not
+// in FinancePDF) so screens can render it without pulling the pdf chunk.
+export const SUBMITTED_TO = '3i Logistics Pvt Limited'
+
 // Procurement's item grid + additional expenses for one expense — shared by
 // every screen that views/edits/prints/duplicates a Procurement-type row.
 export async function fetchExpenseLines(expId: string) {

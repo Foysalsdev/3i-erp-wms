@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { Field, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate } from '@/lib/utils'
-import { downloadCoverSheetPDF, type CoverSheetGroup } from '@/pdf/FinancePDF'
+import type { CoverSheetGroup } from '@/pdf/FinancePDF'
 import { SectionHeader, StatCard } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -53,6 +53,7 @@ export function HOSubmission() {
         const exp = expById.get(row.expense_id)
         g.rows.push({ slNo: row.sl_no, expenseId: exp?.doc_no || row.expense_id.slice(0, 8).toUpperCase(), vendorPayee: exp?.payee_name || '', amount: Number(exp?.amount) || 0, date: exp ? formatDate(exp.expense_date) : '' })
       }
+      const { downloadCoverSheetPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadCoverSheetPDF({ submissionNo: s.submission_no, submissionDate: formatDate(s.submission_date), voucherCount: s.voucher_count, totalAmount: Number(s.total_amount) || 0, groups })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not rebuild the Cover Sheet')
@@ -173,6 +174,7 @@ function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: 
         .in('id', selectedRows.map((r: any) => r.id))
       if (lockErr) throw lockErr
 
+      const { downloadCoverSheetPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadCoverSheetPDF({ submissionNo: submission_no, submissionDate: formatDate(today()), voucherCount: selectedRows.length, totalAmount, groups: pdfGroups })
       notify('success', `${submission_no} created — ${selectedRows.length} vouchers locked`)
       onDone()

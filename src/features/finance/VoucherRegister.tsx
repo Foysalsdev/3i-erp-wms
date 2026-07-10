@@ -69,11 +69,16 @@ export function VoucherRegister() {
     })
   }, [data, q, month, type, department, payMethod, voucherStatus, submissionFilter, minAmt, maxAmt, submissionById])
 
-  const openView = async (r: any) => setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchExpenseLines(r.id)) } : r)
+  const openView = async (r: any) => {
+    try { setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchExpenseLines(r.id)) } : r) }
+    catch (e: any) { notify('error', e?.message ?? 'Could not load the voucher') }
+  }
   const openEdit = async (r: any) => {
     if (r.submission_id) { notify('error', 'This voucher is submitted to Head Office (locked). Use Unlock first.'); return }
-    const extra = r.expense_type === 'Procurement' ? await fetchExpenseLines(r.id) : {}
-    setEditModal({ ...r, ...extra })
+    try {
+      const extra = r.expense_type === 'Procurement' ? await fetchExpenseLines(r.id) : {}
+      setEditModal({ ...r, ...extra })
+    } catch (e: any) { notify('error', e?.message ?? 'Could not load the voucher') }
   }
   const printBill = async (r: any) => {
     try {

@@ -25,7 +25,10 @@ export interface DocConfig {
   showPrice?: boolean
   postRpc?: string
   postParam?: string
-  source?: { table: string; itemTable: string; fk: string; label: string; statuses: string[] }
+  // fk = the column on THIS doc's header that links to the source doc.
+  // itemFk = the FK column on the source's item table (defaults to fk).
+  // numberField = the source header's document-number column (defaults to doc_no).
+  source?: { table: string; itemTable: string; fk: string; itemFk?: string; numberField?: string; label: string; statuses: string[] }
   extraFields?: ExtraField[]
   pdfKind?: 'gatepass'
 }
@@ -81,11 +84,11 @@ export const DOC_CONFIGS: Record<string, DocConfig> = {
     source: { table: 'pickings', itemTable: 'picking_items', fk: 'picking_id', label: 'Load from Picking', statuses: ['posted'] }
   },
   'delivery-challan': {
-    key: 'delivery-challan', table: 'delivery_challans', itemTable: 'delivery_challan_items', itemFK: 'dc_id',
+    key: 'delivery-challan', table: 'delivery_challans', itemTable: 'delivery_challan_items', itemFK: 'challan_id',
     qtyField: 'qty', docType: 'DC', title: 'Delivery Challan', singular: 'DC', icon: 'local_shipping',
-    dateField: 'dc_date', party: 'customer', itemCols: { price: true, location: true, condition: true }, showPrice: true,
-    postRpc: 'post_delivery_challan', postParam: 'p_dc',
-    source: { table: 'sales_orders', itemTable: 'sales_order_items', fk: 'so_id', label: 'Load from Sales Order', statuses: ['posted'] },
+    dateField: 'challan_date', party: 'customer', itemCols: { price: true, location: true, condition: true }, showPrice: true,
+    postRpc: 'post_delivery_challan', postParam: 'p_challan_id',
+    source: { table: 'sales_orders', itemTable: 'sales_order_items', fk: 'sales_order_id', itemFk: 'so_id', numberField: 'so_no', label: 'Load from Sales Order', statuses: ['approved'] },
     extraFields: [
       { name: 'delivery_method', label: 'Delivery Method', kind: 'select', options: ['Transport', 'Courier'] },
       { name: 'transporter_id', label: 'Transporter', kind: 'relation', relation: 'transport_vendors', showWhen: { field: 'delivery_method', equals: 'Transport' } },
@@ -99,7 +102,7 @@ export const DOC_CONFIGS: Record<string, DocConfig> = {
     key: 'gate-pass', table: 'gate_passes', itemTable: 'gate_pass_items', itemFK: 'gate_pass_id',
     qtyField: 'qty', docType: 'GP', title: 'Gate Pass', singular: 'Gate Pass', icon: 'exit_to_app',
     dateField: 'gate_date', itemCols: {}, pdfKind: 'gatepass',
-    source: { table: 'delivery_challans', itemTable: 'delivery_challan_items', fk: 'dc_id', label: 'Load from Delivery Challan', statuses: ['posted'] },
+    source: { table: 'delivery_challans', itemTable: 'delivery_challan_items', fk: 'challan_id', numberField: 'challan_no', label: 'Load from Delivery Challan', statuses: ['issued'] },
     extraFields: [
       { name: 'transporter_id', label: 'Transporter', kind: 'relation', relation: 'transport_vendors' },
       { name: 'vehicle_id', label: 'Vehicle', kind: 'relation', relation: 'vehicles' },
@@ -113,7 +116,7 @@ export const DOC_CONFIGS: Record<string, DocConfig> = {
     qtyField: 'qty', docType: 'SRN', title: 'Sales Return', singular: 'Sales Return', icon: 'assignment_return',
     dateField: 'return_date', party: 'customer', itemCols: { price: true, location: true, condition: true, reason: true }, showPrice: true,
     postRpc: 'post_sales_return', postParam: 'p_srn',
-    source: { table: 'delivery_challans', itemTable: 'delivery_challan_items', fk: 'dc_id', label: 'Load from Delivery Challan', statuses: ['posted'] }
+    source: { table: 'delivery_challans', itemTable: 'delivery_challan_items', fk: 'dc_id', itemFk: 'challan_id', numberField: 'challan_no', label: 'Load from Delivery Challan', statuses: ['issued'] }
   },
   'exchange': {
     key: 'exchange', table: 'exchanges', itemTable: 'exchange_items', itemFK: 'exchange_id',

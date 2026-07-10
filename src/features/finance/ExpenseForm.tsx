@@ -175,6 +175,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
       let voucherNo = h.vendor_bill_no ?? null
       if (willFinalize && h.doc_type === 'internal_voucher' && !voucherNo) {
         voucherNo = await nextFinanceDocNumber(clientId, 'IV')
+        if (!voucherNo) throw new Error('Could not generate the Internal Voucher number')
       }
       const header: any = {
         client_id: clientId, expense_date: h.expense_date || today(), expense_type: h.expense_type,
@@ -191,7 +192,10 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
         const { error } = await supabase.from('finance_expenses').update(header).eq('id', record.id)
         if (error) throw error
       } else {
-        if (willFinalize) header.doc_no = await nextFinanceDocNumber(clientId, 'EXP')
+        if (willFinalize) {
+          header.doc_no = await nextFinanceDocNumber(clientId, 'EXP')
+          if (!header.doc_no) throw new Error('Could not generate the Expense ID')
+        }
         const { data, error } = await supabase.from('finance_expenses').insert(header).select('id').single()
         if (error) throw error
         expId = data.id
@@ -199,7 +203,9 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
       // Finalizing a draft that never got an Expense ID assigns one now.
       if (willFinalize && record?.id && !record.doc_no) {
         const doc_no = await nextFinanceDocNumber(clientId, 'EXP')
-        await supabase.from('finance_expenses').update({ doc_no }).eq('id', expId)
+        if (!doc_no) throw new Error('Could not generate the Expense ID')
+        const { error } = await supabase.from('finance_expenses').update({ doc_no }).eq('id', expId)
+        if (error) throw error
       }
       if (isProcurement) {
         await supabase.from('finance_expense_bills').delete().eq('expense_id', expId)

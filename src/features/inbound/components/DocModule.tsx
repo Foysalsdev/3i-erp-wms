@@ -59,8 +59,10 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   // load source docs (e.g. posted POs) for "load from"
   useEffect(() => {
     if (!clientId || !config.source) return
-    supabase.from(config.source.table as any).select('id,doc_no').eq('client_id', clientId).in('status', config.source.statuses)
-      .order('created_at', { ascending: false }).then(({ data }) => setSources(data ?? []))
+    const numberField = config.source.numberField ?? 'doc_no'
+    supabase.from(config.source.table as any).select(`id,${numberField}`).eq('client_id', clientId).in('status', config.source.statuses)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setSources((data ?? []).map((r: any) => ({ id: r.id, doc_no: r[numberField] }))))
   }, [clientId, config])
 
   const openNew = () => { setEditId(null); setReadOnly(false); setHeader({ status: 'draft' }); setItems([]); setMode('editor') }
@@ -78,7 +80,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
 
   const loadFromSource = async (srcId: string) => {
     if (!config.source || !srcId) return
-    const { data } = await supabase.from(config.source.itemTable as any).select('*').eq(config.source.fk, srcId)
+    const { data } = await supabase.from(config.source.itemTable as any).select('*').eq(config.source.itemFk ?? config.source.fk, srcId)
     const { data: sh } = await supabase.from(config.source.table as any).select('*').eq('id', srcId).single()
     setHeader((h: any) => ({ ...h, [config.source!.fk]: srcId,
       warehouse_id: h.warehouse_id || (sh as any)?.warehouse_id || '',

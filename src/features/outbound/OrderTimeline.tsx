@@ -14,8 +14,8 @@ export function OrderTimeline({ so }: { so: { id: string; status: string } }) {
   const steps = useMemo(() => {
     const events = [...rows].reverse() // oldest first
     const firstReachedAt: Record<string, string> = {}
-    events.forEach((e: any) => {
-      const status = e.new_data?.status
+    events.forEach(e => {
+      const status = (e.new_data as { status?: string } | null)?.status
       if (status && !firstReachedAt[status]) firstReachedAt[status] = e.changed_at
     })
     const seenLabels = new Set<string>()

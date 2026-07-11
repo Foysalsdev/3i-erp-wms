@@ -44,10 +44,15 @@ export function PdfHeader({ title, docNo }: { title: string; docNo?: string }) {
 }
 
 // Static company footer text by default; pass `render` for a page-numbered variant.
+// Every printed document carries its print date & time so a paper copy can
+// always be told apart from a reprint.
 export function PdfFooter({ render }: { render?: (info: { pageNumber: number; totalPages: number }) => string }) {
   const company = getCompanyInfo()
-  if (render) return <Text style={pdfLayout.footer} render={render} fixed />
-  return <Text style={pdfLayout.footer} fixed>{company.footer}</Text>
+  const printed = 'Printed ' + new Date().toLocaleString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+  })
+  if (render) return <Text style={pdfLayout.footer} render={info => `${render(info)}  ·  ${printed}`} fixed />
+  return <Text style={pdfLayout.footer} fixed>{[company.footer, printed].filter(Boolean).join('  ·  ')}</Text>
 }
 
 // --- "Software-generated invoice" header pieces (SAP/ERP style) -------------

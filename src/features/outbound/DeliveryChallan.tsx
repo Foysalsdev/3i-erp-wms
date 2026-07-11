@@ -27,6 +27,7 @@ import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
 import { downloadChallanPdfFor } from './challanPdf'
+import { loadSoInvoices, type SoInvoice } from './soInvoices'
 import { VehicleLoadingScan } from './VehicleLoadingScan'
 import { useRememberedField } from '@/hooks/useRememberedField'
 import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
@@ -34,7 +35,10 @@ import { fetchStockAvailability } from '@/lib/stockAvailability'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
-const statusLabel = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '-'
+// 'issued' (stock deducted, goods on the vehicle) reads as "Dispatched" —
+// never "Stock Out": deducting stock for a delivery does not mean the
+// warehouse ran out of stock.
+const statusLabel = (s: string) => s === 'issued' ? 'Dispatched' : s ? s.charAt(0).toUpperCase() + s.slice(1) : '-'
 const DC_STATUS = ['draft', 'issued', 'delivered', 'cancelled']
 
 export function DeliveryChallan() {
@@ -67,7 +71,7 @@ export function DeliveryChallan() {
     if (!currentClientId) return
     supabase.from('customers').select('id,customer_code,name,billing_address').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
     supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
+    supabase.from('vehicles').select('id,vehicle_number,vehicle_type,vendor_id,driver_name,driver_phone').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
     supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
     ;(supabase as any).from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }: any) => setCouriers(data ?? []))
@@ -100,7 +104,7 @@ export function DeliveryChallan() {
     try {
       const { data: gpNo, error } = await (supabase as any).rpc('post_delivery_challan', { p_challan_id: c.id })
       if (error) throw error
-      notify('success', `${c.challan_no} issued - stock deducted${gpNo ? ' & gate pass ' + gpNo + ' created' : ''}`)
+      notify('success', `${c.challan_no} dispatched — stock deducted, dispatch time recorded${gpNo ? ' & gate pass ' + gpNo + ' created' : ''}`)
       refresh()
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not issue challan')
@@ -128,9 +132,11 @@ export function DeliveryChallan() {
     { key: 'status', header: 'Status', accessor: (r: any) => r.status, sortable: true, render: (r: any) => (
       <div className="flex items-center gap-1">
         <Badge tone={tone(r.status)}>{statusLabel(r.status)}</Badge>
-        {r.posted_at && <Badge tone="positive">Stock out</Badge>}
+        {r.posted_at && r.status === 'draft' && <Badge tone="info">Stock deducted</Badge>}
       </div>
     ) },
+    { key: 'dispatch_time', header: 'Dispatched At', accessor: (r: any) => r.dispatch_time ?? '', sortable: true,
+      render: (r: any) => r.dispatch_time ? <span className="text-xs tabular-nums text-ink-soft">{r.dispatch_time}</span> : <span className="text-xs text-ink-faint">—</span> },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
       render: (r: any) => (
@@ -142,11 +148,13 @@ export function DeliveryChallan() {
             // CN arrives when the courier actually picks up — let it be added
             // later without reopening the whole edit form.
             ...(canEdit && r.delivery_method === 'courier' ? [{ icon: 'qr_code', label: r.courier_tracking_no ? 'Update CN / Tracking' : 'Add CN / Tracking', onClick: () => setCnFor(r) }] : []),
-            ...(canPost && !r.posted_at ? [{ icon: 'check_circle', label: busy === r.id ? 'Issuing...' : 'Issue & Deduct Stock + Gate Pass', onClick: () => issue(r) }] : []),
+            ...(canPost && !r.posted_at ? [{ icon: 'check_circle', label: busy === r.id ? 'Dispatching...' : 'Confirm Dispatch (stock + gate pass)', onClick: () => issue(r) }] : []),
             // Second scan of the workflow: verify what's physically loaded on
             // the vehicle against what was reserved during picking.
             ...(canPost && r.posted_at && r.sales_order_id ? [{ icon: 'qr_code_scanner', label: 'Load & Scan Vehicle', onClick: () => setLoadingScan(r) }] : []),
-            ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
+            // A dispatched (posted) challan has real stock movements behind it —
+            // deleting it would orphan the deduction, so it is not deletable.
+            ...(isPlatformAdmin && !r.posted_at ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
           ]} />
         </div>
       )
@@ -312,6 +320,42 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const [more, setMore] = useState(false)
   const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
 
+  // The order's invoice register: a challan linked to an order is always
+  // raised UNDER one invoice, and its lines are capped by that invoice's
+  // still-undelivered quantity. Non-invoiced quantity can never be planned.
+  const [soInvoices, setSoInvoices] = useState<SoInvoice[]>([])
+  const [soItems, setSoItems] = useState<any[]>([])
+  const invRemaining = (inv: SoInvoice) => inv.lines.reduce((s, l) => s + Math.max(0, l.qty - l.delivered - l.planned), 0)
+  const applyInvoice = (inv: SoInvoice, itemsArg?: any[]) => {
+    const its = itemsArg ?? soItems
+    set({ invoice_id: inv.id, invoice_no: inv.invoice_no })
+    setLines(inv.lines.map((l: any) => {
+      const it = its.find((x: any) => x.id === l.so_item_id)
+      const remaining = Math.max(0, l.qty - l.delivered - l.planned)
+      return {
+        product_id: l.product_id, qty: remaining, unit_price: it?.unit_price ?? 0,
+        stock_status: 'good', so_item_id: l.so_item_id,
+        ordered_qty: Number(it?.qty ?? 0), already_delivered: Number(it?.delivered_qty ?? 0)
+      } as LineRow
+    }).filter((l: any) => Number(l.qty) > 0))
+  }
+  useEffect(() => {
+    if (!h.sales_order_id) { setSoInvoices([]); setSoItems([]); return }
+    let active = true
+    loadSoInvoices(h.sales_order_id).then(({ items, invoices }) => {
+      if (!active) return
+      setSoItems(items); setSoInvoices(invoices)
+      if (!record) {
+        // New challan: when exactly one invoice still has qty to deliver,
+        // pick it automatically and prefill its remaining lines.
+        const open = invoices.filter(inv => invRemaining(inv) > 0)
+        if (open.length === 1) applyInvoice(open[0], items)
+      }
+    })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [h.sales_order_id])
+
   // Bill-To / Ship-To: pick a saved customer address (sets the link + copies
   // the text as a snapshot), still fully editable as free text below.
   const renderAddr = (label: string, idKey: string, textKey: string) => (
@@ -335,10 +379,41 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const mode: 'transport' | 'courier' = h.delivery_method === 'courier' ? 'courier' : 'transport'
   const locked = !!lockSo && !record   // creating a new challan from a specific order
   const [vehs, setVehs] = useState<any[]>(vehicles)
-  const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
-  const tVendorItems = transportVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
+  useEffect(() => { setVehs(vehicles) }, [vehicles])
+  const [tVendors, setTVendors] = useState<any[]>(transportVendors)
+  useEffect(() => { setTVendors(transportVendors) }, [transportVendors])
+  const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: [v.vehicle_type, v.driver_name].filter(Boolean).join(' · ') }))
+  const tVendorItems = tVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
   const driverItems = drivers.map((d: any) => ({ id: d.id, label: d.name, sublabel: d.phone || d.driver_code }))
   const courierItems = couriers.map((v: any) => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
+
+  // Vehicle number is the operator's entry point: picking one auto-identifies
+  // the transport vendor and driver it was last used with (remembered on every
+  // save below). Both stay overridable — free text keeps working for ad-hoc
+  // vendor drivers, and the override becomes the new remembered default.
+  const onVehicle = (id: string) => {
+    const v = vehs.find((x: any) => x.id === id)
+    const vendor = v?.vendor_id ? tVendors.find((t: any) => t.id === v.vendor_id) : null
+    set({
+      vehicle_id: id,
+      ...(v?.driver_name ? { driver_id: null, driver_name: v.driver_name } : {}),
+      ...(v?.driver_phone ? { driver_phone: v.driver_phone } : {}),
+      ...(vendor ? { transporter_id: vendor.id, transport_vendor: vendor.name } : {})
+    })
+  }
+  const createDriver = async (name: string) => {
+    const { data, error } = await (supabase as any).from('drivers').insert({ client_id: clientId, name }).select('*').single()
+    if (error) { notify('error', error.message); return null }
+    setDrivers(d => [...d, data])
+    return { id: data.id, label: data.name, sublabel: data.phone || data.driver_code }
+  }
+  const createVendor = async (name: string) => {
+    const { data, error } = await (supabase as any).from('transport_vendors')
+      .insert({ client_id: clientId, name, vendor_code: 'TV' + String(Date.now()).slice(-6), status: 'active' }).select('*').single()
+    if (error) { notify('error', error.message); return null }
+    setTVendors(v => [...v, data])
+    return { id: data.id, label: data.vendor_code, sublabel: data.name }
+  }
 
   // Courier rate card: per-piece rate by product category, falling back to the
   // courier's flat rate_per_unit for categories without one.
@@ -374,30 +449,27 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     setVehs(v => [...v, data]); return { id: data.id, label: data.vehicle_number, sublabel: data.vehicle_type }
   }
 
-  const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
-  // Pull an order's customer, warehouse, PO, SAP invoice and still-pending lines
-  // (so nothing is typed twice). Each line keeps its so_item_id for tracking.
+  // Pull an order's customer, warehouse and PO (so nothing is typed twice).
+  // The LINES are not prefilled here any more — they come from the selected
+  // invoice (see applyInvoice above), because only invoiced quantity may be
+  // planned onto a challan.
   const loadFromSO = async (so: any) => {
-    const { data: items } = await supabase.from('sales_order_items').select('id,product_id,qty,delivered_qty,unit_price').eq('so_id', so.id)
     const cust = customers.find((c: any) => c.id === so.customer_id)
     setH((x: any) => ({ ...x, sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
-      po_no: so.reference_no || x.po_no, invoice_no: so.billing_doc_no || so.invoice_no || x.invoice_no,
+      po_no: so.reference_no || x.po_no,
       bill_to_address: x.bill_to_address || cust?.billing_address || '',
       ship_to_address: x.ship_to_address || cust?.shipping_address || '' }))
-    setLines((items ?? []).map((it: any) => ({
-      product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
-      unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id,
-      ordered_qty: n(it.qty), already_delivered: n(it.delivered_qty)
-    })).filter((l: any) => l.qty > 0))
+    setLines([])
   }
 
   // Order picker (only when not locked to a specific order).
   const [sos, setSos] = useState<any[]>([])
   useEffect(() => {
     if (!clientId || locked) return
-    // Delivered orders have nothing left to plan (see loadFromSO below), so
-    // they're excluded here the same as closed/cancelled ones.
-    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(delivered,closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
+    // Delivered orders have nothing left to plan, and unapproved orders
+    // (draft/pending/rejected) may not be delivered at all — the approval
+    // step always comes first.
+    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(draft,pending,rejected,delivered,closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
   }, [clientId, locked])
   const selectSO = async (soId: string) => {
     const so = sos.find((x: any) => x.id === soId)
@@ -421,11 +493,35 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     if (validLines.length === 0) { notify('error', 'Onto ekta product line add korun'); return }
     const badLine = validLines.find((r: LineRow) => !(Number(r.qty) > 0))
     if (badLine) { notify('error', 'Protita line-e Quantity din (0 er beshi)'); return }
+    // Order-linked challans deliver UNDER an invoice, and each line is capped
+    // at that invoice's still-unplanned quantity — the non-invoiced remainder
+    // of the order physically cannot be put on a challan. (post_delivery_challan
+    // re-checks all of this server-side at issue time.)
+    if (h.sales_order_id && !posted) {
+      if (soInvoices.length === 0) { notify('error', 'No SAP invoice is recorded on this order yet — add it via “Invoices (SAP)” first. Non-invoiced quantity cannot go on a challan.'); return }
+      if (!h.invoice_id) { notify('error', 'Select which invoice this challan delivers'); return }
+      const inv = soInvoices.find(i => i.id === h.invoice_id)
+      for (const r of validLines) {
+        const soItemId = (r as any).so_item_id
+        if (!soItemId) { notify('error', 'Every line must come from the selected invoice — remove manually added products'); return }
+        const l = inv?.lines.find((x: any) => x.so_item_id === soItemId)
+        if (!l) { notify('error', `A line is not on invoice ${inv?.invoice_no} — pick the right invoice or remove it`); return }
+        // `planned` already counts this challan's previously saved lines; add
+        // them back so editing a saved challan doesn't cap against itself.
+        const own = record ? Number((record.__items ?? []).find((x: any) => x.so_item_id === soItemId)?.qty ?? 0) : 0
+        const cap = Math.max(0, l.qty - l.delivered - l.planned) + own
+        if (Number(r.qty) > cap) {
+          notify('error', `Invoice ${inv!.invoice_no}: only ${cap} pcs remaining for ${products.find((p: any) => p.id === r.product_id)?.material_code ?? 'this model'}`)
+          return
+        }
+      }
+    }
     setSaving(true)
     try {
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       const header = {
         client_id: clientId, sales_order_id: h.sales_order_id || null, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
+        invoice_id: h.invoice_id || null,
         invoice_no: invoice, challan_date: h.challan_date || today(), total_qty: totalQty, po_no: h.po_no || null,
         delivery_method: mode, delivery_cost: h.delivery_cost === '' || h.delivery_cost == null ? null : Number(h.delivery_cost),
         // transport details
@@ -462,14 +558,27 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
         if (error) throw error
         challanId = data.id
       }
-      await supabase.from('delivery_challan_items').delete().eq('challan_id', challanId)
-      const payloadLines = lines.filter(r => r.product_id).map(r => ({
-        client_id: clientId, challan_id: challanId, product_id: r.product_id, qty: Number(r.qty) || 0,
-        unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null, so_item_id: (r as any).so_item_id || null
-      }))
-      if (payloadLines.length) {
-        const { error } = await supabase.from('delivery_challan_items').insert(payloadLines)
-        if (error) throw error
+      // A dispatched challan's lines are frozen — they are the record of what
+      // physically left (a DB trigger blocks changes too). Only header details
+      // (receiver, CN, addresses, remarks) stay editable after dispatch.
+      if (!posted) {
+        await supabase.from('delivery_challan_items').delete().eq('challan_id', challanId)
+        const payloadLines = lines.filter(r => r.product_id).map(r => ({
+          client_id: clientId, challan_id: challanId, product_id: r.product_id, qty: Number(r.qty) || 0,
+          unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null, so_item_id: (r as any).so_item_id || null
+        }))
+        if (payloadLines.length) {
+          const { error } = await supabase.from('delivery_challan_items').insert(payloadLines)
+          if (error) throw error
+        }
+      }
+      // Remember the vehicle ↔ vendor/driver combination just used, so the
+      // next challan with this vehicle auto-fills them (fire-and-forget:
+      // failure here must not block the challan itself).
+      if (mode === 'transport' && h.vehicle_id) {
+        ;(supabase as any).from('vehicles').update({
+          driver_name: h.driver_name || null, driver_phone: h.driver_phone || null, vendor_id: h.transporter_id || null
+        }).eq('id', h.vehicle_id).then(() => {})
       }
       notify('success', `Challan ${record ? 'updated' : 'created'}`)
       onDone()
@@ -490,8 +599,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   return (
     <Modal open onClose={onClose} title={`${record ? 'Edit' : lockSo ? 'Plan Delivery' : 'New'} Delivery Challan${lockSo ? ' — ' + lockSo.so_no : ''}`} size="lg">
       <div className="space-y-4">
-        {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Challan No: </span><span className="font-semibold">{record.challan_no}</span>{posted && <span className="ml-2"><Badge tone="positive">Issued - stock out</Badge></span>}</div>}
-        {posted && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">This challan is issued and stock is deducted. Editing lines will not change posted stock.</p>}
+        {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">Challan No: </span><span className="font-semibold">{record.challan_no}</span>{posted && <span className="ml-2"><Badge tone="info">Dispatched — stock deducted</Badge></span>}{record.dispatch_time && <span className="ml-2 text-xs text-ink-soft">Dispatched at {record.dispatch_time}</span>}</div>}
+        {posted && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">This challan is dispatched and stock is deducted. Editing lines will not change posted stock.</p>}
 
         {locked ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-surface-line bg-surface-sunken/40 p-3 text-sm sm:grid-cols-4">
@@ -501,8 +610,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Warehouse</p><p className="font-medium text-ink">{warehouses.find((w: any) => w.id === h.warehouse_id)?.code ?? '—'}</p></div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Sales Order (auto-fills customer, items, PO & invoice)" className="sm:col-span-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Sales Order (auto-fills customer, PO & invoices)" className="col-span-full">
               <Combobox items={sos.map((o: any) => ({ id: o.id, label: o.so_no, sublabel: customers.find((c: any) => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
             </Field>
             <Field label="Customer" required>
@@ -516,17 +625,40 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                 {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
               </SelectBox>
             </Field>
-            <Field label="SAP Invoice No" required>
-              {h.sales_order_id && h.invoice_no ? (
-                // Pulled from the order's own invoice — shown read-only so it isn't retyped;
-                // correct it on the Sales Order (Enter Invoice) if it's wrong.
-                <p className="fiori-input flex items-center bg-surface-sunken text-ink-soft">{h.invoice_no}</p>
-              ) : (
+            {!h.sales_order_id && (
+              <Field label="SAP Invoice No" required>
                 <Input value={h.invoice_no ?? ''} onChange={e => set({ invoice_no: e.target.value })} placeholder="SAP invoice number" />
-              )}
-            </Field>
+              </Field>
+            )}
           </div>
         )}
+
+        {/* Order-linked challans always deliver UNDER one recorded invoice —
+            picking it prefills the lines with that invoice's remaining qty. */}
+        {h.sales_order_id && (soInvoices.length === 0 ? (
+          <p className="rounded-lg border border-bad/30 bg-bad/5 px-3 py-2 text-sm text-bad">
+            No SAP invoice is recorded on this order yet. Record it via the order's “Invoices (SAP)” action first — non-invoiced quantity cannot go on a delivery challan.
+          </p>
+        ) : (
+          <Field label="Deliver Under Invoice" required>
+            <SelectBox value={h.invoice_id ?? ''} disabled={posted} onChange={e => {
+              const inv = soInvoices.find(i => i.id === e.target.value)
+              if (inv) applyInvoice(inv)
+            }}>
+              <option value="">Select the invoice this challan delivers…</option>
+              {soInvoices.map(inv => (
+                <option key={inv.id} value={inv.id}>
+                  {`${inv.invoice_no} — ${formatNumber(inv.qty)} pcs · ${formatNumber(invRemaining(inv))} still to deliver`}
+                </option>
+              ))}
+            </SelectBox>
+            {h.invoice_id && (() => {
+              const inv = soInvoices.find(i => i.id === h.invoice_id)
+              if (!inv) return null
+              return <p className="mt-1 text-[11px] text-ink-faint">Invoice {inv.invoice_no}: {formatNumber(inv.qty)} pcs invoiced · {formatNumber(inv.delivered)} delivered · {formatNumber(invRemaining(inv))} remaining to plan</p>
+            })()}
+          </Field>
+        ))}
 
         <div>
           <p className="mb-1.5 text-xs font-medium text-ink-soft">Delivery by</p>
@@ -536,25 +668,25 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Challan Date" required><Input type="date" value={h.challan_date ?? ''} onChange={e => set({ challan_date: e.target.value })} /></Field>
           {mode === 'transport' ? (
             <>
-              <Field label="Vehicle">
-                <CreatableCombobox items={vehItems} value={h.vehicle_id ?? ''} onChange={(id: string) => set({ vehicle_id: id })} onCreate={createVehicle} noun="vehicle" placeholder="DM TA 00-0000" format={formatVehicleNo} />
+              <Field label="Vehicle (auto-fills vendor & driver)">
+                <CreatableCombobox items={vehItems} value={h.vehicle_id ?? ''} onChange={onVehicle} onCreate={createVehicle} noun="vehicle" placeholder="DM TA 00-0000" format={formatVehicleNo} />
+              </Field>
+              <Field label="Transport Vendor">
+                <CreatableCombobox items={tVendorItems} value={h.transporter_id ?? ''}
+                  onChange={(id: string) => { const v = tVendors.find((x: any) => x.id === id); set({ transporter_id: id, transport_vendor: v?.name || '' }) }}
+                  onCreate={createVendor} noun="transport vendor" placeholder="Search or add a transporter" />
               </Field>
               <Field label="Driver">
-                <Combobox items={driverItems} value={h.driver_id ?? ''}
+                <CreatableCombobox items={driverItems} value={h.driver_id ?? ''}
                   onChange={(id: string) => { const d = drivers.find((x: any) => x.id === id); set({ driver_id: id, driver_name: d?.name || h.driver_name, driver_phone: d?.phone || h.driver_phone }) }}
-                  placeholder="Pick a saved driver" />
+                  onCreate={createDriver} noun="driver" placeholder="Search or add a driver" />
               </Field>
-              <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_id: null, driver_name: e.target.value })} placeholder="Or type — ad-hoc / vendor driver" /></Field>
+              <Field label="Driver Name (free text)"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_id: null, driver_name: e.target.value })} placeholder="Or type — ad-hoc / vendor driver" /></Field>
               <Field label="Driver Phone"><Input value={h.driver_phone ?? ''} onChange={e => set({ driver_phone: e.target.value })} /></Field>
-              <Field label="Transport Vendor">
-                <Combobox items={tVendorItems} value={h.transporter_id ?? ''}
-                  onChange={(id: string) => { const v = transportVendors.find((x: any) => x.id === id); set({ transporter_id: id, transport_vendor: v?.name || '' }) }}
-                  placeholder="Search transporter by code or name" />
-              </Field>
               <Field label="Lock No"><Input value={h.lock_no ?? ''} onChange={e => set({ lock_no: e.target.value })} /></Field>
               <Field label="Transport Cost / Trip (BDT)">
                 <Input type="number" value={h.delivery_cost ?? ''} onChange={e => set({ delivery_cost: e.target.value })} placeholder="Vehicle fare for this trip" />
@@ -599,9 +731,14 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
           {more ? '− Hide' : '+ More'} details (receiver, dispatch time, addresses)
         </button>
         {more && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {!locked && <Field label="Order Ref"><Input value={h.po_no ?? ''} onChange={e => set({ po_no: e.target.value })} /></Field>}
-            <Field label="Dispatch Time"><Input value={h.dispatch_time ?? ''} onChange={e => set({ dispatch_time: e.target.value })} placeholder="Auto-set when challan is issued" /></Field>
+            <Field label="Dispatch Date & Time (automatic)">
+              {/* System-stamped at the moment the challan is issued — never typed. */}
+              <p className="fiori-input flex items-center border-surface-line bg-surface-sunken text-ink-soft">
+                {h.dispatch_time || 'Stamped automatically when the challan is issued'}
+              </p>
+            </Field>
             <Field label="Prepared By"><Input value={h.prepared_by ?? ''} onChange={e => set({ prepared_by: e.target.value })} /></Field>
             <Field label="Receiver Name"><Input value={h.receiver_name ?? ''} onChange={e => set({ receiver_name: e.target.value })} /></Field>
             <Field label="Receiver Phone"><Input value={h.receiver_phone ?? ''} onChange={e => set({ receiver_phone: e.target.value })} /></Field>
@@ -618,7 +755,24 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
             placeholder={DEFAULT_CHALLAN_NOTE} className="min-h-[56px]" />
         </Field>
 
-        <LineItems rows={lines} onChange={setLines} products={products} locations={locations} variant="out" stock={stockMap} />
+        {posted ? (
+          <div>
+            <h4 className="mb-2 text-sm font-medium text-ink-soft">Line items (dispatched — locked)</h4>
+            <div className="overflow-hidden rounded-lg border border-surface-line">
+              {lines.map((r: any, i: number) => {
+                const p = products.find((x: any) => x.id === r.product_id)
+                return (
+                  <div key={i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                    <span className="min-w-0 truncate text-ink">{p ? `${p.material_code} — ${p.name}` : r.product_id}</span>
+                    <span className="shrink-0 font-medium text-ink">{formatNumber(r.qty)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <LineItems rows={lines} onChange={setLines} products={products} locations={locations} variant="out" stock={stockMap} />
+        )}
 
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -667,7 +821,8 @@ function ChallanOverview({ challan, customerName, vehicles, products, transportV
           <Stat label={challan.delivery_method === 'courier' ? 'Courier' : 'Transport Vendor'} value={carrier} />
           {challan.delivery_method === 'courier' && <Stat label="CN / Tracking" value={challan.courier_tracking_no || '—'} />}
           <Stat label={challan.delivery_method === 'courier' ? 'Courier Bill' : 'Transport Cost'} value={challan.delivery_cost != null ? formatNumber(challan.delivery_cost) : '—'} />
-          <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge>{challan.posted_at && <Badge tone="positive">Stock out</Badge>}</div>} />
+          <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge></div>} />
+          <Stat label="Dispatched At" value={challan.dispatch_time || '—'} />
         </div>
 
         <DocumentFlow nodes={[

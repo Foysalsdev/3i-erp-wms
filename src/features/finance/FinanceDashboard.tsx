@@ -57,7 +57,7 @@ export function FinanceDashboard() {
     return {
       balance: allRecv - cashSpent + allAdj,
       monthSpent: sum(expenses.filter(e => monthOf(e.expense_date) === m), amt),
-      dues: totalDue(expenses as any[], payments as any[]),
+      dues: totalDue(expenses, payments),
       pendingCollection, readyForSubmission, submittedThisMonth
     }
   }, [receipts, expenses, adjustments, payments, submissions])

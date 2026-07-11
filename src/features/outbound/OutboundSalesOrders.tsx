@@ -70,8 +70,9 @@ function NextActionCell({ order, ownerName }: { order: SalesOrder; ownerName?: s
 // Row-expand preview (DataTable's `expand`): a quick look at what's in the
 // order — ordered/delivered/pending per line — without opening the full
 // overview modal. Lines are fetched lazily, only when a row is expanded.
-export function OrderLinesPreview({ so, products, onView }: { so: SalesOrder; products: ProductLite[]; onView: () => void }) {
-  const [items, setItems] = useState<any[] | null>(null)
+export type ProductMini = Pick<Tables<'products'>, 'id' | 'material_code' | 'name'>
+export function OrderLinesPreview({ so, products, onView }: { so: SalesOrder; products: ProductMini[]; onView: () => void }) {
+  const [items, setItems] = useState<SalesOrderItem[] | null>(null)
   useEffect(() => {
     let active = true
     supabase.from('sales_order_items').select('*').eq('so_id', so.id).then(({ data }) => { if (active) setItems(data ?? []) })

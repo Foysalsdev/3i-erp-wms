@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
@@ -10,7 +11,7 @@ import { formatNumber } from '@/lib/utils'
 import { normaliseSerial, describeSerialHistory, type SerialHistoryItem } from '@/lib/serials'
 import { SerialHistoryModal } from '@/components/shared/SerialHistoryModal'
 
-const num = (v: any): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
+const num = (v: number | string | null | undefined): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
 interface SLine {
   item_id: string; product_id: string; code: string; name: string; uom: string
@@ -28,7 +29,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
-  const [soRow, setSoRow] = useState<any>(null)
+  const [soRow, setSoRow] = useState<Pick<Tables<'sales_orders'>, 'id' | 'so_no' | 'customer_id' | 'warehouse_id' | 'status' | 'reference_no'> | null>(null)
   const [lines, setLines] = useState<SLine[]>([])
   const [loading, setLoading] = useState(true)
   const [activeIdx, setActiveIdx] = useState<number | null>(null)
@@ -42,18 +43,19 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
       const { data: order } = await supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,status,reference_no').eq('id', lockSoId).single()
       setSoRow(order)
       const { data: items } = await supabase.from('sales_order_items').select('id,product_id,qty').eq('so_id', lockSoId)
-      const pids = (items ?? []).map((i: any) => i.product_id).filter(Boolean)
+      const pids = (items ?? []).map(i => i.product_id).filter((x): x is string => !!x)
       const guard = pids.length ? pids : ['00000000-0000-0000-0000-000000000000']
       const [{ data: prods }, { data: existing }] = await Promise.all([
-        (supabase as any).from('products').select('id,material_code,name,uom,china_code,barcode').in('id', guard),
+        supabase.from('products').select('id,material_code,name,uom,china_code,barcode').in('id', guard),
         supabase.from('serial_numbers').select('id,serial_no,product_id,so_item_id').eq('client_id', currentClientId!).eq('reference_no', order?.so_no ?? '__none__')
       ])
-      const pmap: Record<string, any> = {}; (prods ?? []).forEach((p: any) => { pmap[p.id] = p })
-      setLines((items ?? []).map((it: any) => {
-        const p = pmap[it.product_id] ?? {}
-        const serials = (existing ?? []).filter((s: any) => s.so_item_id === it.id || (!s.so_item_id && s.product_id === it.product_id))
-          .map((s: any) => ({ id: s.id, serial_no: s.serial_no }))
-        return { item_id: it.id, product_id: it.product_id, code: p.material_code ?? '?', name: p.name ?? 'Unknown', uom: p.uom ?? '', china: p.china_code ?? null, bar: p.barcode ?? null, ordered: num(it.qty), serials }
+      type ProdInfo = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'uom' | 'china_code' | 'barcode'>
+      const pmap: Record<string, ProdInfo> = {}; (prods ?? []).forEach(p => { pmap[p.id] = p })
+      setLines((items ?? []).map(it => {
+        const p: Partial<ProdInfo> = (it.product_id ? pmap[it.product_id] : undefined) ?? {}
+        const serials = (existing ?? []).filter(s => s.so_item_id === it.id || (!s.so_item_id && s.product_id === it.product_id))
+          .map(s => ({ id: s.id, serial_no: s.serial_no }))
+        return { item_id: it.id, product_id: it.product_id ?? '', code: p.material_code ?? '?', name: p.name ?? 'Unknown', uom: p.uom ?? '', china: p.china_code ?? null, bar: p.barcode ?? null, ordered: num(it.qty), serials }
       }))
     } finally { setLoading(false) }
   }
@@ -78,11 +80,11 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
     // coming back out) are allowed: they get re-assigned to this order and the
     // user sees a small history popup. Duplicates within THIS order are still
     // blocked by the grid before we ever get here.
-    let reused: any[] = []
+    let reused: Pick<Tables<'serial_numbers'>, 'id' | 'serial_no' | 'reference_no' | 'status'>[] = []
     if (fresh.length) {
       const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
         .eq('client_id', currentClientId!).in('serial_no', fresh.map(f => f.serial_no))
-      reused = (clash ?? []).filter((c: any) => c.reference_no !== soRow.so_no)
+      reused = (clash ?? []).filter(c => c.reference_no !== soRow!.so_no)
     }
     if (removedIds.length) {
       const { error } = await supabase.from('serial_numbers').delete().in('id', removedIds)
@@ -92,25 +94,25 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
     if (reused.length) {
       hist = await describeSerialHistory(currentClientId!, reused)   // capture before overwriting
       const { error } = await supabase.from('serial_numbers')
-        .update({ so_item_id: line.item_id, reference_no: soRow.so_no, warehouse_id: soRow.warehouse_id || null, status: 'reserved' } as any)
-        .in('id', reused.map((r: any) => r.id))
+        .update({ so_item_id: line.item_id, reference_no: soRow!.so_no, warehouse_id: soRow!.warehouse_id || null, status: 'reserved' })
+        .in('id', reused.map(r => r.id))
       if (error) throw error
     }
-    const reusedSet = new Set(reused.map((r: any) => r.serial_no))
+    const reusedSet = new Set(reused.map(r => r.serial_no))
     const inserts = fresh.filter(f => !reusedSet.has(f.serial_no))
     if (inserts.length) {
       const rows = inserts.map(f => ({
         client_id: currentClientId!, product_id: f.product_id, serial_no: f.serial_no,
-        so_item_id: f.so_item_id, reference_no: soRow.so_no, warehouse_id: soRow.warehouse_id || null,
+        so_item_id: f.so_item_id, reference_no: soRow!.so_no, warehouse_id: soRow!.warehouse_id || null,
         status: 'reserved' // serial_numbers_status_check only allows in_stock/reserved/delivered/returned/damaged/quarantine/scrapped
       }))
-      const { error } = await supabase.from('serial_numbers').insert(rows as any)
+      const { error } = await supabase.from('serial_numbers').insert(rows)
       if (error) throw error
     }
     if (hist.length) setHistory(hist)
     const newTotal = lines.reduce((s, l, i) => s + (i === idx ? entries.length : l.serials.length), 0)
-    if (newTotal > 0 && soRow.status === 'approved') {
-      await supabase.from('sales_orders').update({ status: 'picking' }).eq('id', soRow.id)
+    if (newTotal > 0 && soRow!.status === 'approved') {
+      await supabase.from('sales_orders').update({ status: 'picking' }).eq('id', soRow!.id)
     }
     notify('success', `${line.code}: ${entries.length}/${line.ordered} serial(s) saved`)
     onDone?.()

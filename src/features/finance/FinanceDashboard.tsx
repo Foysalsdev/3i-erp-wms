@@ -8,13 +8,13 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid
 } from 'recharts'
 import { StatCard } from './components/FinanceUI'
-import { cashOut, totalDue } from './financeCash'
+import { cashOut, totalDue, type Expense } from './financeCash'
 
 // Finance module home — the "accounts at a glance". All figures stay inside
 // the finance module (finance.view), never on the shared dashboard.
 const thisMonth = () => new Date().toISOString().slice(0, 7)
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
-const sum = (rows: any[], f: (r: any) => number) => rows.reduce((s, r) => s + f(r), 0)
+const sum = <T,>(rows: T[], f: (r: T) => number) => rows.reduce((s, r) => s + f(r), 0)
 const DEPT_COLORS = ['#16a34a', '#f2a900', '#ea7a0c', '#dc2626', '#8c8f94', '#64748b']
 const TREND_MONTHS = 6
 const lastNMonths = (n: number) => {
@@ -33,7 +33,7 @@ export function FinanceDashboard() {
   const { data: rawExpenses } = useCollection('finance_expenses', { order: 'expense_date' })
   // Drafts aren't real yet and soft-deleted rows are hidden everywhere — both
   // stay out of every money figure and count on this page.
-  const expenses = useMemo(() => (rawExpenses as any[]).filter(e => !e.is_draft && !e.deleted_at), [rawExpenses])
+  const expenses = useMemo(() => rawExpenses.filter(e => !e.is_draft && !e.deleted_at), [rawExpenses])
   const { data: adjustments } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
   const { data: payments } = useCollection('finance_vendor_payments', { order: 'payment_date' })
   const { data: budgets } = useCollection('finance_budgets', {})
@@ -41,23 +41,23 @@ export function FinanceDashboard() {
   // expense_type is required + explicitly chosen at entry time (unlike the
   // old category_id, which was only ever inherited from an item master and
   // silently ended up null) — it's the fix for the "Uncategorized" bug too.
-  const catName = (e: any) => e.expense_type || 'Uncategorized'
+  const catName = (e: Expense) => e.expense_type || 'Uncategorized'
 
   const m = thisMonth()
   const k = useMemo(() => {
-    const amt = (r: any) => Number(r.amount) || 0
-    const allRecv = sum(receipts as any[], amt)
-    const allAdj = sum(adjustments as any[], amt)
+    const amt = (r: { amount: number | null }) => Number(r.amount) || 0
+    const allRecv = sum(receipts, amt)
+    const allAdj = sum(adjustments, amt)
     // Cash-in-hand: credit purchases don't count until paid; vendor payments do.
-    const cashSpent = sum(expenses as any[], cashOut) + sum(payments as any[], amt)
-    const pendingCollection = (expenses as any[]).filter(e => e.voucher_status === 'pending_collection').length
-    const readyForSubmission = (expenses as any[]).filter(e => e.voucher_status === 'collected' && !e.submission_id).length
-    const submittedThisMonthIds = new Set((submissions as any[]).filter(s => monthOf(s.submission_date) === m).map(s => s.id))
-    const submittedThisMonth = (expenses as any[]).filter(e => e.submission_id && submittedThisMonthIds.has(e.submission_id)).length
+    const cashSpent = sum(expenses, cashOut) + sum(payments, amt)
+    const pendingCollection = expenses.filter(e => e.voucher_status === 'pending_collection').length
+    const readyForSubmission = expenses.filter(e => e.voucher_status === 'collected' && !e.submission_id).length
+    const submittedThisMonthIds = new Set(submissions.filter(s => monthOf(s.submission_date) === m).map(s => s.id))
+    const submittedThisMonth = expenses.filter(e => e.submission_id && submittedThisMonthIds.has(e.submission_id)).length
     return {
       balance: allRecv - cashSpent + allAdj,
-      monthSpent: sum((expenses as any[]).filter(e => monthOf(e.expense_date) === m), amt),
-      dues: totalDue(expenses as any[], payments as any[]),
+      monthSpent: sum(expenses.filter(e => monthOf(e.expense_date) === m), amt),
+      dues: totalDue(expenses, payments),
       pendingCollection, readyForSubmission, submittedThisMonth
     }
   }, [receipts, expenses, adjustments, payments, submissions])
@@ -65,10 +65,10 @@ export function FinanceDashboard() {
   // Budget vs spend for the current month (per department + overall).
   const [yy, mm] = m.split('-').map(Number)
   const budgetRows = useMemo(() => {
-    const monthBudgets = (budgets as any[]).filter(b => b.year === yy && b.month === mm)
+    const monthBudgets = budgets.filter(b => b.year === yy && b.month === mm)
     if (!monthBudgets.length) return []
     const spentByDept = new Map<string, number>()
-    ;(expenses as any[]).filter(e => monthOf(e.expense_date) === m).forEach(e => {
+    ;expenses.filter(e => monthOf(e.expense_date) === m).forEach(e => {
       const d = e.department || 'Others'; spentByDept.set(d, (spentByDept.get(d) ?? 0) + (Number(e.amount) || 0))
     })
     const totalSpent = [...spentByDept.values()].reduce((s, v) => s + v, 0)
@@ -81,32 +81,32 @@ export function FinanceDashboard() {
 
   const monthByHead = useMemo(() => {
     const map = new Map<string, number>()
-    ;(expenses as any[]).filter(e => monthOf(e.expense_date) === m).forEach(e => {
+    ;expenses.filter(e => monthOf(e.expense_date) === m).forEach(e => {
       const key = catName(e); map.set(key, (map.get(key) ?? 0) + (Number(e.amount) || 0))
     })
     return [...map.entries()].map(([head, amount]) => ({ head, amount })).sort((a, b) => b.amount - a.amount)
   }, [expenses])
 
-  const recent = useMemo(() => (expenses as any[]).slice(0, 8), [expenses])
+  const recent = useMemo(() => expenses.slice(0, 8), [expenses])
 
   // Department-wise Expense Trend — same "stack the last N months" pattern as
   // the Cash Book's category trend chart, grouped by department instead.
   const trendMonths = useMemo(() => lastNMonths(TREND_MONTHS), [])
   const { depts, deptTrend } = useMemo(() => {
     const totals = new Map<string, number>()
-    for (const e of expenses as any[]) {
+    for (const e of expenses) {
       if (!trendMonths.includes(monthOf(e.expense_date))) continue
       const d = e.department || 'Others'
       totals.set(d, (totals.get(d) ?? 0) + (Number(e.amount) || 0))
     }
     const ranked = [...totals.keys()].sort((a, b) => (totals.get(b) ?? 0) - (totals.get(a) ?? 0)).slice(0, 6)
     const byMonth = trendMonths.map(ym => {
-      const row: Record<string, any> = { label: monthShortLabel(ym) }
+      const row: Record<string, string | number> = { label: monthShortLabel(ym) }
       for (const d of ranked) row[d] = 0
-      for (const e of expenses as any[]) {
+      for (const e of expenses) {
         if (monthOf(e.expense_date) !== ym) continue
         const d = e.department || 'Others'
-        if (ranked.includes(d)) row[d] = (row[d] ?? 0) + (Number(e.amount) || 0)
+        if (ranked.includes(d)) row[d] = (Number(row[d]) || 0) + (Number(e.amount) || 0)
       }
       return row
     })
@@ -174,7 +174,7 @@ export function FinanceDashboard() {
           </div>
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {recent.length === 0 ? <p className="p-3 text-sm text-ink-faint">No expenses yet</p> :
-              recent.map((e: any, i: number) => (
+              recent.map((e, i) => (
                 <div key={e.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{formatDate(e.expense_date)} · {catName(e)}{e.payee_name ? <span className="text-ink-faint"> · {e.payee_name}</span> : null}</span>
                   <span className="shrink-0 font-semibold text-ink">{formatNumber(e.amount, 2)}</span>

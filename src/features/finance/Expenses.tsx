@@ -4,7 +4,7 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
@@ -17,7 +17,10 @@ import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/fe
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { StatCard, SectionHeader } from './components/FinanceUI'
 import { ExpenseForm, EXPENSE_TYPES } from './ExpenseForm'
-import { VOUCHER_STATUS_LABEL, VOUCHER_STATUS_TONE, fetchExpenseLines } from './financeCash'
+import { VOUCHER_STATUS_LABEL, VOUCHER_STATUS_TONE, fetchExpenseLines, type Expense, type ExpenseLineItem, type ExpenseAddlLine } from './financeCash'
+
+// An expense row plus the Procurement line details loaded on demand.
+export type ExpenseView = Expense & { __items?: ExpenseLineItem[]; __addl?: ExpenseAddlLine[] }
 
 const today = () => new Date().toISOString().slice(0, 10)
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
@@ -35,12 +38,12 @@ export function Expenses() {
   const [q, setQ] = useState('')
   const [month, setMonth] = useState('')
   const [type, setType] = useState('')
-  const [modal, setModal] = useState<{ record: any; quick?: boolean } | null>(null)
+  const [modal, setModal] = useState<{ record: Partial<ExpenseView> | null; quick?: boolean } | null>(null)
   useAutoOpen(() => setModal({ record: null }))
-  const [viewing, setViewing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [viewing, setViewing] = useState<ExpenseView | null>(null)
+  const [deleting, setDeleting] = useState<Expense | null>(null)
 
-  const data = useMemo(() => (raw as any[]).filter(e => !e.deleted_at), [raw])
+  const data = useMemo(() => raw.filter(e => !e.deleted_at), [raw])
   const refreshMasters = () => refreshItems()
   const recentPayees = useMemo(() => {
     const seen = new Set<string>()
@@ -56,7 +59,7 @@ export function Expenses() {
   // Frequently used expense combos (type + description), ranked by recency-weighted
   // frequency across the last 200 entries — one click opens a prefilled entry.
   const frequentExpenses = useMemo(() => {
-    const counts = new Map<string, { expense_type: string; description: string; department?: string; payment_mode?: string; count: number }>()
+    const counts = new Map<string, { expense_type: string; description: string; department?: string | null; payment_mode?: string | null; count: number }>()
     for (const e of data.slice(0, 200)) {
       if (e.expense_type === 'Procurement') continue
       const key = `${e.expense_type}::${(e.description || '').trim().toLowerCase()}`
@@ -69,19 +72,19 @@ export function Expenses() {
 
   const fetchLines = fetchExpenseLines
 
-  const openView = async (r: any) => {
+  const openView = async (r: Expense) => {
     try { setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchLines(r.id)) } : r) }
     catch (e: any) { notify('error', e?.message ?? 'Could not load the expense') }
   }
-  const openEdit = async (r: any) => {
+  const openEdit = async (r: Expense) => {
     if (r.submission_id) { notify('error', 'This voucher is submitted to Head Office (locked). Unlock it from Voucher Register first.'); return }
     try {
       const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id) : {}
       setModal({ record: { ...r, ...extra } })
     } catch (e: any) { notify('error', e?.message ?? 'Could not load the expense') }
   }
-  const duplicate = async (r: any) => {
-    const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id).catch((e: any) => { notify('error', e?.message ?? 'Could not load the expense'); return null }) : {}
+  const duplicate = async (r: Expense) => {
+    const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id).catch((e: Error) => { notify('error', e?.message ?? 'Could not load the expense'); return null }) : {}
     if (extra === null) return
     setModal({
       record: {
@@ -90,16 +93,16 @@ export function Expenses() {
       }
     })
   }
-  const openFrequent = (f: any) => setModal({
+  const openFrequent = (f: { expense_type: string; description: string; department?: string | null; payment_mode?: string | null }) => setModal({
     record: { expense_type: f.expense_type, description: f.description, department: f.department, payment_mode: f.payment_mode || 'Cash', expense_date: today() }
   })
 
-  const printBill = async (r: any) => {
+  const printBill = async (r: Expense) => {
     try {
       const { __items, __addl } = r.expense_type === 'Procurement' ? await fetchLines(r.id) : { __items: [], __addl: [] }
       const lines = [
-        ...__items.map((it: any) => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
-        ...__addl.map((a: any) => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
+        ...__items.map(it => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
+        ...__addl.map(a => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
       ]
       const { downloadBillVoucherPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadBillVoucherPDF({
@@ -144,18 +147,18 @@ export function Expenses() {
   const exportTotal = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   const exportSubtitle = `Total spend ${formatNumber(exportTotal, 2)} BDT · ${rows.length} entries${month ? ` · ${month}` : ''}`
 
-  const columns = [
-    { key: 'doc_no', header: 'Expense ID', render: (r: any) => <span className="font-medium">{r.doc_no || (r.is_draft ? <Badge tone="neutral">Draft</Badge> : '—')}</span> },
-    { key: 'expense_date', header: 'Date', render: (r: any) => formatDate(r.expense_date), sortable: true },
-    { key: 'expense_type', header: 'Type', render: (r: any) => r.expense_type || '—' },
-    { key: 'vendor', header: 'Vendor/Payee', render: (r: any) => r.payee_name || '—' },
-    { key: 'department', header: 'Department', render: (r: any) => r.department || '—' },
-    { key: 'payment_mode', header: 'Payment', render: (r: any) => r.payment_mode || '—' },
-    { key: 'voucher_status', header: 'Voucher Status', render: (r: any) => <Badge tone={VOUCHER_STATUS_TONE[r.voucher_status] || 'neutral'}>{VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status}</Badge> },
-    { key: 'amount', header: 'Total (BDT)', accessor: (r: any) => formatNumber(r.amount, 2), className: 'text-right' },
+  const columns: Column<Expense>[] = [
+    { key: 'doc_no', header: 'Expense ID', render: r => <span className="font-medium">{r.doc_no || (r.is_draft ? <Badge tone="neutral">Draft</Badge> : '—')}</span> },
+    { key: 'expense_date', header: 'Date', render: r => formatDate(r.expense_date), sortable: true },
+    { key: 'expense_type', header: 'Type', render: r => r.expense_type || '—' },
+    { key: 'vendor', header: 'Vendor/Payee', render: r => r.payee_name || '—' },
+    { key: 'department', header: 'Department', render: r => r.department || '—' },
+    { key: 'payment_mode', header: 'Payment', render: r => r.payment_mode || '—' },
+    { key: 'voucher_status', header: 'Voucher Status', render: r => <Badge tone={VOUCHER_STATUS_TONE[r.voucher_status] || 'neutral'}>{VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status}</Badge> },
+    { key: 'amount', header: 'Total (BDT)', accessor: r => formatNumber(r.amount, 2), className: 'text-right' },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: r => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => openView(r) },
@@ -196,7 +199,7 @@ export function Expenses() {
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           onRowClick={canEdit ? openEdit : openView} emptyTitle="No expenses recorded yet" />
       </Card>
 
@@ -215,7 +218,7 @@ export function Expenses() {
         name={deleting ? `Expense · ${deleting.doc_no || formatDate(deleting.expense_date)}` : undefined}
         onConfirm={async () => {
           // Soft delete — data stays for reconciliation, just hidden everywhere.
-          const res = await supabase.from('finance_expenses').update({ deleted_at: new Date().toISOString() }).eq('id', deleting.id)
+          const res = await supabase.from('finance_expenses').update({ deleted_at: new Date().toISOString() }).eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }} />
@@ -223,9 +226,11 @@ export function Expenses() {
   )
 }
 
-export function ExpenseOverview({ p, canEdit, onEdit, onPrint, onClose }: any) {
-  const items: any[] = p.__items ?? []
-  const addl: any[] = p.__addl ?? []
+export function ExpenseOverview({ p, canEdit, onEdit, onPrint, onClose }: {
+  p: ExpenseView; canEdit: boolean; onEdit: () => void; onPrint: () => void; onClose: () => void
+}) {
+  const items: ExpenseLineItem[] = p.__items ?? []
+  const addl: ExpenseAddlLine[] = p.__addl ?? []
   const isProcurement = p.expense_type === 'Procurement'
   const subtotal = items.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0)
   const addlTotal = addl.reduce((s, a) => s + (Number(a.amount) || 0), 0)

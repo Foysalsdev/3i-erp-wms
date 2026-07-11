@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
@@ -22,13 +23,16 @@ interface Expected { serial_no: string; product_id: string; matched: boolean }
 // verified against what was picked — not re-typed or trusted blind. Matched
 // serials get tagged to this gate pass (status -> delivered); the scan
 // session's start/end become the gate pass's in/out time.
-export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: { challan: any; vehicles: any[]; onClose: () => void; onDone: () => void }) {
+export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: {
+  challan: Tables<'delivery_challans'>; vehicles: Pick<Tables<'vehicles'>, 'id' | 'vehicle_number'>[]
+  onClose: () => void; onDone: () => void
+}) {
   const { currentClientId } = useAuth()
   const notify = useUI(s => s.notify)
   const [loading, setLoading] = useState(true)
-  const [gatePass, setGatePass] = useState<any>(null)
+  const [gatePass, setGatePass] = useState<Tables<'gate_passes'> | null>(null)
   const [expected, setExpected] = useState<Expected[]>([])
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'china_code' | 'barcode'>[]>([])
   const [input, setInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [startedAt, setStartedAt] = useState<string | null>(null)
@@ -42,7 +46,7 @@ export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: { cha
         supabase.from('gate_passes').select('*').eq('challan_id', challan.id).maybeSingle(),
         challan.sales_order_id
           ? supabase.from('sales_orders').select('so_no').eq('id', challan.sales_order_id).single()
-          : Promise.resolve({ data: null as any })
+          : Promise.resolve({ data: null as { so_no: string } | null })
       ])
       setGatePass(gp ?? null)
       if (!so?.so_no) { setExpected([]); setLoading(false); return }
@@ -50,7 +54,7 @@ export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: { cha
       // partial shipment) are what's left to verify for this vehicle.
       const { data: serials } = await supabase.from('serial_numbers')
         .select('serial_no,product_id').eq('client_id', currentClientId).eq('reference_no', so.so_no).eq('status', 'reserved')
-      const list = (serials ?? []).map((s: any) => ({ serial_no: s.serial_no, product_id: s.product_id, matched: false }))
+      const list = (serials ?? []).map(s => ({ serial_no: s.serial_no, product_id: s.product_id ?? '', matched: false }))
       setExpected(list)
       const pids = [...new Set(list.map(s => s.product_id))]
       if (pids.length) {
@@ -110,14 +114,14 @@ export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: { cha
       let gp = gatePass
       if (!gp) { notify('error', 'No gate pass found for this challan yet — issue the challan first'); return }
       const { error: e1 } = await supabase.from('serial_numbers')
-        .update({ status: 'delivered', gate_pass_id: gp.id } as any)
+        .update({ status: 'delivered', gate_pass_id: gp.id })
         .eq('client_id', currentClientId!).in('serial_no', matchedSerials)
       if (e1) throw e1
       const { error: e2 } = await supabase.from('gate_passes').update({
         gate_in_time: gp.gate_in_time || startedAt || timeStamp(now()),
         gate_out_time: timeStamp(now()),
         loaded_serial_count: (Number(gp.loaded_serial_count) || 0) + matchedSerials.length
-      } as any).eq('id', gp.id)
+      }).eq('id', gp.id)
       if (e2) throw e2
       notify('success', `${matchedSerials.length} serial(s) loaded & tagged to ${gp.gate_pass_no}`)
       onDone()

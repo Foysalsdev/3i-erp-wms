@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
-import { SUBMITTED_TO } from './financeCash'
+import { SUBMITTED_TO, type Expense, type BalanceAdjustment } from './financeCash'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid
 } from 'recharts'
@@ -51,7 +51,7 @@ export function MonthlyAdjustment() {
   const { data: receipts, loading: l1 } = useCollection('finance_fund_receipts', { order: 'receipt_date' })
   const { data: rawExpenses, loading: l2 } = useCollection('finance_expenses', { order: 'expense_date' })
   // Drafts aren't real yet and soft-deleted rows are hidden everywhere.
-  const expenses = useMemo(() => (rawExpenses as any[]).filter(e => !e.is_draft && !e.deleted_at), [rawExpenses])
+  const expenses = useMemo(() => rawExpenses.filter(e => !e.is_draft && !e.deleted_at), [rawExpenses])
   const { data: adjustments, refresh: refreshAdj } = useCollection('finance_monthly_adjustments', { order: 'year' })
   const { data: balanceAdjustments, refresh: refreshBalanceAdj } = useCollection('finance_balance_adjustments', { order: 'adjustment_date' })
   const { data: payments } = useCollection('finance_vendor_payments', { order: 'payment_date' })
@@ -69,13 +69,13 @@ export function MonthlyAdjustment() {
   const [submitting, setSubmitting] = useState(false)
   const [addingAdjustment, setAddingAdjustment] = useState<'correction' | 'topup' | false>(false)
 
-  const catName = (e: any) => e.expense_type || 'Uncategorized'
+  const catName = (e: Expense) => e.expense_type || 'Uncategorized'
   const [year, month] = period.split('-').map(Number)
 
-  const monthReceipts = useMemo(() => (receipts as any[]).filter(r => inMonth(r.receipt_date, period)), [receipts, period])
-  const monthExpenses = useMemo(() => (expenses as any[]).filter(e => inMonth(e.expense_date, period)), [expenses, period])
-  const monthPayments = useMemo(() => (payments as any[]).filter(p => inMonth(p.payment_date, period)), [payments, period])
-  const monthBalanceAdjustments = useMemo(() => (balanceAdjustments as any[]).filter(a => inMonth(a.adjustment_date, period)), [balanceAdjustments, period])
+  const monthReceipts = useMemo(() => receipts.filter(r => inMonth(r.receipt_date, period)), [receipts, period])
+  const monthExpenses = useMemo(() => expenses.filter(e => inMonth(e.expense_date, period)), [expenses, period])
+  const monthPayments = useMemo(() => payments.filter(p => inMonth(p.payment_date, period)), [payments, period])
+  const monthBalanceAdjustments = useMemo(() => balanceAdjustments.filter(a => inMonth(a.adjustment_date, period)), [balanceAdjustments, period])
   const totalReceivedMonth = monthReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   // Accrual spend (all purchases) — feeds the category analysis + the submitted snapshot.
   const totalExpenseMonth = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
@@ -93,10 +93,10 @@ export function MonthlyAdjustment() {
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year
   const prevMonthEndDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${lastDayOfMonth(prevYear, prevMonth)}`
-  const openingBalance = (receipts as any[]).filter(r => r.receipt_date <= prevMonthEndDate).reduce((s, r) => s + (Number(r.amount) || 0), 0)
-    - (expenses as any[]).filter(e => e.expense_date <= prevMonthEndDate).reduce((s, e) => s + cashOut(e), 0)
-    - (payments as any[]).filter(p => p.payment_date <= prevMonthEndDate).reduce((s, p) => s + (Number(p.amount) || 0), 0)
-    + (balanceAdjustments as any[]).filter(a => a.adjustment_date <= prevMonthEndDate).reduce((s, a) => s + (Number(a.amount) || 0), 0)
+  const openingBalance = receipts.filter(r => r.receipt_date <= prevMonthEndDate).reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    - expenses.filter(e => e.expense_date <= prevMonthEndDate).reduce((s, e) => s + cashOut(e), 0)
+    - payments.filter(p => p.payment_date <= prevMonthEndDate).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+    + balanceAdjustments.filter(a => a.adjustment_date <= prevMonthEndDate).reduce((s, a) => s + (Number(a.amount) || 0), 0)
   const closingBalance = openingBalance + totalReceivedMonth - monthCashPaid + totalAdjustmentMonth
 
   const categoryTotals = useMemo(() => {
@@ -105,7 +105,7 @@ export function MonthlyAdjustment() {
     return Array.from(m.entries()).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount)
   }, [monthExpenses])
 
-  const existing = (adjustments as any[]).find(a => a.year === year && a.month === month)
+  const existing = adjustments.find(a => a.year === year && a.month === month)
   // Submitting only snapshots the figures at that moment — it doesn't lock
   // the underlying receipts/expenses, so a later edit can silently diverge
   // from what was already sent to Head Office. Surface that instead of
@@ -124,10 +124,10 @@ export function MonthlyAdjustment() {
     return trendMonths.map(ym => {
       const [y, m] = ym.split('-').map(Number)
       const cutoff = `${y}-${String(m).padStart(2, '0')}-${lastDayOfMonth(y, m)}`
-      const received = (receipts as any[]).filter(r => r.receipt_date <= cutoff).reduce((s, r) => s + (Number(r.amount) || 0), 0)
-      const spent = (expenses as any[]).filter(e => e.expense_date <= cutoff).reduce((s, e) => s + cashOut(e), 0)
-        + (payments as any[]).filter(p => p.payment_date <= cutoff).reduce((s, p) => s + (Number(p.amount) || 0), 0)
-      const adjusted = (balanceAdjustments as any[]).filter(a => a.adjustment_date <= cutoff).reduce((s, a) => s + (Number(a.amount) || 0), 0)
+      const received = receipts.filter(r => r.receipt_date <= cutoff).reduce((s, r) => s + (Number(r.amount) || 0), 0)
+      const spent = expenses.filter(e => e.expense_date <= cutoff).reduce((s, e) => s + cashOut(e), 0)
+        + payments.filter(p => p.payment_date <= cutoff).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+      const adjusted = balanceAdjustments.filter(a => a.adjustment_date <= cutoff).reduce((s, a) => s + (Number(a.amount) || 0), 0)
       return { label: monthShortLabel(ym), balance: received - spent + adjusted }
     })
   }, [trendMonths, receipts, expenses, payments, balanceAdjustments])
@@ -135,7 +135,7 @@ export function MonthlyAdjustment() {
   // Top categories by spend within the trend window; the rest fold into "Other".
   const { topCats, categoryTrend } = useMemo(() => {
     const totals = new Map<string, number>()
-    for (const e of expenses as any[]) {
+    for (const e of expenses) {
       if (!trendMonths.includes(monthKey(e.expense_date))) continue
       const k = catName(e)
       totals.set(k, (totals.get(k) ?? 0) + (Number(e.amount) || 0))
@@ -145,14 +145,14 @@ export function MonthlyAdjustment() {
     const hasOther = ranked.length > MAX_SERIES
 
     const byMonth = trendMonths.map(ym => {
-      const row: Record<string, any> = { label: monthShortLabel(ym) }
+      const row: Record<string, string | number> = { label: monthShortLabel(ym) }
       for (const cat of top) row[cat] = 0
       if (hasOther) row['Other'] = 0
-      for (const e of expenses as any[]) {
+      for (const e of expenses) {
         if (monthKey(e.expense_date) !== ym) continue
         const cat = catName(e)
         const key = top.includes(cat) ? cat : (hasOther ? 'Other' : cat)
-        row[key] = (row[key] ?? 0) + (Number(e.amount) || 0)
+        row[key] = (Number(row[key]) || 0) + (Number(e.amount) || 0)
       }
       return row
     })
@@ -166,10 +166,10 @@ export function MonthlyAdjustment() {
   // Shared by the on-screen Cash Ledger panel and the PDF export.
   const monthLedger = useMemo(() => {
     type Posting = { raw: string; particulars: string; ref?: string; delta: number }
-    const adjLabel = (a: any) => a.kind === 'topup' ? 'Top-up / Replenishment' : a.kind === 'opening' ? 'Opening Balance' : 'Balance adjustment'
+    const adjLabel = (a: BalanceAdjustment) => a.kind === 'topup' ? 'Top-up / Replenishment' : a.kind === 'opening' ? 'Opening Balance' : 'Balance adjustment'
     const postings: Posting[] = [
       ...monthReceipts.map(r => ({ raw: r.receipt_date as string, particulars: `Fund received from ${SUBMITTED_TO}`, delta: Number(r.amount) || 0 })),
-      ...monthBalanceAdjustments.map((a: any) => ({ raw: a.adjustment_date as string, particulars: `${adjLabel(a)}${a.remarks ? ` — ${a.remarks}` : ''}`, delta: Number(a.amount) || 0 })),
+      ...monthBalanceAdjustments.map(a => ({ raw: a.adjustment_date, particulars: `${adjLabel(a)}${a.remarks ? ` — ${a.remarks}` : ''}`, delta: Number(a.amount) || 0 })),
       // Credit purchases don't move cash — they land in Dues, not the cash book.
       ...monthExpenses.filter(e => !isCredit(e)).map(e => ({
         raw: e.expense_date as string,
@@ -177,7 +177,7 @@ export function MonthlyAdjustment() {
         ref: e.doc_no || e.bill_ref || undefined,
         delta: -(Number(e.amount) || 0)
       })),
-      ...monthPayments.map((p: any) => ({
+      ...monthPayments.map(p => ({
         raw: p.payment_date as string,
         particulars: `Paid to ${p.payee_name || 'vendor'}${p.remarks ? ` — ${p.remarks}` : ''}`,
         delta: -(Number(p.amount) || 0)
@@ -311,7 +311,7 @@ export function MonthlyAdjustment() {
           )}
           <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-line">
             {monthBalanceAdjustments.length === 0 && !addingAdjustment ? <p className="p-3 text-sm text-ink-faint">No adjustments this month</p> :
-              monthBalanceAdjustments.map((a: any, i: number) => (
+              monthBalanceAdjustments.map((a, i) => (
                 <div key={a.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="text-ink">{formatDate(a.adjustment_date)}{a.kind === 'topup' && <Badge tone="positive">Top-up</Badge>}{a.remarks ? <span className="text-ink-faint"> · {a.remarks}</span> : null}</span>
                   <span className={'font-semibold ' + (Number(a.amount) < 0 ? 'text-bad' : 'text-ink')}>{Number(a.amount) > 0 ? '+' : ''}{formatNumber(a.amount, 2)}</span>
@@ -422,7 +422,10 @@ export function MonthlyAdjustment() {
 // later one-off correction (a bank charge, a rounding fix) that isn't a
 // real fund receipt or expense. Top-up/Replenishment (HO refilling the cash
 // fund outside of a Requisition) uses the same table with kind='topup'.
-function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel, kind = 'correction' }: any) {
+function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel, kind = 'correction' }: {
+  clientId: string; notify: (kind: 'success' | 'error', msg: string) => void
+  onDone: () => void; onCancel: () => void; kind?: 'correction' | 'topup' | 'opening'
+}) {
   const isTopup = kind === 'topup'
   const [date, setDate] = useState(today())
   const [amount, setAmount] = useState('')

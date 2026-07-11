@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { CreatableCombobox } from '@/components/shared/CreatableCombobox'
+import type { Expense, FinanceItem, ExpenseCategory, ExpenseLineItem, ExpenseAddlLine } from './financeCash'
+import type { TablesInsert } from '@/types/database.types'
 import { cn, formatNumber } from '@/lib/utils'
 import { FinancePanel, SectionHeader } from './components/FinanceUI'
 
@@ -81,7 +83,7 @@ const AUTO_CALC: Record<string, { qty: string; rate: string }> = {
 
 const blankItem = () => ({ item_id: '', name: '', category_id: '', unit: '', qty: undefined as number | undefined, rate: undefined as number | undefined })
 const blankAddl = () => ({ expense_type: '', amount: undefined as number | undefined })
-const lineTotal = (r: any) => (Number(r.qty) || 0) * (Number(r.rate) || 0)
+const lineTotal = (r: { qty?: number; rate?: number }) => (Number(r.qty) || 0) * (Number(r.rate) || 0)
 const numOrU = (v: string) => v === '' ? undefined : Number(v)
 
 // Dynamic Expense entry covering all 10 Expense Types. Procurement keeps the
@@ -89,25 +91,32 @@ const numOrU = (v: string) => v === '' ? undefined : Number(v)
 // fields (see TYPE_FIELDS) plus the shared header (type, vendor/payee,
 // payment, document, amount). No vendor master required anywhere — Vendor /
 // Payee is a plain free-text field with a recent-names suggestion list only.
-export function ExpenseForm({ record, clientId, items, categories, recentPayees, quick, onMastersChanged, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? {
+type Details = Record<string, string | number | null | undefined>
+type ExpenseDraft = Partial<Expense> & { __items?: ExpenseLineItem[]; __addl?: ExpenseAddlLine[] }
+
+export function ExpenseForm({ record, clientId, items, categories, recentPayees, quick, onMastersChanged, notify, onClose, onDone }: {
+  record: ExpenseDraft | null; clientId: string; items: FinanceItem[]; categories: ExpenseCategory[]
+  recentPayees?: string[]; quick?: boolean; onMastersChanged?: () => void
+  notify: (kind: 'success' | 'error', msg: string) => void; onClose: () => void; onDone: () => void
+}) {
+  const [h, setH] = useState<ExpenseDraft>(record ?? {
     expense_type: quick ? 'Refreshment' : 'Procurement', expense_date: today(), payment_mode: 'Cash',
     department: 'Warehouse', doc_type: DEFAULT_DOC_TYPE(quick ? 'Refreshment' : 'Procurement'), details: {}
   })
-  const [rows, setRows] = useState<any[]>(record?.__items?.length ? record.__items : [blankItem()])
-  const [addl, setAddl] = useState<any[]>(record?.__addl ?? [])
+  const [rows, setRows] = useState<ExpenseLineItem[]>(record?.__items?.length ? record.__items : [blankItem()])
+  const [addl, setAddl] = useState<ExpenseAddlLine[]>(record?.__addl ?? [])
   const [docTypeTouched, setDocTypeTouched] = useState(!!record?.id)
   const [saving, setSaving] = useState(false)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
-  const setDetail = (key: string, value: any) => setH((x: any) => ({ ...x, details: { ...(x.details ?? {}), [key]: value } }))
+  const set = (patch: ExpenseDraft) => setH(x => ({ ...x, ...patch }))
+  const setDetail = (key: string, value: string | number | undefined) => setH(x => ({ ...x, details: { ...((x.details ?? {}) as Details), [key]: value ?? null } }))
 
-  const itemOptions = useMemo(() => (items as any[]).filter(i => i.is_active !== false)
+  const itemOptions = useMemo(() => items.filter(i => i.is_active !== false)
     .map(i => ({ id: i.id, label: i.name, sublabel: i.unit || undefined })), [items])
-  const catName = (id?: string) => (categories as any[]).find(c => c.id === id)?.name
+  const catName = (id?: string) => categories.find(c => c.id === id)?.name
 
-  const setRow = (i: number, patch: any) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, ...patch } : r))
+  const setRow = (i: number, patch: Partial<ExpenseLineItem>) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, ...patch } : r))
   const pickItem = (i: number, id: string) => {
-    const it = (items as any[]).find(x => x.id === id)
+    const it = items.find(x => x.id === id)
     if (!it) { setRow(i, { item_id: id }); return }
     setRow(i, { item_id: id, name: it.name, unit: it.unit || '', rate: it.last_price != null ? Number(it.last_price) : undefined, category_id: it.category_id || '' })
   }
@@ -117,16 +126,16 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
     onMastersChanged?.()
     return { id: data.id, label: data.name }
   }
-  const addFrequent = (it: any) => setRows(rs => {
+  const addFrequent = (it: FinanceItem) => setRows(rs => {
     const base = rs.filter(r => r.name || r.item_id)
     return [...base, { item_id: it.id, name: it.name, unit: it.unit || '', rate: it.last_price != null ? Number(it.last_price) : undefined, category_id: it.category_id || '', qty: undefined }]
   })
 
   const isProcurement = h.expense_type === 'Procurement'
   const isCredit = h.payment_mode === 'Credit'
-  const details = h.details ?? {}
-  const fields = TYPE_FIELDS[h.expense_type] ?? []
-  const autoCalc = AUTO_CALC[h.expense_type]
+  const details = (h.details ?? {}) as Details
+  const fields = TYPE_FIELDS[h.expense_type ?? ''] ?? []
+  const autoCalc = AUTO_CALC[h.expense_type ?? '']
   const autoAmount = autoCalc ? (Number(details[autoCalc.qty]) || 0) * (Number(details[autoCalc.rate]) || 0) : undefined
 
   const validRows = rows.filter(r => (r.name || r.item_id) && Number(r.qty) > 0)
@@ -140,9 +149,9 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
   const period = (h.expense_date || today()).slice(0, 7)
   const [by, bm] = period.split('-').map(Number)
   const dept = h.department || 'Warehouse'
-  const budgetRow = (budgets as any[]).find(b => b.year === by && b.month === bm && b.department === dept)
-    || (budgets as any[]).find(b => b.year === by && b.month === bm && b.department === 'All')
-  const monthSpentDept = budgetRow ? (allExpenses as any[]).filter(e =>
+  const budgetRow = budgets.find(b => b.year === by && b.month === bm && b.department === dept)
+    || budgets.find(b => b.year === by && b.month === bm && b.department === 'All')
+  const monthSpentDept = budgetRow ? allExpenses.filter(e =>
     (e.expense_date || '').slice(0, 7) === period && e.id !== record?.id && !e.deleted_at && !e.is_draft &&
     (budgetRow.department === 'All' || (e.department || 'Others') === dept)
   ).reduce((s, e) => s + (Number(e.amount) || 0), 0) : 0
@@ -152,10 +161,10 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
   // Soft duplicate-voucher-number warning — never blocks (a different vendor
   // can legitimately share the same memo number).
   const dupVoucher = h.doc_type === 'vendor_voucher' && h.vendor_bill_no?.trim() &&
-    (allExpenses as any[]).some(e => e.id !== record?.id && !e.deleted_at && !e.is_draft && e.vendor_bill_no?.trim() === h.vendor_bill_no.trim())
+    allExpenses.some(e => e.id !== record?.id && !e.deleted_at && !e.is_draft && e.vendor_bill_no?.trim() === h.vendor_bill_no!.trim())
 
   const onTypeChange = (t: string) => {
-    const patch: any = { expense_type: t, details: {} }
+    const patch: ExpenseDraft = { expense_type: t, details: {} }
     if (!docTypeTouched) patch.doc_type = DEFAULT_DOC_TYPE(t)
     set(patch)
   }
@@ -177,7 +186,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
         voucherNo = await nextFinanceDocNumber(clientId, 'IV')
         if (!voucherNo) throw new Error('Could not generate the Internal Voucher number')
       }
-      const header: any = {
+      const header: TablesInsert<'finance_expenses'> = {
         client_id: clientId, expense_date: h.expense_date || today(), expense_type: h.expense_type,
         payee_name: h.payee_name || null, payment_mode: h.payment_mode || null,
         due_date: isCredit ? (h.due_date || null) : null, department: h.department || null,
@@ -187,7 +196,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
         is_draft: asDraft,
         voucher_status: h.doc_type === 'no_document' ? 'collected' : (h.voucher_status || 'pending_collection')
       }
-      let expId = record?.id
+      let expId: string | undefined = record?.id
       if (record?.id) {
         const { error } = await supabase.from('finance_expenses').update(header).eq('id', record.id)
         if (error) throw error
@@ -200,6 +209,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
         if (error) throw error
         expId = data.id
       }
+      if (!expId) throw new Error('Expense id missing after save')
       // Finalizing a draft that never got an Expense ID assigns one now.
       if (willFinalize && record?.id && !record.doc_no) {
         const doc_no = await nextFinanceDocNumber(clientId, 'EXP')
@@ -242,7 +252,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
     }
   }
 
-  const frequent = (items as any[]).filter(i => i.is_active !== false).slice(0, 8)
+  const frequent = items.filter(i => i.is_active !== false).slice(0, 8)
 
   return (
     <Modal open onClose={onClose} title={record?.id ? `Expense — ${record.doc_no || 'Draft'}` : quick ? 'Quick Entry' : 'New Expense'} size="xl">

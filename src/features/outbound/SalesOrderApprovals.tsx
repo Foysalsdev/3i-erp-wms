@@ -4,7 +4,7 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -14,7 +14,12 @@ import { Field, Textarea } from '@/components/ui/Field'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { NotesPanel } from '@/features/masters/components/Panels'
-import { OrderLinesPreview } from './OutboundSalesOrders'
+import { OrderLinesPreview, type ProductMini } from './OutboundSalesOrders'
+import type { Tables } from '@/types/database.types'
+
+type SalesOrder = Tables<'sales_orders'>
+type CustomerMini = Pick<Tables<'customers'>, 'id' | 'customer_code' | 'name'>
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
 
 const paymentTone = (s: string) => s === 'paid' ? 'positive' : s === 'partial' ? 'info' : 'neutral'
 
@@ -31,11 +36,11 @@ export function SalesOrderApprovals() {
   const { currentClientId, session } = useAuth()
   const notify = useUI(s => s.notify)
   const [q, setQ] = useState('')
-  const [customers, setCustomers] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
+  const [customers, setCustomers] = useState<CustomerMini[]>([])
+  const [products, setProducts] = useState<ProductMini[]>([])
   const [checked, setChecked] = useState<Set<string>>(new Set())
-  const [reviewing, setReviewing] = useState<any>(null)
-  const [rejecting, setRejecting] = useState<any>(null)
+  const [reviewing, setReviewing] = useState<SalesOrder | null>(null)
+  const [rejecting, setRejecting] = useState<SalesOrder | null>(null)
 
   useEffect(() => {
     if (!currentClientId) return
@@ -43,16 +48,16 @@ export function SalesOrderApprovals() {
     supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
   }, [currentClientId])
 
-  const customerName = (id: string) => { const c = customers.find((x: any) => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
+  const customerName = (id: string | null) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
 
   const rows = useMemo(() => {
-    const pending = (data as any[]).filter(r => r.status === 'pending')
+    const pending = data.filter(r => r.status === 'pending')
     if (!q.trim()) return pending
     const t = q.toLowerCase()
     return pending.filter(r => String(r.so_no ?? '').toLowerCase().includes(t) || customerName(r.customer_id).toLowerCase().includes(t))
   }, [data, q, customers])
 
-  const approveOne = async (r: any) => {
+  const approveOne = async (r: SalesOrder) => {
     const { error } = await supabase.from('sales_orders')
       .update({ status: 'approved', approved_by: session?.user.id ?? null, approved_at: new Date().toISOString() })
       .eq('id', r.id)
@@ -67,9 +72,9 @@ export function SalesOrderApprovals() {
     ids.forEach(id => allIn ? n.delete(id) : n.add(id))
     return n
   })
-  const selectedRows = rows.filter((r: any) => checked.has(r.id))
+  const selectedRows = rows.filter(r => checked.has(r.id))
   const bulkApprove = async () => {
-    const ids = selectedRows.map((r: any) => r.id)
+    const ids = selectedRows.map(r => r.id)
     if (!ids.length) return
     const { error } = await supabase.from('sales_orders')
       .update({ status: 'approved', approved_by: session?.user.id ?? null, approved_at: new Date().toISOString() })
@@ -78,13 +83,13 @@ export function SalesOrderApprovals() {
     else { notify('success', `${ids.length} order(s) approved`); setChecked(new Set()); refresh() }
   }
 
-  const columns = [
-    { key: 'so_no', header: 'SO No', accessor: (r: any) => r.so_no, sortable: true, className: 'font-medium' },
-    { key: 'customer', header: 'Customer', accessor: (r: any) => customerName(r.customer_id), sortable: true },
-    { key: 'order_date', header: 'Date', accessor: (r: any) => r.order_date, render: (r: any) => formatDate(r.order_date), sortable: true },
-    { key: 'qty', header: 'Qty', accessor: (r: any) => r.total_qty, render: (r: any) => formatNumber(r.total_qty), className: 'text-right', sortable: true },
-    { key: 'amount', header: 'Amount', accessor: (r: any) => r.total_amount, render: (r: any) => formatNumber(r.total_amount), className: 'text-right', sortable: true },
-    { key: 'payment', header: 'Payment', render: (r: any) => (
+  const columns: Column<SalesOrder>[] = [
+    { key: 'so_no', header: 'SO No', accessor: r => r.so_no, sortable: true, className: 'font-medium' },
+    { key: 'customer', header: 'Customer', accessor: r => customerName(r.customer_id), sortable: true },
+    { key: 'order_date', header: 'Date', accessor: r => r.order_date, render: r => formatDate(r.order_date), sortable: true },
+    { key: 'qty', header: 'Qty', accessor: r => r.total_qty, render: r => formatNumber(r.total_qty), className: 'text-right', sortable: true },
+    { key: 'amount', header: 'Amount', accessor: r => r.total_amount, render: r => formatNumber(r.total_amount), className: 'text-right', sortable: true },
+    { key: 'payment', header: 'Payment', render: r => (
       <div className="flex items-center gap-1.5">
         <Badge tone={paymentTone(r.payment_status ?? 'unpaid')}>{r.payment_status ?? 'unpaid'}</Badge>
         {Number(r.deposited_amount) > 0 && <span className="text-xs text-ink-soft">{formatNumber(r.deposited_amount)}</span>}
@@ -92,8 +97,8 @@ export function SalesOrderApprovals() {
     ) },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
-        <div className="flex justify-end" onClick={(e: any) => e.stopPropagation()}>
+      render: r => (
+        <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'Review', onClick: () => setReviewing(r) },
             { icon: 'how_to_reg', label: 'Approve', onClick: () => approveOne(r) },
@@ -116,11 +121,11 @@ export function SalesOrderApprovals() {
       ]} />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           emptyTitle="Nothing waiting on approval" emptyIcon="task_alt"
           emptyHint="Orders sales submits stay here until approved or rejected — they never reach the warehouse before that."
           selection={{ selected: checked, onToggle: toggleOne, onToggleAll: toggleAll }}
-          expand={{ render: (r: any) => <OrderLinesPreview so={r} products={products} onView={() => setReviewing(r)} /> }} />
+          expand={{ render: (r: SalesOrder) => <OrderLinesPreview so={r} products={products} onView={() => setReviewing(r)} /> }} />
       </Card>
 
       {reviewing && (
@@ -140,12 +145,15 @@ export function SalesOrderApprovals() {
 
 // The "small cart" — order header + line items + the running note/comment
 // thread — everything an approver needs before deciding, in one place.
-function ReviewModal({ so, customerName, products, onApprove, onReject, onClose }: any) {
-  const [items, setItems] = useState<any[]>([])
+function ReviewModal({ so, customerName, products, onApprove, onReject, onClose }: {
+  so: SalesOrder; customerName: string; products: ProductMini[]
+  onApprove: () => void; onReject: () => void; onClose: () => void
+}) {
+  const [items, setItems] = useState<Tables<'sales_order_items'>[]>([])
   useEffect(() => { supabase.from('sales_order_items').select('*').eq('so_id', so.id).then(({ data }) => setItems(data ?? [])) }, [so.id])
-  const productLabel = (id: string) => { const p = products.find((x: any) => x.id === id); return p ? `${p.material_code} — ${p.name}` : id }
+  const productLabel = (id: string | null) => { const p = products.find(x => x.id === id); return p ? `${p.material_code} — ${p.name}` : id ?? '—' }
 
-  const Stat = ({ label, value }: any) => (
+  const Stat = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
   )
 
@@ -170,7 +178,7 @@ function ReviewModal({ so, customerName, products, onApprove, onReject, onClose 
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Order (cart)</p>
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
-              items.map((it: any, i: number) => (
+              items.map((it, i) => (
                 <div key={it.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{productLabel(it.product_id)}</span>
                   <span className="shrink-0 text-ink-soft">{formatNumber(it.qty)} × {formatNumber(it.unit_price)} = <b className="text-ink">{formatNumber(it.line_total)}</b></span>
@@ -196,7 +204,7 @@ function ReviewModal({ so, customerName, products, onApprove, onReject, onClose 
 
 // Rejection always records a reason — the reject action itself, not the
 // freeform Notes thread, is the one-time structured "why" for the decision.
-function RejectModal({ so, notify, onClose, onDone }: any) {
+function RejectModal({ so, notify, onClose, onDone }: { so: SalesOrder; notify: Notify; onClose: () => void; onDone: () => void }) {
   const { session } = useAuth()
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)

@@ -4,10 +4,10 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { useInboundData, STATUS_TONE } from '../hooks'
-import type { DocConfig } from '../docConfigs'
+import type { DocConfig, ExtraField } from '../docConfigs'
 import { ItemsEditor, type LineItem } from './ItemsEditor'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Field, Input, Textarea } from '@/components/ui/Field'
@@ -15,6 +15,16 @@ import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { formatDate } from '@/lib/utils'
+
+// The engine serves many document tables (grns, putaways, returns, ...)
+// through one config, so a row is a dynamic record: known workflow columns
+// typed, everything else reachable through the index signature.
+export type DocRecord = {
+  id: string; doc_no: string | null; status: string
+  warehouse_id?: string | null; created_at?: string
+} & Record<string, unknown>
+const cell = (r: DocRecord, k: string) => r[k] as string | number | null | undefined
+const str = (v: unknown) => (v == null ? '' : String(v))
 
 // `permModule` lets the same document engine power different sidebar modules
 // (inbound, outbound, reverse) while gating actions on that module's RBAC keys.
@@ -26,14 +36,14 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   const canEdit = can(`${permModule}.create`) || can(`${permModule}.edit`)
   const canPost = can(`${permModule}.post`)
 
-  const [docs, setDocs] = useState<any[]>([])
+  const [docs, setDocs] = useState<DocRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<'list' | 'editor'>('list')
   const [readOnly, setReadOnly] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [header, setHeader] = useState<any>({})
+  const [header, setHeader] = useState<Partial<DocRecord>>({})
   const [items, setItems] = useState<LineItem[]>([])
-  const [sources, setSources] = useState<any[]>([])
+  const [sources, setSources] = useState<{ id: string; doc_no: string | number | null | undefined }[]>([])
   const [saving, setSaving] = useState(false)
 
   const prodMap = useMemo(() => Object.fromEntries(products.map(p => [p.id, p.label])), [products])
@@ -44,13 +54,15 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   const partyMap = useMemo(() => Object.fromEntries(partyOpts.map(o => [o.id, o.sub ? `${o.label} — ${o.sub}` : o.label])), [partyOpts])
   const relList = (r?: string) => r === 'transport_vendors' ? transporters : r === 'vehicles' ? vehicles : r === 'drivers' ? drivers : r === 'warehouses' ? warehouses : r === 'customers' ? customers : []
   const relMap = (r?: string) => Object.fromEntries(relList(r).map(o => [o.id, o.sub ? `${o.label} — ${o.sub}` : o.label]))
-  const showExtra = (f: any, src: any) => !f.showWhen || src[f.showWhen.field] === f.showWhen.equals
+  const showExtra = (f: ExtraField, src: Partial<DocRecord>) => !f.showWhen || src[f.showWhen.field] === f.showWhen.equals
 
   const load = () => {
     if (!clientId) return
     setLoading(true)
+    // config-driven table names: the typed client can't take a 100-table union
+    // (TS2589), so the from() boundary stays dynamic while rows are DocRecord.
     supabase.from(config.table as any).select('*').eq('client_id', clientId).order('created_at', { ascending: false })
-      .then(({ data }) => { setDocs(data ?? []); setLoading(false) })
+      .then(({ data }) => { setDocs((data ?? []) as unknown as DocRecord[]); setLoading(false) })
   }
   useEffect(load, [clientId, config.table])
 
@@ -60,18 +72,18 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     const numberField = config.source.numberField ?? 'doc_no'
     supabase.from(config.source.table as any).select(`id,${numberField}`).eq('client_id', clientId).in('status', config.source.statuses)
       .order('created_at', { ascending: false })
-      .then(({ data }) => setSources((data ?? []).map((r: any) => ({ id: r.id, doc_no: r[numberField] }))))
+      .then(({ data }) => setSources(((data ?? []) as unknown as DocRecord[]).map(r => ({ id: r.id, doc_no: cell(r, numberField) }))))
   }, [clientId, config])
 
   const openNew = () => { setEditId(null); setReadOnly(false); setHeader({ status: 'draft' }); setItems([]); setMode('editor') }
 
-  const openDoc = async (doc: any, ro: boolean) => {
+  const openDoc = async (doc: DocRecord, ro: boolean) => {
     setEditId(doc.id); setReadOnly(ro || doc.status !== 'draft'); setHeader(doc)
     const { data } = await supabase.from(config.itemTable as any).select('*').eq(config.itemFK, doc.id)
-    setItems((data ?? []).map((r: any) => ({
-      product_id: r.product_id, qty: r[config.qtyField], unit_price: r.unit_price,
-      location_id: r.location_id, from_location_id: r.from_location_id, to_location_id: r.to_location_id,
-      stock_status: r.stock_status ?? 'good', reason: r.reason, direction: r.direction
+    setItems(((data ?? []) as unknown as DocRecord[]).map((r) => ({
+      product_id: r.product_id as string, qty: cell(r, config.qtyField) as number, unit_price: r.unit_price as number,
+      location_id: r.location_id as string | undefined, from_location_id: r.from_location_id as string | undefined, to_location_id: r.to_location_id as string | undefined,
+      stock_status: (r.stock_status as string) ?? 'good', reason: r.reason as string | undefined, direction: r.direction as 'in' | 'out' | undefined
     })))
     setMode('editor')
   }
@@ -79,18 +91,18 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   const loadFromSource = async (srcId: string) => {
     if (!config.source || !srcId) return
     const { data } = await supabase.from(config.source.itemTable as any).select('*').eq(config.source.itemFk ?? config.source.fk, srcId)
-    const { data: sh } = await supabase.from(config.source.table as any).select('*').eq('id', srcId).single()
-    setHeader((h: any) => ({ ...h, [config.source!.fk]: srcId,
-      warehouse_id: h.warehouse_id || (sh as any)?.warehouse_id || '',
-      ...(party && (sh as any)?.[partyField] ? { [partyField]: (sh as any)[partyField] } : {}) }))
-    setItems((data ?? []).map((r: any) => ({
-      product_id: r.product_id, qty: r.received_qty ?? r.qty, unit_price: r.unit_price ?? 0,
-      location_id: r.location_id, to_location_id: r.location_id, stock_status: r.stock_status ?? 'good'
+    const { data: sh } = await supabase.from(config.source.table as any).select('*').eq('id', srcId).single<DocRecord>()
+    setHeader(h => ({ ...h, [config.source!.fk]: srcId,
+      warehouse_id: h.warehouse_id || sh?.warehouse_id || '',
+      ...(party && sh?.[partyField] ? { [partyField]: sh[partyField] } : {}) }))
+    setItems(((data ?? []) as unknown as DocRecord[]).map(r => ({
+      product_id: r.product_id as string, qty: (r.received_qty ?? r.qty) as number, unit_price: (r.unit_price as number) ?? 0,
+      location_id: r.location_id as string | undefined, to_location_id: r.location_id as string | undefined, stock_status: (r.stock_status as string) ?? 'good'
     })))
   }
 
   const buildItemRow = (docId: string, li: LineItem) => {
-    const row: any = { client_id: clientId, [config.itemFK]: docId, product_id: li.product_id, [config.qtyField]: Number(li.qty || 0) }
+    const row: Record<string, unknown> = { client_id: clientId, [config.itemFK]: docId, product_id: li.product_id, [config.qtyField]: Number(li.qty || 0) }
     if (config.itemCols.price) row.unit_price = Number(li.unit_price || 0)
     if (config.itemCols.location) row.location_id = li.location_id || null
     if (config.itemCols.condition) row.stock_status = li.stock_status || 'good'
@@ -106,7 +118,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     if (!valid.length) { notify('error', 'Add at least one line item'); return }
     setSaving(true)
     let docId = editId
-    const hdr: any = {
+    const hdr: Record<string, unknown> = {
       client_id: clientId, warehouse_id: header.warehouse_id,
       [config.dateField]: header[config.dateField] || new Date().toISOString().slice(0, 10),
       remarks: header.remarks || null, status: 'draft'
@@ -119,9 +131,9 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     if (!docId) {
       hdr.doc_no = await nextDocNumber(clientId!, config.docType)
       if (!hdr.doc_no) { notify('error', `Could not generate the ${config.singular} number`); setSaving(false); return }
-      const { data, error } = await supabase.from(config.table as any).insert(hdr).select('id').single()
+      const { data, error } = await supabase.from(config.table as any).insert(hdr).select('id').single<{ id: string }>()
       if (error) { notify('error', error.message); setSaving(false); return }
-      docId = (data as any).id
+      docId = data.id
     } else {
       const { error } = await supabase.from(config.table as any).update(hdr).eq('id', docId)
       if (error) { notify('error', error.message); setSaving(false); return }
@@ -135,7 +147,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     setMode('list'); load()
   }
 
-  const post = async (doc: any) => {
+  const post = async (doc: DocRecord) => {
     if (config.postRpc) {
       // Public wrappers (see migration 18) expose the app.post_* routines to PostgREST.
       const { error } = await (supabase as any).rpc(config.postRpc, { [config.postParam!]: doc.id })
@@ -147,21 +159,21 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     notify('success', `${doc.doc_no} posted`); load()
   }
 
-  const printDoc = async (doc: any) => {
+  const printDoc = async (doc: DocRecord) => {
     try {
       const { data } = await supabase.from(config.itemTable as any).select('*').eq(config.itemFK, doc.id)
-      const lines = (data ?? []).map((r: any) => ({ name: prodMap[r.product_id] ?? r.product_id, qty: Number(r[config.qtyField]), price: Number(r.unit_price ?? 0) }))
+      const lines = ((data ?? []) as unknown as DocRecord[]).map(r => ({ name: prodMap[r.product_id as string] ?? String(r.product_id), qty: Number(cell(r, config.qtyField)), price: Number(r.unit_price ?? 0) }))
       const extraMeta = (config.extraFields ?? []).filter(f => doc[f.name] && showExtra(f, doc))
-        .map(f => ({ label: f.label, value: f.kind === 'relation' ? (relMap(f.relation)[doc[f.name]] ?? doc[f.name]) : String(doc[f.name]) }))
+        .map(f => ({ label: f.label, value: f.kind === 'relation' ? (relMap(f.relation)[str(doc[f.name])] ?? str(doc[f.name])) : str(doc[f.name]) }))
       const baseMeta = [
-        { label: 'Date', value: formatDate(doc[config.dateField]) },
+        { label: 'Date', value: formatDate(str(cell(doc, config.dateField))) },
         { label: 'Status', value: doc.status },
-        ...(party ? [{ label: partyLabel, value: partyMap[doc[partyField]] ?? '—' }] : []),
+        ...(party ? [{ label: partyLabel, value: partyMap[str(doc[partyField])] ?? '—' }] : []),
         { label: 'Warehouse', value: warehouses.find(w => w.id === doc.warehouse_id)?.label ?? '—' }
       ]
       if (config.pdfKind === 'gatepass') {
         const ref = config.source ? sources.find(s => s.id === doc[config.source!.fk])?.doc_no : undefined
-        const meta = [...baseMeta.filter(m => m.label !== 'Status'), ...extraMeta, ...(ref ? [{ label: 'Delivery Challan', value: ref }] : [])]
+        const meta = [...baseMeta.filter(m => m.label !== 'Status'), ...extraMeta, ...(ref ? [{ label: 'Delivery Challan', value: str(ref) }] : [])]
         const { downloadGatePassPDF } = await import('@/pdf/GatePassPDF')  // lazy: pdf chunk loads on demand
         await downloadGatePassPDF({ client: clientName, docNo: doc.doc_no ?? '', meta, lines })
       } else {
@@ -173,7 +185,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     }
   }
 
-  const del = async (doc: any) => {
+  const del = async (doc: DocRecord) => {
     const { error } = await supabase.from(config.table as any).delete().eq('id', doc.id)
     if (error) { notify('error', error.message); return }
     notify('success', 'Deleted'); load()
@@ -186,29 +198,29 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
         <Card className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-bold text-ink">{editId ? (readOnly ? 'View' : 'Edit') : 'New'} {config.title}{header.doc_no ? ` · ${header.doc_no}` : ''}</h2>
-            {readOnly && <Badge tone={STATUS_TONE[header.status]}>{header.status}</Badge>}
+            {readOnly && <Badge tone={STATUS_TONE[header.status ?? 'draft']}>{header.status}</Badge>}
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {party && (
-              <Field label={partyLabel}><Combobox value={header[partyField] ?? ''} disabled={readOnly} options={partyOpts.map(o => ({ id: o.id, label: o.label, sub: o.sub }))} placeholder={`Search ${partyLabel.toLowerCase()}…`} onChange={v => setHeader({ ...header, [partyField]: v })} /></Field>
+              <Field label={partyLabel}><Combobox value={str(header[partyField])} disabled={readOnly} options={partyOpts.map(o => ({ id: o.id, label: o.label, sub: o.sub }))} placeholder={`Search ${partyLabel.toLowerCase()}…`} onChange={v => setHeader({ ...header, [partyField]: v })} /></Field>
             )}
             <Field label="Warehouse" required><Combobox value={header.warehouse_id ?? ''} disabled={readOnly} options={warehouses.map(w => ({ id: w.id, label: w.label, sub: w.sub }))} placeholder="Search warehouse…" onChange={v => setHeader({ ...header, warehouse_id: v })} /></Field>
-            <Field label="Date"><Input type="date" disabled={readOnly} value={(header[config.dateField] ?? '').slice(0, 10)} onChange={e => setHeader({ ...header, [config.dateField]: e.target.value })} /></Field>
-            {config.hasExpected && <Field label="Expected Date"><Input type="date" disabled={readOnly} value={(header.expected_date ?? '').slice(0, 10)} onChange={e => setHeader({ ...header, expected_date: e.target.value })} /></Field>}
+            <Field label="Date"><Input type="date" disabled={readOnly} value={str(header[config.dateField]).slice(0, 10)} onChange={e => setHeader({ ...header, [config.dateField]: e.target.value })} /></Field>
+            {config.hasExpected && <Field label="Expected Date"><Input type="date" disabled={readOnly} value={str(header.expected_date).slice(0, 10)} onChange={e => setHeader({ ...header, expected_date: e.target.value })} /></Field>}
             {config.source && !readOnly && !editId && (
-              <Field label={config.source.label}><Combobox value={header[config.source.fk] ?? ''} options={sources.map(s => ({ id: s.id, label: s.doc_no }))} placeholder="Search…" onChange={v => loadFromSource(v)} /></Field>
+              <Field label={config.source.label}><Combobox value={str(header[config.source.fk])} options={sources.map(s => ({ id: s.id, label: str(s.doc_no) }))} placeholder="Search…" onChange={v => loadFromSource(v)} /></Field>
             )}
             {config.extraFields?.filter(f => showExtra(f, header)).map(f => (
               <Field key={f.name} label={f.label}>
                 {f.kind === 'text'
-                  ? <Input disabled={readOnly} value={header[f.name] ?? ''} onChange={e => setHeader({ ...header, [f.name]: e.target.value })} />
-                  : <Combobox value={header[f.name] ?? ''} disabled={readOnly}
+                  ? <Input disabled={readOnly} value={str(header[f.name])} onChange={e => setHeader({ ...header, [f.name]: e.target.value })} />
+                  : <Combobox value={str(header[f.name])} disabled={readOnly}
                       options={f.kind === 'relation' ? relList(f.relation).map(o => ({ id: o.id, label: o.label, sub: o.sub })) : (f.options ?? []).map(o => ({ id: o, label: o }))}
                       onChange={v => setHeader({ ...header, [f.name]: v })} />}
               </Field>
             ))}
           </div>
-          <Field label="Remarks"><Textarea disabled={readOnly} value={header.remarks ?? ''} onChange={e => setHeader({ ...header, remarks: e.target.value })} /></Field>
+          <Field label="Remarks"><Textarea disabled={readOnly} value={str(header.remarks)} onChange={e => setHeader({ ...header, remarks: e.target.value })} /></Field>
           <div>
             <p className="fiori-label">Line Items</p>
             <ItemsEditor items={items} setItems={setItems} products={products}
@@ -224,13 +236,13 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     )
   }
 
-  const columns = [
-    { key: 'doc_no', header: 'Document No', accessor: (r: any) => r.doc_no, sortable: true, className: 'font-medium' },
-    { key: 'date', header: 'Date', render: (r: any) => formatDate(r[config.dateField]), sortable: true, accessor: (r: any) => r[config.dateField] },
-    ...(party ? [{ key: 'party', header: partyLabel, render: (r: any) => partyMap[r[partyField]]?.split(' — ')[1] ?? '—' }] : []),
-    { key: 'wh', header: 'Warehouse', render: (r: any) => warehouses.find(w => w.id === r.warehouse_id)?.label?.split(' — ')[0] ?? '—' },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge> },
-    { key: '__actions', header: 'Action', className: 'w-px whitespace-nowrap text-right', render: (r: any) => (
+  const columns: Column<DocRecord>[] = [
+    { key: 'doc_no', header: 'Document No', accessor: r => r.doc_no, sortable: true, className: 'font-medium' },
+    { key: 'date', header: 'Date', render: r => formatDate(cell(r, config.dateField) as string), sortable: true, accessor: r => cell(r, config.dateField) as string },
+    ...(party ? [{ key: 'party', header: partyLabel, render: (r: DocRecord) => partyMap[r[partyField] as string]?.split(' — ')[1] ?? '—' }] : []),
+    { key: 'wh', header: 'Warehouse', render: r => warehouses.find(w => w.id === r.warehouse_id)?.label?.split(' — ')[0] ?? '—' },
+    { key: 'status', header: 'Status', render: r => <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge> },
+    { key: '__actions', header: 'Action', className: 'w-px whitespace-nowrap text-right', render: r => (
       <div className="flex justify-end" onClick={e => e.stopPropagation()}>
         <ActionMenu items={rowActions(r)} />
       </div>
@@ -238,7 +250,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   ]
 
   // Per-row actions, collapsed into the shared 3-dot (kebab) menu.
-  const rowActions = (r: any): MenuItem[] => [
+  const rowActions = (r: DocRecord): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => openDoc(r, true) },
     ...(canEdit && r.status === 'draft' ? [{ icon: 'edit', label: 'Edit', onClick: () => openDoc(r, false) }] : []),
     { icon: 'print', label: 'Print', onClick: () => printDoc(r) },
@@ -254,7 +266,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
         {canEdit && <Button icon="add" onClick={openNew}>New {config.singular}</Button>}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={columns} rows={docs} rowKey={(r: any) => r.id} onRowClick={r => openDoc(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />
+        <DataTable fill loading={loading} columns={columns} rows={docs} rowKey={r => r.id} onRowClick={r => openDoc(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />
       </Card>
     </div>
   )

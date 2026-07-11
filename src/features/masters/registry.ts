@@ -1,3 +1,4 @@
+import type { TableName } from '@/hooks/useCollection'
 import type { Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { createElement } from 'react'
@@ -28,7 +29,7 @@ export interface FieldDef {
 
 export interface MasterDef {
   key: string
-  table: string
+  table: TableName
   title: string
   singular: string
   icon: string

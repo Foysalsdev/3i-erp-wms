@@ -1,3 +1,4 @@
+import type { TableName } from '@/hooks/useCollection'
 import type { Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { createElement } from 'react'
@@ -47,7 +48,7 @@ export interface StatusDef { value: string; label: string; tone: 'positive' | 'n
 export interface OpDef {
   key: string            // route tab key
   module: string         // sidebar module key (inbound/outbound/transport/finance)
-  table: string
+  table: TableName
   docType: string        // doc_type passed to app.next_document_number
   numberField: string    // column holding the generated document number
   title: string

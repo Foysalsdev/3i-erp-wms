@@ -5,7 +5,7 @@ import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
@@ -37,10 +37,22 @@ import { downloadChallanPdfFor } from './challanPdf'
 
 const SO_STATUS = ['draft', 'pending', 'approved', 'rejected', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
+import type { Tables } from '@/types/database.types'
+import type { Challan } from './DeliveryChallan'
+import type { ReactNode } from 'react'
+
+type SalesOrder = Tables<'sales_orders'>
+type SalesOrderItem = Tables<'sales_order_items'>
+type SalesOrderView = SalesOrder & { __items?: SalesOrderItem[] }
+type CustomerLite = Pick<Tables<'customers'>, 'id' | 'customer_code' | 'name' | 'email' | 'billing_address' | 'shipping_address' | 'sap_customer_code'>
+type WarehouseLite = Pick<Tables<'warehouses'>, 'id' | 'code' | 'name'>
+type ProductLite = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'barcode' | 'category' | 'uom' | 'plant'>
+type UserLite = Pick<Tables<'profiles'>, 'id' | 'full_name'>
+
 const tone = (s: string) => ['delivered', 'closed'].includes(s) ? 'positive' : ['cancelled', 'rejected'].includes(s) ? 'negative' : s === 'draft' ? 'neutral' : ['dispatched', 'packed', 'picking'].includes(s) ? 'info' : 'critical'
 
 // Compact "what's next & who owns it" cell for the order list (WES #6).
-function NextActionCell({ order, ownerName }: { order: any; ownerName?: string | null }) {
+function NextActionCell({ order, ownerName }: { order: SalesOrder; ownerName?: string | null }) {
   const wf = workflowState(order)
   if (wf.cancelled) return <span className="text-xs text-ink-faint">—</span>
   const done = !wf.next
@@ -58,8 +70,9 @@ function NextActionCell({ order, ownerName }: { order: any; ownerName?: string |
 // Row-expand preview (DataTable's `expand`): a quick look at what's in the
 // order — ordered/delivered/pending per line — without opening the full
 // overview modal. Lines are fetched lazily, only when a row is expanded.
-export function OrderLinesPreview({ so, products, onView }: { so: any; products: any[]; onView: () => void }) {
-  const [items, setItems] = useState<any[] | null>(null)
+export type ProductMini = Pick<Tables<'products'>, 'id' | 'material_code' | 'name'>
+export function OrderLinesPreview({ so, products, onView }: { so: SalesOrder; products: ProductMini[]; onView: () => void }) {
+  const [items, setItems] = useState<SalesOrderItem[] | null>(null)
   useEffect(() => {
     let active = true
     supabase.from('sales_order_items').select('*').eq('so_id', so.id).then(({ data }) => { if (active) setItems(data ?? []) })
@@ -76,8 +89,8 @@ export function OrderLinesPreview({ so, products, onView }: { so: any; products:
   return (
     <div className="space-y-2">
       <div className="overflow-hidden rounded-xl border border-surface-line bg-surface">
-        {items.map((it: any, i: number) => {
-          const p = products.find((x: any) => x.id === it.product_id)
+        {items.map((it, i) => {
+          const p = products.find(x => x.id === it.product_id)
           const pending = Math.max(0, Number(it.qty) - Number(it.delivered_qty || 0))
           return (
             <div key={it.id} className={cn('flex items-center justify-between gap-3 px-3.5 py-2 text-sm', i > 0 && 'border-t border-surface-line')}>
@@ -98,7 +111,7 @@ export function OrderLinesPreview({ so, products, onView }: { so: any; products:
 export function OutboundSalesOrders() {
   const { data, loading, refresh } = useCollection('sales_orders', { order: 'created_at' })
   const { currentClientId, can, isPlatformAdmin, clients, session } = useAuth()
-  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
   // Warehouse/dispatch actions are hidden from sales-only users (no inventory access).
   const dispatchAccess = isPlatformAdmin || can('inventory.view')
   const notify = useUI(s => s.notify)
@@ -114,37 +127,37 @@ export function OutboundSalesOrders() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
+  const [editing, setEditing] = useState<SalesOrderView | null>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
-  const [scanning, setScanning] = useState<any>(null)
-  const [invoicing, setInvoicing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
-  const [customers, setCustomers] = useState<any[]>([])
-  const [warehouses, setWarehouses] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
-  const [vehicles, setVehicles] = useState<any[]>([])
-  const [transportVendors, setTransportVendors] = useState<any[]>([])
-  const [couriers, setCouriers] = useState<any[]>([])
-  const [planning, setPlanning] = useState<any>(null)
-  const [users, setUsers] = useState<any[]>([])
-  const [overview, setOverview] = useState<any>(null)
+  const [scanning, setScanning] = useState<SalesOrder | null>(null)
+  const [invoicing, setInvoicing] = useState<SalesOrder | null>(null)
+  const [deleting, setDeleting] = useState<SalesOrder | null>(null)
+  const [customers, setCustomers] = useState<CustomerLite[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([])
+  const [products, setProducts] = useState<ProductLite[]>([])
+  const [vehicles, setVehicles] = useState<Pick<Tables<'vehicles'>, 'id' | 'vehicle_number' | 'vehicle_type'>[]>([])
+  const [transportVendors, setTransportVendors] = useState<Pick<Tables<'transport_vendors'>, 'id' | 'vendor_code' | 'name'>[]>([])
+  const [couriers, setCouriers] = useState<Pick<Tables<'couriers'>, 'id' | 'courier_code' | 'name' | 'rate_per_unit'>[]>([])
+  const [planning, setPlanning] = useState<SalesOrder | null>(null)
+  const [users, setUsers] = useState<UserLite[]>([])
+  const [overview, setOverview] = useState<SalesOrder | null>(null)
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name,email,billing_address,sap_customer_code').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
+    supabase.from('customers').select('id,customer_code,name,email,billing_address,shipping_address,sap_customer_code').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
     supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
-    ;(supabase as any).from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }: any) => setCouriers(data ?? []))
+    supabase.from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
     supabase.from('profiles').select('id,full_name').eq('status', 'active').then(({ data }) => setUsers(data ?? []))
   }, [currentClientId])
 
-  const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
+  const customerName = (id: string | null) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
   const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
 
   const rows = useMemo(() => {
-    let out = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
+    let out = statusFilter === 'all' ? data : data.filter(r => r.status === statusFilter)
     if (mineOnly) out = out.filter(r => r.assigned_to === session?.user.id)
     if (overdueOnly) out = out.filter(r => workflowState(r).overdue)
     if (customerFilter) out = out.filter(r => r.customer_id === customerFilter)
@@ -153,10 +166,10 @@ export function OutboundSalesOrders() {
     if (!q.trim()) return out
     const t = q.toLowerCase()
     const fields = ['so_no', 'reference_no', 'invoice_no', 'sap_so_no', 'outbound_delivery_no', 'transfer_order_no', 'billing_doc_no']
-    return out.filter(r => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+    return out.filter(r => fields.some(f => String(r[f as keyof SalesOrder] ?? '').toLowerCase().includes(t)))
   }, [data, q, statusFilter, mineOnly, overdueOnly, customerFilter, dateFrom, dateTo, session])
 
-  const closeRemaining = async (r: any) => {
+  const closeRemaining = async (r: SalesOrder) => {
     if (!window.confirm(`Close remaining (undelivered) qty for ${r.so_no}? The order will be marked closed.`)) return
     const { error } = await supabase.from('sales_orders').update({ status: 'closed' }).eq('id', r.id)
     if (error) notify('error', error.message)
@@ -168,14 +181,14 @@ export function OutboundSalesOrders() {
   // Approve/Reject actions, which live in the dedicated Pending Approval tab).
   // Scoped to the order still sitting exactly at 'approved' — once picking has
   // started, unwinding back to 'pending' is no longer safe/meaningful.
-  const undoApproval = async (r: any) => {
+  const undoApproval = async (r: SalesOrder) => {
     if (!window.confirm(`Undo the approval on ${r.so_no}? It will go back to Pending Approval.`)) return
     const { error } = await supabase.from('sales_orders')
       .update({ status: 'pending', approved_by: null, approved_at: null }).eq('id', r.id)
     if (error) notify('error', error.message)
     else { notify('success', `${r.so_no} approval undone`); refresh() }
   }
-  const undoRejection = async (r: any) => {
+  const undoRejection = async (r: SalesOrder) => {
     if (!window.confirm(`Undo the rejection on ${r.so_no}? It will go back to Pending Approval.`)) return
     const { error } = await supabase.from('sales_orders')
       .update({ status: 'pending', rejected_by: null, rejected_at: null, rejection_reason: null }).eq('id', r.id)
@@ -183,28 +196,28 @@ export function OutboundSalesOrders() {
     else { notify('success', `${r.so_no} rejection undone`); refresh() }
   }
 
-  const openEdit = async (r: any) => {
+  const openEdit = async (r: SalesOrder) => {
     const { data: items } = await supabase.from('sales_order_items').select('*').eq('so_id', r.id)
     setEditing({ ...r, __items: items ?? [] }); setModal(true)
   }
 
   // Build the printable line list (product name + qty + price) for a sales order.
-  const soLines = async (r: any) => {
+  const soLines = async (r: SalesOrder) => {
     const { data: items } = await supabase.from('sales_order_items').select('*').eq('so_id', r.id)
-    return (items ?? []).map((it: any) => ({
-      name: products.find(p => p.id === it.product_id)?.name ?? it.product_id,
+    return (items ?? []).map(it => ({
+      name: products.find(p => p.id === it.product_id)?.name ?? it.product_id ?? '—',
       qty: Number(it.qty), price: Number(it.unit_price ?? 0)
     }))
   }
 
-  const soMeta = (r: any) => [
+  const soMeta = (r: SalesOrder) => [
     { label: 'Date', value: formatDate(r.order_date) },
     { label: 'Customer', value: customerName(r.customer_id) },
     ...(r.reference_no ? [{ label: 'Customer PO', value: r.reference_no }] : []),
     { label: 'Status', value: r.status }
   ]
 
-  const printSO = async (r: any) => {
+  const printSO = async (r: SalesOrder) => {
     try {
       const lines = await soLines(r)
       const { downloadDocPDF } = await import('@/pdf/DocumentPDF')  // lazy: pdf chunk loads on demand
@@ -216,7 +229,7 @@ export function OutboundSalesOrders() {
 
   // "Mail" opens the user's email client pre-filled to the customer; the PDF is
   // downloaded alongside so it can be attached. (No mail server needed.)
-  const mailSO = async (r: any) => {
+  const mailSO = async (r: SalesOrder) => {
     await printSO(r)
     const cust = customers.find(c => c.id === r.customer_id)
     const to = cust?.email ?? ''
@@ -226,18 +239,18 @@ export function OutboundSalesOrders() {
     if (!to) notify('info', 'No email on file for this customer - add the recipient manually.')
   }
 
-  const exportPrework = async (r: any) => {
-    const prodById = (id: string) => products.find(p => p.id === id)
+  const exportPrework = async (r: SalesOrder) => {
+    const prodById = (id: string | null) => products.find(p => p.id === id)
     const [{ data: items }, { data: serials }] = await Promise.all([
       supabase.from('sales_order_items').select('*').eq('so_id', r.id),
       supabase.from('serial_numbers').select('serial_no,product_id').eq('client_id', currentClientId!).eq('reference_no', r.so_no)
     ])
     const cust = customers.find(c => c.id === r.customer_id)
-    const lines = (items ?? []).map((it: any, i: number) => ({
+    const lines = (items ?? []).map((it, i) => ({
       sl: i + 1, code: prodById(it.product_id)?.material_code ?? '', name: prodById(it.product_id)?.name ?? '',
       qty: Number(it.qty) || 0, basic: Number(it.basic_price) || 0, vat: Number(it.vat_rate) || 0, total: Number(it.line_total) || 0
     }))
-    const serialRows = (serials ?? []).map((s: any) => ({ model: prodById(s.product_id)?.material_code ?? '', serial: s.serial_no }))
+    const serialRows = (serials ?? []).map(s => ({ model: prodById(s.product_id)?.material_code ?? '', serial: s.serial_no }))
     const { downloadPrework } = await import('@/lib/preworkExport')  // lazy: keeps exceljs out of the main bundle
     await downloadPrework({
       soNo: r.so_no, poNo: r.reference_no ?? '', customerName: cust?.name ?? '', sapCustomerCode: cust?.sap_customer_code ?? '',
@@ -248,21 +261,21 @@ export function OutboundSalesOrders() {
     notify('info', 'Prework Excel downloaded')
   }
 
-  const columns = [
-    { key: 'so_no', header: 'SO No', accessor: (r: any) => r.so_no, sortable: true, className: 'font-medium',
-      render: (r: any) => (
+  const columns: Column<SalesOrder>[] = [
+    { key: 'so_no', header: 'SO No', accessor: r => r.so_no, sortable: true, className: 'font-medium',
+      render: r => (
         <button type="button" onClick={e => { e.stopPropagation(); setOverview(r) }}
           className="font-medium text-brand-700 underline-offset-2 hover:underline">{r.so_no}</button>
       ) },
-    { key: 'customer', header: 'Customer', accessor: (r: any) => customerName(r.customer_id), sortable: true },
-    { key: 'order_date', header: 'Date', accessor: (r: any) => r.order_date, render: (r: any) => formatDate(r.order_date), sortable: true },
-    { key: 'total_qty', header: 'Qty', accessor: (r: any) => r.total_qty, render: (r: any) => formatNumber(r.total_qty), className: 'text-right', sortable: true },
-    { key: 'total_amount', header: 'Amount', accessor: (r: any) => r.total_amount, render: (r: any) => formatNumber(r.total_amount), className: 'text-right', sortable: true },
-    { key: 'status', header: 'Status', accessor: (r: any) => r.status, render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
-    { key: 'next_action', header: 'Next Action', render: (r: any) => <NextActionCell order={r} ownerName={userName(r.assigned_to)} /> },
+    { key: 'customer', header: 'Customer', accessor: r => customerName(r.customer_id), sortable: true },
+    { key: 'order_date', header: 'Date', accessor: r => r.order_date, render: r => formatDate(r.order_date), sortable: true },
+    { key: 'total_qty', header: 'Qty', accessor: r => r.total_qty, render: r => formatNumber(r.total_qty), className: 'text-right', sortable: true },
+    { key: 'total_amount', header: 'Amount', accessor: r => r.total_amount, render: r => formatNumber(r.total_amount), className: 'text-right', sortable: true },
+    { key: 'status', header: 'Status', accessor: r => r.status, render: r => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
+    { key: 'next_action', header: 'Next Action', render: r => <NextActionCell order={r} ownerName={userName(r.assigned_to)} /> },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: r => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => setOverview(r) },
@@ -305,7 +318,7 @@ export function OutboundSalesOrders() {
           onClear={() => { setCustomerFilter(''); setDateFrom(''); setDateTo('') }}>
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-soft">Customer</label>
-            <Combobox items={customers.map((c: any) => ({ id: c.id, label: `${c.customer_code} — ${c.name}` }))}
+            <Combobox items={customers.map(c => ({ id: c.id, label: `${c.customer_code} — ${c.name}` }))}
               value={customerFilter} onChange={setCustomerFilter} placeholder="All customers" />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -330,9 +343,9 @@ export function OutboundSalesOrders() {
         }} />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           emptyTitle="No sales orders yet"
-          expand={{ render: (r: any) => <OrderLinesPreview so={r} products={products} onView={() => setOverview(r)} /> }} />
+          expand={{ render: (r: SalesOrder) => <OrderLinesPreview so={r} products={products} onView={() => setOverview(r)} /> }} />
       </Card>
 
       {modal && (
@@ -371,6 +384,7 @@ export function OutboundSalesOrders() {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `SO · ${deleting.so_no}` : undefined}
         onConfirm={async () => {
+          if (!deleting) return { error: null }
           // An order with delivery challans has real dispatch history — block it
           // rather than tear down the downstream documents.
           const { count } = await supabase.from('delivery_challans')
@@ -381,7 +395,7 @@ export function OutboundSalesOrders() {
           // Release any serials reserved against this order back into stock and
           // unlink them, so they survive and no longer block the line-item delete.
           const { data: items } = await supabase.from('sales_order_items').select('id').eq('so_id', deleting.id)
-          const itemIds = (items ?? []).map((i: any) => i.id)
+          const itemIds = (items ?? []).map(i => i.id)
           if (itemIds.length) {
             await supabase.from('serial_numbers')
               .update({ so_item_id: null, reference_no: null, status: 'in_stock' })
@@ -395,12 +409,23 @@ export function OutboundSalesOrders() {
   )
 }
 
-function SOForm({ record, customers, warehouses, products, users, clientId, notify, canApprove, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? { order_date: today(), status: 'pending' })
-  const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
+// deposited_amount may hold the raw input string mid-edit.
+type SODraft = Omit<Partial<SalesOrder>, 'deposited_amount'> & { deposited_amount?: number | string | null; __items?: SalesOrderItem[]; __readOnly?: boolean }
+
+function SOForm({ record, customers, warehouses, products, users, clientId, notify, canApprove, onClose, onDone }: {
+  record: SODraft | null; customers: CustomerLite[]; warehouses: WarehouseLite[]; products: ProductLite[]
+  users: UserLite[]; clientId: string; notify: Notify; canApprove: boolean; onClose: () => void; onDone: () => void
+}) {
+  const [h, setH] = useState<SODraft>(record ?? { order_date: today(), status: 'pending' })
+  const [lines, setLines] = useState<LineRow[]>((record?.__items ?? []).map(it => ({
+    product_id: it.product_id ?? '', qty: it.qty, unit_price: it.unit_price,
+    basic_price: it.basic_price ?? undefined, vat_rate: it.vat_rate ?? undefined,
+    remarks: it.remarks ?? undefined, delivered_qty: it.delivered_qty ?? undefined
+  })))
   const [saving, setSaving] = useState(false)
   const readOnly = !!record?.__readOnly
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const set = (patch: SODraft) => setH(x => ({ ...x, ...patch }))
   // 'approved'/'rejected' are decision outcomes, not manual choices — they're
   // only reachable through the Approve/Reject actions on the Pending Approval
   // tab (which always records who/when/why), so the dropdown hides them here
@@ -416,7 +441,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
       const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
       const { data } = await supabase.from('sales_orders').select('reference_no').eq('client_id', clientId).like('reference_no', `PO-${day}-%`)
       let max = 0
-      for (const row of (data ?? []) as any[]) { const m = /-(\d+)$/.exec(row.reference_no || ''); if (m) max = Math.max(max, parseInt(m[1], 10)) }
+      for (const row of data ?? []) { const m = /-(\d+)$/.exec(row.reference_no || ''); if (m) max = Math.max(max, parseInt(m[1], 10)) }
       set({ reference_no: `PO-${day}-${String(max + 1).padStart(3, '0')}` })
     } finally { setGenning(false) }
   }
@@ -456,25 +481,26 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
       }
       let soId = record?.id
       if (record) {
-        const { error } = await supabase.from('sales_orders').update(header as any).eq('id', record.id)
+        const { error } = await supabase.from('sales_orders').update(header).eq('id', record.id!)
         if (error) throw error
       } else {
         const so_no = await nextDocNumber(clientId, 'SO')
         if (!so_no) throw new Error('Could not generate SO number')
-        const { data, error } = await supabase.from('sales_orders').insert({ ...header, so_no } as any).select('id').single()
+        const { data, error } = await supabase.from('sales_orders').insert({ ...header, so_no }).select('id').single()
         if (error) throw error
         soId = data.id
       }
+      if (!soId) throw new Error('Order id missing after save')
       await supabase.from('sales_order_items').delete().eq('so_id', soId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
         client_id: clientId, so_id: soId, product_id: r.product_id,
         qty: Number(r.qty) || 0,
         basic_price: Number(r.basic_price) || 0, vat_rate: Number(r.vat_rate) || 0,
         unit_price: lineUnitPrice(r), line_total: lineTotal(r),
-        remarks: (r as any).remarks || null
+        remarks: r.remarks || null
       }))
       if (payloadLines.length) {
-        const { error } = await (supabase as any).from('sales_order_items').insert(payloadLines)
+        const { error } = await supabase.from('sales_order_items').insert(payloadLines)
         if (error) throw error
       }
       notify('success', `Order ${record ? 'updated' : 'created'}`)
@@ -486,7 +512,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
     }
   }
 
-  const selCust = customers.find((c: any) => c.id === h.customer_id)
+  const selCust = customers.find(c => c.id === h.customer_id)
 
   return (
     <Modal open onClose={onClose} title={`${readOnly ? 'View' : record ? 'Edit' : 'New'} Order`} size="lg">
@@ -494,19 +520,19 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
       <div className="space-y-4">
         {record && <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm"><span className="text-ink-faint">SO No: </span><span className="font-semibold">{record.so_no}</span></div>}
         {record && (() => {
-          const dt = (record.__items ?? []).reduce((a: number, l: any) => a + Number(l.delivered_qty || 0), 0)
-          const ot = (record.__items ?? []).reduce((a: number, l: any) => a + Number(l.qty || 0), 0)
+          const dt = (record.__items ?? []).reduce((a, l) => a + Number(l.delivered_qty || 0), 0)
+          const ot = (record.__items ?? []).reduce((a, l) => a + Number(l.qty || 0), 0)
           return ot > 0 ? <p className="text-xs text-ink-soft">Delivered <span className="font-semibold text-ink">{dt}</span> / {ot}{dt > 0 && dt < ot ? ' · partially fulfilled' : ''}</p> : null
         })()}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Customer (Dealer)">
-            <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
+            <Combobox items={customers.map(c => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
             {selCust?.sap_customer_code && <p className="mt-1 text-[11px] text-ink-faint">SAP customer code: <span className="font-mono text-ink-soft">{selCust.sap_customer_code}</span></p>}
           </Field>
           <Field label="Warehouse">
             <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
               <option value="">Select…</option>
-              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
+              {warehouses.map(w => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
             </SelectBox>
           </Field>
           <Field label="Order Ref">
@@ -524,10 +550,10 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
             <SelectBox value={h.status ?? 'pending'} onChange={e => set({ status: e.target.value })}>
               {statusOptions.map((s: string) => <option key={s} value={s}>{s}</option>)}
             </SelectBox>
-            {!['approved', 'rejected'].includes(h.status) && <p className="mt-1 text-[11px] text-ink-faint">Approve/Reject are separate actions on the Pending Approval tab, not a status choice here.</p>}
+            {!['approved', 'rejected'].includes(h.status ?? '') && <p className="mt-1 text-[11px] text-ink-faint">Approve/Reject are separate actions on the Pending Approval tab, not a status choice here.</p>}
           </Field>
           <Field label="Owner (responsible)">
-            <Combobox items={(users ?? []).map((u: any) => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />
+            <Combobox items={(users ?? []).map(u => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />
           </Field>
           <Field label="Mail Ref / Link" className="sm:col-span-2">
             <Input value={h.mail_ref ?? ''} onChange={e => set({ mail_ref: e.target.value })} placeholder="Mail subject or link (the mail thread holds the full record — no file upload needed)" />
@@ -566,14 +592,14 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
 
 // Single place to record the SAP outputs after invoicing — no re-typing into the
 // challan or reports. Marks the order 'invoiced'.
-function InvoiceModal({ order, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>({
+function InvoiceModal({ order, notify, onClose, onDone }: { order: SalesOrder; notify: Notify; onClose: () => void; onDone: () => void }) {
+  const [h, setH] = useState({
     sap_so_no: order.sap_so_no ?? '',
     outbound_delivery_no: order.outbound_delivery_no ?? '', transfer_order_no: order.transfer_order_no ?? '',
     billing_doc_no: order.billing_doc_no ?? order.invoice_no ?? ''
   })
   const [saving, setSaving] = useState(false)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const set = (patch: Partial<typeof h>) => setH(x => ({ ...x, ...patch }))
   const save = async () => {
     setSaving(true)
     try {
@@ -582,7 +608,7 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
       const { error } = await supabase.from('sales_orders').update({
         invoice_no: h.billing_doc_no || null, sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
         transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null, status: 'invoiced'
-      } as any).eq('id', order.id)
+      }).eq('id', order.id)
       if (error) throw error
       notify('success', `${order.so_no} marked invoiced`)
       onDone()
@@ -607,11 +633,18 @@ function InvoiceModal({ order, notify, onClose, onDone }: any) {
   )
 }
 
-function SOOverview({ so, customerName, products, customers, vehicles, ownerName, approvedByName, rejectedByName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: any) {
+type DeliveryWithItems = Challan & { items: Pick<Tables<'delivery_challan_items'>, 'challan_id' | 'product_id' | 'qty'>[] }
+
+function SOOverview({ so, customerName, products, customers, vehicles, ownerName, approvedByName, rejectedByName, canEdit, onEdit, onScanned, onDownloadSO, onClose }: {
+  so: SalesOrder; customerName: string; products: ProductLite[]; customers: CustomerLite[]
+  vehicles: Pick<Tables<'vehicles'>, 'id' | 'vehicle_number' | 'vehicle_type'>[]
+  ownerName?: string | null; approvedByName?: string | null; rejectedByName?: string | null
+  canEdit: boolean; onEdit: () => void; onScanned: () => void; onDownloadSO: () => void; onClose: () => void
+}) {
   const notify = useUI(s => s.notify)
   const [tab, setTab] = useState<'details' | 'scan' | 'notes'>('details')
-  const [items, setItems] = useState<any[]>([])
-  const [deliveries, setDeliveries] = useState<any[]>([])
+  const [items, setItems] = useState<SalesOrderItem[]>([])
+  const [deliveries, setDeliveries] = useState<DeliveryWithItems[]>([])
 
   useEffect(() => {
     if (!so?.id) return
@@ -623,26 +656,26 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
       const { data: chs } = await supabase.from('delivery_challans')
         .select('*')
         .eq('sales_order_id', so.id).order('challan_date', { ascending: true })
-      const ids = (chs ?? []).map((c: any) => c.id)
-      const byCh: Record<string, any[]> = {}
+      const ids = (chs ?? []).map(c => c.id)
+      const byCh: Record<string, DeliveryWithItems['items']> = {}
       if (ids.length) {
         const { data: cis } = await supabase.from('delivery_challan_items').select('challan_id,product_id,qty').in('challan_id', ids)
-        ;(cis ?? []).forEach((ci: any) => { (byCh[ci.challan_id] ??= []).push(ci) })
+        ;(cis ?? []).forEach(ci => { (byCh[ci.challan_id] ??= []).push(ci) })
       }
-      setDeliveries((chs ?? []).map((c: any) => ({ ...c, items: byCh[c.id] ?? [] })))
+      setDeliveries((chs ?? []).map(c => ({ ...c, items: byCh[c.id] ?? [] })))
     })()
   }, [so?.id])
 
-  const productCode = (id: string) => products.find((p: any) => p.id === id)?.material_code ?? '?'
-  const productName = (id: string) => products.find((p: any) => p.id === id)?.name ?? id
+  const productCode = (id: string | null) => products.find(p => p.id === id)?.material_code ?? '?'
+  const productName = (id: string | null) => products.find(p => p.id === id)?.name ?? id ?? '—'
 
-  const Stat = ({ label, value }: any) => (
+  const Stat = ({ label, value }: { label: string; value: ReactNode }) => (
     <div className="min-w-0">
       <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p>
       <div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div>
     </div>
   )
-  const Section = ({ title, children }: any) => (
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
     <div>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">{title}</p>
       {children}
@@ -652,7 +685,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
   return (
     <Modal open onClose={onClose} title={`Order — ${so.so_no}`} size="xl">
       <div className="space-y-5">
-        <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }, { key: 'notes', label: 'Notes' }]} active={tab} onChange={(k: any) => setTab(k)} />
+        <Tabs tabs={[{ key: 'details', label: 'Details' }, { key: 'scan', label: 'Scan Serials' }, { key: 'notes', label: 'Notes' }]} active={tab} onChange={k => setTab(k as 'details' | 'scan' | 'notes')} />
 
         {tab === 'details' && <>
         <div className="flex justify-end">
@@ -679,7 +712,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
 
         <DocumentFlow nodes={[
           { icon: 'shopping_cart', type: 'Sales Order', number: so.so_no, status: so.status, tone: tone(so.status), current: true },
-          ...deliveries.map((d: any) => ({ icon: 'local_shipping', type: 'Delivery Challan', number: d.challan_no, status: d.status, to: `/outbound/delivery-challan?q=${encodeURIComponent(d.challan_no)}` }))
+          ...deliveries.map(d => ({ icon: 'local_shipping', type: 'Delivery Challan', number: d.challan_no, status: d.status, to: `/outbound/delivery-challan?q=${encodeURIComponent(d.challan_no)}` }))
         ]} />
 
         <Section title="Workflow">
@@ -703,7 +736,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
         <Section title="Items">
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
-              items.map((it: any, i: number) => {
+              items.map((it, i) => {
                 const pending = Math.max(0, Number(it.qty) - Number(it.delivered_qty || 0))
                 return (
                   <div key={it.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
@@ -724,7 +757,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
               <div className="flex items-center gap-2 p-3.5 text-sm text-ink-faint">
                 <Icon name="local_shipping" className="text-[18px]" /> No deliveries yet — use “Plan Delivery”.
               </div>
-            ) : deliveries.map((d: any, i: number) => {
+            ) : deliveries.map((d, i) => {
               const courier = d.delivery_method === 'courier'
               const carrier = courier
                 ? `Courier · ${d.courier_name || '—'}${d.courier_tracking_no ? ` (${d.courier_tracking_no})` : ''}`
@@ -739,12 +772,12 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-ink-soft">
                       {formatDate(d.challan_date)} {d.posted_at ? <Badge tone="positive">Stock out</Badge> : <Badge tone={tone(d.status)}>{d.status}</Badge>}
-                      <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products }).catch((e: any) => notify('error', e?.message ?? 'Could not generate PDF'))}
+                      <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products }).catch((e: Error) => notify('error', e?.message ?? 'Could not generate PDF'))}
                         className="rounded-lg p-1 text-ink-faint hover:bg-surface-sunken hover:text-brand-600"><Icon name="download" className="text-[16px]" /></button>
                     </span>
                   </div>
                   {d.items.length > 0 && (
-                    <p className="mt-1 pl-7 text-xs text-ink-faint">{d.items.map((it: any) => `${productCode(it.product_id)}×${formatNumber(it.qty)}`).join('  ·  ')}</p>
+                    <p className="mt-1 pl-7 text-xs text-ink-faint">{d.items.map(it => `${productCode(it.product_id)}×${formatNumber(it.qty)}`).join('  ·  ')}</p>
                   )}
                 </div>
               )

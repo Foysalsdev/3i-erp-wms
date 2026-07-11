@@ -4,7 +4,7 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
@@ -14,8 +14,9 @@ import { SelectBox } from '@/components/ui/SelectBox'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
-import { VOUCHER_STATUS_LABEL, VOUCHER_STATUS_TONE, DOC_TYPE_LABEL, fetchExpenseLines } from './financeCash'
+import { VOUCHER_STATUS_LABEL, VOUCHER_STATUS_TONE, DOC_TYPE_LABEL, fetchExpenseLines, type Expense, type HoSubmission } from './financeCash'
 import { ExpenseForm, EXPENSE_TYPES, PAYMENT_METHODS } from './ExpenseForm'
+import type { ExpenseView } from './Expenses'
 import { ExpenseOverview } from './Expenses'
 
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
@@ -42,15 +43,15 @@ export function VoucherRegister() {
   const [submissionFilter, setSubmissionFilter] = useState('')
   const [minAmt, setMinAmt] = useState('')
   const [maxAmt, setMaxAmt] = useState('')
-  const [editModal, setEditModal] = useState<any>(null)
-  const [viewing, setViewing] = useState<any>(null)
-  const [markLost, setMarkLost] = useState<any>(null)
-  const [unlocking, setUnlocking] = useState<any>(null)
+  const [editModal, setEditModal] = useState<ExpenseView | null>(null)
+  const [viewing, setViewing] = useState<ExpenseView | null>(null)
+  const [markLost, setMarkLost] = useState<{ record: Expense; note: string } | null>(null)
+  const [unlocking, setUnlocking] = useState<{ record: Expense; note: string } | null>(null)
 
-  const data = useMemo(() => (rawExpenses as any[]).filter(e => !e.deleted_at && !e.is_draft), [rawExpenses])
-  const submissionById = useMemo(() => new Map((submissions as any[]).map(s => [s.id, s])), [submissions])
-  const departments = useMemo(() => [...new Set(data.map(e => e.department).filter(Boolean))].sort(), [data])
-  const submissionStatus = (r: any) => !r.submission_id ? 'not_submitted' : (submissionById.get(r.submission_id)?.status || 'submitted')
+  const data = useMemo(() => rawExpenses.filter(e => !e.deleted_at && !e.is_draft), [rawExpenses])
+  const submissionById = useMemo(() => new Map<string, HoSubmission>(submissions.map(s => [s.id, s])), [submissions])
+  const departments = useMemo(() => [...new Set(data.map(e => e.department).filter((d): d is string => !!d))].sort(), [data])
+  const submissionStatus = (r: Expense) => !r.submission_id ? 'not_submitted' : (submissionById.get(r.submission_id)?.status || 'submitted')
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -68,23 +69,23 @@ export function VoucherRegister() {
     })
   }, [data, q, month, type, department, payMethod, voucherStatus, submissionFilter, minAmt, maxAmt, submissionById])
 
-  const openView = async (r: any) => {
+  const openView = async (r: Expense) => {
     try { setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchExpenseLines(r.id)) } : r) }
     catch (e: any) { notify('error', e?.message ?? 'Could not load the voucher') }
   }
-  const openEdit = async (r: any) => {
+  const openEdit = async (r: Expense) => {
     if (r.submission_id) { notify('error', 'This voucher is submitted to Head Office (locked). Use Unlock first.'); return }
     try {
       const extra = r.expense_type === 'Procurement' ? await fetchExpenseLines(r.id) : {}
       setEditModal({ ...r, ...extra })
     } catch (e: any) { notify('error', e?.message ?? 'Could not load the voucher') }
   }
-  const printBill = async (r: any) => {
+  const printBill = async (r: Expense) => {
     try {
       const { __items, __addl } = r.expense_type === 'Procurement' ? await fetchExpenseLines(r.id) : { __items: [], __addl: [] }
       const lines = [
-        ...(__items ?? []).map((it: any) => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
-        ...(__addl ?? []).map((a: any) => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
+        ...(__items ?? []).map(it => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
+        ...(__addl ?? []).map(a => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
       ]
       const { downloadBillVoucherPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadBillVoucherPDF({
@@ -99,22 +100,24 @@ export function VoucherRegister() {
       notify('error', e?.message ?? 'Could not generate the PDF')
     }
   }
-  const markCollected = async (r: any) => {
+  const markCollected = async (r: Expense) => {
     const { error } = await supabase.from('finance_expenses').update({ voucher_status: 'collected' }).eq('id', r.id)
     if (error) { notify('error', error.message); return }
     notify('success', 'Marked Collected'); refresh()
   }
   const doMarkLost = async () => {
+    if (!markLost) return
     const { error } = await supabase.from('finance_expenses').update({ voucher_status: 'lost', description: [markLost.record.description, markLost.note ? `Lost: ${markLost.note}` : null].filter(Boolean).join(' · ') }).eq('id', markLost.record.id)
     if (error) { notify('error', error.message); return }
     notify('success', 'Marked Lost'); setMarkLost(null); refresh()
   }
   const doUnlock = async () => {
+    if (!unlocking) return
     const r = unlocking.record
     const { error } = await supabase.from('finance_expenses').update({ submission_id: null, voucher_status: 'collected' }).eq('id', r.id)
     if (error) { notify('error', error.message); return }
     await supabase.from('finance_ho_submission_vouchers').update({ returned_at: new Date().toISOString(), return_note: unlocking.note || null })
-      .eq('submission_id', r.submission_id).eq('expense_id', r.id)
+      .eq('submission_id', r.submission_id!).eq('expense_id', r.id)
     notify('success', 'Voucher unlocked — back to Ready for Submission'); setUnlocking(null); refresh()
   }
 
@@ -125,32 +128,32 @@ export function VoucherRegister() {
     { key: 'vstatus', header: 'Voucher Status', width: '12%' }, { key: 'sstatus', header: 'HO Submission', width: '12%' }
   ]
   const exportRows = useMemo(() => rows.map(r => ({
-    no: r.doc_no || '—', vno: r.vendor_bill_no || '—', doc: DOC_TYPE_LABEL[r.doc_type] || r.doc_type,
+    no: r.doc_no || '—', vno: r.vendor_bill_no || '—', doc: DOC_TYPE_LABEL[r.doc_type ?? ''] || r.doc_type,
     type: r.expense_type || '—', vendor: r.payee_name || '—', amount: (Number(r.amount) || 0).toFixed(2),
     vstatus: VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status || '—',
-    sstatus: submissionStatus(r) === 'not_submitted' ? 'Not Submitted' : (submissionById.get(r.submission_id)?.submission_no || '—')
+    sstatus: submissionStatus(r) === 'not_submitted' ? 'Not Submitted' : (submissionById.get(r.submission_id!)?.submission_no || '—')
   })), [rows, submissionById])
 
-  const columns = [
-    { key: 'doc_no', header: 'Expense ID', render: (r: any) => <span className="font-medium">{r.doc_no || '—'}</span> },
-    { key: 'vendor_bill_no', header: 'Voucher No', render: (r: any) => r.vendor_bill_no || '—' },
-    { key: 'doc_type', header: 'Doc Type', render: (r: any) => DOC_TYPE_LABEL[r.doc_type] || r.doc_type },
-    { key: 'expense_type', header: 'Type', render: (r: any) => r.expense_type || '—' },
-    { key: 'vendor', header: 'Vendor/Payee', render: (r: any) => r.payee_name || '—' },
-    { key: 'amount', header: 'Amount', accessor: (r: any) => formatNumber(r.amount, 2), className: 'text-right' },
-    { key: 'voucher_status', header: 'Voucher Status', render: (r: any) => <Badge tone={VOUCHER_STATUS_TONE[r.voucher_status] || 'neutral'}>{VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status}</Badge> },
+  const columns: Column<Expense>[] = [
+    { key: 'doc_no', header: 'Expense ID', render: r => <span className="font-medium">{r.doc_no || '—'}</span> },
+    { key: 'vendor_bill_no', header: 'Voucher No', render: r => r.vendor_bill_no || '—' },
+    { key: 'doc_type', header: 'Doc Type', render: r => DOC_TYPE_LABEL[r.doc_type ?? ''] || r.doc_type },
+    { key: 'expense_type', header: 'Type', render: r => r.expense_type || '—' },
+    { key: 'vendor', header: 'Vendor/Payee', render: r => r.payee_name || '—' },
+    { key: 'amount', header: 'Amount', accessor: r => formatNumber(r.amount, 2), className: 'text-right' },
+    { key: 'voucher_status', header: 'Voucher Status', render: r => <Badge tone={VOUCHER_STATUS_TONE[r.voucher_status] || 'neutral'}>{VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status}</Badge> },
     {
-      key: 'submission', header: 'HO Submission', render: (r: any) => {
+      key: 'submission', header: 'HO Submission', render: (r: Expense) => {
         const st = submissionStatus(r)
         if (st === 'not_submitted') return <span className="text-ink-faint">—</span>
-        const sub = submissionById.get(r.submission_id)
+        const sub = submissionById.get(r.submission_id!)
         return <Badge tone={st === 'verified' ? 'positive' : 'brand'}>{sub?.submission_no || 'Submitted'}</Badge>
       }
     },
-    { key: 'created_at', header: 'Created', render: (r: any) => formatDateTime(r.created_at) },
+    { key: 'created_at', header: 'Created', render: r => formatDateTime(r.created_at) },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: r => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => openView(r) },
@@ -188,7 +191,7 @@ export function VoucherRegister() {
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id} onRowClick={openView} emptyTitle="No vouchers yet" />
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id} onRowClick={openView} emptyTitle="No vouchers yet" />
       </Card>
 
       {editModal && (
@@ -201,7 +204,7 @@ export function VoucherRegister() {
         <Modal open onClose={() => setMarkLost(null)} title="Mark Voucher Lost">
           <div className="space-y-4">
             <p className="text-sm text-ink-soft">This is just a record note — there's no re-issue process, it simply flags this voucher as lost.</p>
-            <Field label="Note"><Textarea value={markLost.note} onChange={e => setMarkLost((x: any) => ({ ...x, note: e.target.value }))} placeholder="Optional" /></Field>
+            <Field label="Note"><Textarea value={markLost.note} onChange={e => setMarkLost(x => x && ({ ...x, note: e.target.value }))} placeholder="Optional" /></Field>
             <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
               <Button variant="ghost" onClick={() => setMarkLost(null)}>Cancel</Button>
               <Button onClick={doMarkLost}>Mark Lost</Button>
@@ -214,7 +217,7 @@ export function VoucherRegister() {
         <Modal open onClose={() => setUnlocking(null)} title="Unlock Voucher">
           <div className="space-y-4">
             <p className="text-sm text-ink-soft">For a voucher HO returned. This clears the lock and puts it back to Ready for Submission so it can go into the next batch.</p>
-            <Field label="Reason"><Input value={unlocking.note} onChange={e => setUnlocking((x: any) => ({ ...x, note: e.target.value }))} placeholder="e.g. Returned by HO — missing signature" /></Field>
+            <Field label="Reason"><Input value={unlocking.note} onChange={e => setUnlocking(x => x && ({ ...x, note: e.target.value }))} placeholder="e.g. Returned by HO — missing signature" /></Field>
             <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
               <Button variant="ghost" onClick={() => setUnlocking(null)}>Cancel</Button>
               <Button icon="lock_open" onClick={doUnlock}>Unlock</Button>

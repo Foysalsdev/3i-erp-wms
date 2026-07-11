@@ -25,20 +25,20 @@ export function VendorDues() {
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   const canCreate = can('finance.create')
-  const [paying, setPaying] = useState<any>(null)
-  const expenses = useMemo(() => (rawExpenses as any[]).filter(e => !e.deleted_at && !e.is_draft), [rawExpenses])
+  const [paying, setPaying] = useState<{ payee_name?: string | null; amount?: number } | null>(null)
+  const expenses = useMemo(() => rawExpenses.filter(e => !e.deleted_at && !e.is_draft), [rawExpenses])
 
   const rows = useMemo(() => {
     const credit = new Map<string, number>(), paid = new Map<string, number>(), display = new Map<string, string>()
     expenses.forEach(e => {
       const k = payeeKey(e.payee_name)
-      if (isCredit(e) && k) { credit.set(k, (credit.get(k) ?? 0) + (Number(e.amount) || 0)); if (!display.has(k)) display.set(k, e.payee_name.trim()) }
+      if (isCredit(e) && k) { credit.set(k, (credit.get(k) ?? 0) + (Number(e.amount) || 0)); if (!display.has(k)) display.set(k, e.payee_name!.trim()) }
     })
-    ;(payments as any[]).forEach(p => {
+    ;payments.forEach(p => {
       const k = payeeKey(p.payee_name)
-      if (k) { paid.set(k, (paid.get(k) ?? 0) + (Number(p.amount) || 0)); if (!display.has(k)) display.set(k, p.payee_name.trim()) }
+      if (k) { paid.set(k, (paid.get(k) ?? 0) + (Number(p.amount) || 0)); if (!display.has(k)) display.set(k, p.payee_name!.trim()) }
     })
-    const due = earliestDueDate(expenses, payments as any[])
+    const due = earliestDueDate(expenses, payments)
     const keys = new Set<string>([...credit.keys(), ...paid.keys()])
     return [...keys].map(k => ({
       key: k, name: display.get(k) || k, credit: credit.get(k) ?? 0, paid: paid.get(k) ?? 0,
@@ -49,7 +49,7 @@ export function VendorDues() {
   const totalOutstanding = rows.reduce((s, r) => s + (r.outstanding > 0.004 ? r.outstanding : 0), 0)
   const duePayees = rows.filter(r => r.outstanding > 0.004).length
   const overdueCount = rows.filter(r => r.outstanding > 0.004 && r.dueDate && r.dueDate < today()).length
-  const recent = (payments as any[]).slice(0, 12)
+  const recent = payments.slice(0, 12)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
@@ -57,7 +57,7 @@ export function VendorDues() {
         <StatCard icon="request_quote" tone={totalOutstanding > 0.004 ? 'bad' : 'brand'} label="Total Payable" value={`${formatNumber(totalOutstanding, 2)} BDT`} />
         <StatCard icon="store" label="Vendors/Payees with dues" value={formatNumber(duePayees)} />
         <StatCard icon="event_busy" tone={overdueCount > 0 ? 'bad' : 'brand'} label="Overdue" value={formatNumber(overdueCount)} />
-        <StatCard icon="payments" tone="ok" label="Paid (all time)" value={`${formatNumber((payments as any[]).reduce((s, p) => s + (Number(p.amount) || 0), 0), 2)} BDT`} />
+        <StatCard icon="payments" tone="ok" label="Paid (all time)" value={`${formatNumber(payments.reduce((s, p) => s + (Number(p.amount) || 0), 0), 2)} BDT`} />
       </div>
 
       <Card className="p-4">
@@ -108,8 +108,11 @@ export function VendorDues() {
   )
 }
 
-function PaymentForm({ draft, clientId, notify, onClose, onDone }: any) {
-  const [p, setP] = useState<any>({ payee_name: draft.payee_name || '', payment_date: today(), amount: draft.amount ?? '', method: 'Cash', remarks: '' })
+function PaymentForm({ draft, clientId, notify, onClose, onDone }: {
+  draft: { payee_name?: string | null; amount?: number }; clientId: string
+  notify: (kind: 'success' | 'error', msg: string) => void; onClose: () => void; onDone: () => void
+}) {
+  const [p, setP] = useState<{ payee_name: string; payment_date: string; amount: number | ''; method: string; remarks: string }>({ payee_name: draft.payee_name || '', payment_date: today(), amount: draft.amount ?? '', method: 'Cash', remarks: '' })
   const [saving, setSaving] = useState(false)
   const save = async () => {
     if (!p.payee_name?.trim()) { notify('error', 'Enter the vendor/payee name'); return }
@@ -129,7 +132,7 @@ function PaymentForm({ draft, clientId, notify, onClose, onDone }: any) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Vendor / Payee" required><Input value={p.payee_name} onChange={e => setP({ ...p, payee_name: e.target.value })} /></Field>
           <Field label="Date" required><Input type="date" value={p.payment_date} onChange={e => setP({ ...p, payment_date: e.target.value })} /></Field>
-          <Field label="Amount (BDT)" required><Input type="number" value={p.amount} onChange={e => setP({ ...p, amount: e.target.value })} placeholder="0.00" /></Field>
+          <Field label="Amount (BDT)" required><Input type="number" value={p.amount} onChange={e => setP({ ...p, amount: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="0.00" /></Field>
           <Field label="Method">
             <Select value={p.method} onChange={e => setP({ ...p, method: e.target.value })}>{PAY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}</Select>
           </Field>

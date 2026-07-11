@@ -12,6 +12,8 @@ import { Icon } from '@/components/ui/Icon'
 import { Field, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate } from '@/lib/utils'
 import type { CoverSheetGroup } from '@/pdf/FinancePDF'
+import type { Expense, HoSubmission as Submission } from './financeCash'
+import type { TablesInsert } from '@/types/database.types'
 import { SectionHeader, StatCard } from './components/FinanceUI'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -29,22 +31,22 @@ export function HOSubmission() {
   const canCreate = can('finance.create')
   const [creating, setCreating] = useState(false)
   const [reprinting, setReprinting] = useState<string | null>(null)
-  const [verifying, setVerifying] = useState<any>(null)
+  const [verifying, setVerifying] = useState<Submission | null>(null)
 
-  const eligible = useMemo(() => (rawExpenses as any[]).filter(e => !e.deleted_at && !e.is_draft && e.voucher_status === 'collected' && !e.submission_id), [rawExpenses])
+  const eligible = useMemo(() => rawExpenses.filter(e => !e.deleted_at && !e.is_draft && e.voucher_status === 'collected' && !e.submission_id), [rawExpenses])
 
-  const markVerified = async (s: any) => {
+  const markVerified = async (s: Submission) => {
     const { error } = await supabase.from('finance_ho_submissions').update({ status: 'verified', verified_at: new Date().toISOString() }).eq('id', s.id)
     if (error) { notify('error', error.message); return }
     notify('success', `${s.submission_no} marked Verified`); setVerifying(null); refreshSubs()
   }
 
-  const reprint = async (s: any) => {
+  const reprint = async (s: Submission) => {
     setReprinting(s.id)
     try {
       const { data: sv, error } = await supabase.from('finance_ho_submission_vouchers').select('*').eq('submission_id', s.id).order('sl_no')
       if (error) throw error
-      const expById = new Map((rawExpenses as any[]).map(e => [e.id, e]))
+      const expById = new Map(rawExpenses.map(e => [e.id, e]))
       const groups: CoverSheetGroup[] = []
       const byCat = new Map<string, CoverSheetGroup>()
       for (const row of sv ?? []) {
@@ -66,8 +68,8 @@ export function HOSubmission() {
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard icon="fact_check" tone="brand" label="Ready for Submission" value={formatNumber(eligible.length)} />
-        <StatCard icon="inventory" label="Submissions (all time)" value={formatNumber((submissions as any[]).length)} />
-        <StatCard icon="task_alt" tone="ok" label="Verified" value={formatNumber((submissions as any[]).filter(s => s.status === 'verified').length)} />
+        <StatCard icon="inventory" label="Submissions (all time)" value={formatNumber(submissions.length)} />
+        <StatCard icon="task_alt" tone="ok" label="Verified" value={formatNumber(submissions.filter(s => s.status === 'verified').length)} />
       </div>
 
       <div className="flex justify-end">
@@ -81,8 +83,8 @@ export function HOSubmission() {
             <div className="grid grid-cols-[1fr_120px_100px_130px_110px_140px] gap-2 border-b border-surface-line bg-surface-sunken px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
               <span>Submission No</span><span>Date</span><span className="text-right">Vouchers</span><span className="text-right">Total (BDT)</span><span>Status</span><span className="text-right">Action</span>
             </div>
-            {(submissions as any[]).length === 0 ? <p className="p-4 text-sm text-ink-faint">No submissions yet.</p> :
-              (submissions as any[]).map((s, i) => (
+            {submissions.length === 0 ? <p className="p-4 text-sm text-ink-faint">No submissions yet.</p> :
+              submissions.map((s, i) => (
                 <div key={s.id} className={'grid grid-cols-[1fr_120px_100px_130px_110px_140px] items-center gap-2 px-3 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="font-medium text-ink">{s.submission_no}</span>
                   <span className="text-ink-soft">{formatDate(s.submission_date)}</span>
@@ -119,19 +121,23 @@ export function HOSubmission() {
   )
 }
 
-function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: any) {
+function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: {
+  clientId: string; eligible: Expense[]; notify: (kind: 'success' | 'error', msg: string) => void
+  onClose: () => void; onDone: () => void
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [remarks, setRemarks] = useState('')
   const [saving, setSaving] = useState(false)
   const toggle = (id: string) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const toggleAll = () => setSelected(s => s.size === eligible.length ? new Set() : new Set(eligible.map((e: any) => e.id)))
+  const toggleAll = () => setSelected(s => s.size === eligible.length ? new Set() : new Set(eligible.map(e => e.id)))
 
-  const selectedRows = eligible.filter((e: any) => selected.has(e.id))
+  const selectedRows = eligible.filter(e => selected.has(e.id))
   const [order, setOrder] = useState<string[] | null>(null)
   const categoryOrder = useMemo(() => {
-    if (order) return order.filter(c => selectedRows.some((r: any) => r.expense_type === c))
+    if (order) return order.filter(c => selectedRows.some(r => r.expense_type === c))
     const seen: string[] = []
-    for (const r of selectedRows) if (!seen.includes(r.expense_type)) seen.push(r.expense_type)
+    // eligible rows are always finalized, so expense_type is set
+    for (const r of selectedRows) if (!seen.includes(r.expense_type!)) seen.push(r.expense_type!)
     return seen
   }, [order, selectedRows])
   const moveCategory = (cat: string, dir: -1 | 1) => {
@@ -141,7 +147,7 @@ function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: 
     const next = [...cur]; [next[i], next[j]] = [next[j], next[i]]
     setOrder(next)
   }
-  const totalAmount = selectedRows.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0)
+  const totalAmount = selectedRows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
 
   const create = async () => {
     if (!selectedRows.length) { notify('error', 'Select at least one voucher'); return }
@@ -155,12 +161,12 @@ function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: 
       }).select('*').single()
       if (error) throw error
 
-      const groups = categoryOrder.map(cat => ({ category: cat, rows: selectedRows.filter((r: any) => r.expense_type === cat).sort((a: any, b: any) => (a.expense_date < b.expense_date ? -1 : a.expense_date > b.expense_date ? 1 : 0)) }))
+      const groups = categoryOrder.map(cat => ({ category: cat, rows: selectedRows.filter(r => r.expense_type === cat).sort((a, b) => (a.expense_date < b.expense_date ? -1 : a.expense_date > b.expense_date ? 1 : 0)) }))
       let slNo = 0
-      const svPayload: any[] = []
+      const svPayload: TablesInsert<'finance_ho_submission_vouchers'>[] = []
       const pdfGroups = groups.map(g => ({
         category: g.category,
-        rows: g.rows.map((r: any) => {
+        rows: g.rows.map(r => {
           slNo++
           svPayload.push({ client_id: clientId, submission_id: sub.id, expense_id: r.id, sl_no: slNo, category_label: g.category })
           return { slNo, expenseId: r.doc_no || r.id.slice(0, 8).toUpperCase(), vendorPayee: r.payee_name || '', amount: Number(r.amount) || 0, date: formatDate(r.expense_date) }
@@ -171,7 +177,7 @@ function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: 
 
       const { error: lockErr } = await supabase.from('finance_expenses')
         .update({ submission_id: sub.id, voucher_status: 'submitted' })
-        .in('id', selectedRows.map((r: any) => r.id))
+        .in('id', selectedRows.map(r => r.id))
       if (lockErr) throw lockErr
 
       const { downloadCoverSheetPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
@@ -196,7 +202,7 @@ function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: 
           </div>
           <div className="max-h-64 overflow-y-auto">
             {eligible.length === 0 ? <p className="p-4 text-sm text-ink-faint">Nothing ready for submission.</p> :
-              eligible.map((r: any, i: number) => (
+              eligible.map((r, i) => (
                 <label key={r.id} className={'grid cursor-pointer grid-cols-[32px_1fr_120px_120px_110px] items-center gap-2 px-3 py-2 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} />
                   <span className="min-w-0 truncate text-ink">{r.payee_name || '—'}</span>

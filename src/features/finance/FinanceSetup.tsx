@@ -12,6 +12,9 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { SectionHeader } from './components/FinanceUI'
+import type { FinanceItem, ExpenseCategory } from './financeCash'
+import type { Tables } from '@/types/database.types'
+import type { ReactNode } from 'react'
 import { DEPARTMENTS } from './ExpenseForm'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -30,15 +33,15 @@ export function FinanceSetup() {
   const { data: items, refresh: refreshItems } = useCollection('finance_items', { order: 'name', ascending: true })
   const { data: openings, refresh: refreshOpenings } = useCollection('finance_balance_adjustments', { order: 'adjustment_date', ascending: true })
   const { data: budgets, refresh: refreshBudgets } = useCollection('finance_budgets', { order: 'year', ascending: false })
-  const [edit, setEdit] = useState<{ kind: string; rec: any } | null>(null)
-  const [del, setDel] = useState<{ table: string; rec: any; label: string } | null>(null)
+  const [edit, setEdit] = useState<{ kind: MasterKind; rec: Partial<FinanceItem & ExpenseCategory> } | null>(null)
+  const [del, setDel] = useState<{ table: MasterTable | 'finance_budgets'; rec: { id: string }; label: string } | null>(null)
   const [opening, setOpening] = useState(false)
-  const [budgetEdit, setBudgetEdit] = useState<any>(null)
+  const [budgetEdit, setBudgetEdit] = useState<Partial<Tables<'finance_budgets'>> | null>(null)
   const perms = { canCreate, canEdit, canDelete }
-  const catName = (id?: string) => (cats as any[]).find(c => c.id === id)?.name || '—'
+  const catName = (id?: string | null) => cats.find(c => c.id === id)?.name || '—'
 
-  const toggleActive = async (table: string, rec: any, refresh: () => void) => {
-    const { error } = await supabase.from(table as any).update({ is_active: !rec.is_active }).eq('id', rec.id)
+  const toggleActive = async (table: MasterTable, rec: { id: string; is_active: boolean | null }, refresh: () => void) => {
+    const { error } = await supabase.from(table).update({ is_active: !rec.is_active }).eq('id', rec.id)
     if (error) { notify('error', error.message); return }
     refresh()
   }
@@ -47,36 +50,36 @@ export function FinanceSetup() {
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       {/* Categories */}
       <MasterCard icon="sell" title="Expense Categories" hint="The heads your procurement falls under (Fuel, Stationery, Cleaning, Safety Items, Labour…)."
-        rows={cats as any[]} perms={perms} onNew={() => setEdit({ kind: 'category', rec: { name: '', code: '', is_active: true } })}
-        onEdit={(r: any) => setEdit({ kind: 'category', rec: r })} onToggle={(r: any) => toggleActive('finance_expense_categories', r, refreshCats)}
-        onDelete={(r: any) => setDel({ table: 'finance_expense_categories', rec: r, label: `Category · ${r.name}` })}
-        cols={[{ h: 'Code', w: '110px', render: (r: any) => <span className="font-mono text-xs text-ink-soft">{r.code || '—'}</span> }, { h: 'Name', w: '1fr', render: (r: any) => r.name }]} />
+        rows={cats} perms={perms} onNew={() => setEdit({ kind: 'category', rec: { name: '', code: '', is_active: true } })}
+        onEdit={r => setEdit({ kind: 'category', rec: r })} onToggle={r => toggleActive('finance_expense_categories', r, refreshCats)}
+        onDelete={r => setDel({ table: 'finance_expense_categories', rec: r, label: `Category · ${r.name}` })}
+        cols={[{ h: 'Code', w: '110px', render: r => <span className="font-mono text-xs text-ink-soft">{r.code || '—'}</span> }, { h: 'Name', w: '1fr', render: r => r.name }]} />
 
       {/* Items */}
       <MasterCard icon="inventory_2" title="Items" hint="Reusable items with remembered unit & last price, used by the Procurement expense type's item grid. New items can be added from the entry form too."
-        rows={items as any[]} perms={perms} onNew={() => setEdit({ kind: 'item', rec: { name: '', category_id: '', unit: '', is_active: true } })}
-        onEdit={(r: any) => setEdit({ kind: 'item', rec: r })} onToggle={(r: any) => toggleActive('finance_items', r, refreshItems)}
-        onDelete={(r: any) => setDel({ table: 'finance_items', rec: r, label: `Item · ${r.name}` })}
+        rows={items} perms={perms} onNew={() => setEdit({ kind: 'item', rec: { name: '', category_id: '', unit: '', is_active: true } })}
+        onEdit={r => setEdit({ kind: 'item', rec: r })} onToggle={r => toggleActive('finance_items', r, refreshItems)}
+        onDelete={r => setDel({ table: 'finance_items', rec: r, label: `Item · ${r.name}` })}
         cols={[
-          { h: 'Name', w: '1fr', render: (r: any) => r.name },
-          { h: 'Category', w: '150px', render: (r: any) => <span className="text-ink-soft">{catName(r.category_id)}</span> },
-          { h: 'Unit', w: '80px', render: (r: any) => <span className="text-ink-soft">{r.unit || '—'}</span> },
-          { h: 'Last Price', w: '100px', render: (r: any) => <span className="tabular-nums text-ink-soft">{r.last_price != null ? formatNumber(r.last_price, 2) : '—'}</span> }
+          { h: 'Name', w: '1fr', render: r => r.name },
+          { h: 'Category', w: '150px', render: r => <span className="text-ink-soft">{catName(r.category_id)}</span> },
+          { h: 'Unit', w: '80px', render: r => <span className="text-ink-soft">{r.unit || '—'}</span> },
+          { h: 'Last Price', w: '100px', render: r => <span className="tabular-nums text-ink-soft">{r.last_price != null ? formatNumber(r.last_price, 2) : '—'}</span> }
         ]} />
 
       {/* Monthly Budgets */}
       <Card className="p-4">
         <SectionHeader icon="savings" title="Monthly Budgets"
-          action={canCreate && <Button size="sm" variant="secondary" icon="add" onClick={() => { const d = new Date(); setBudgetEdit({ year: d.getFullYear(), month: d.getMonth() + 1, department: 'All', amount: '' }) }}>New Budget</Button>} />
+          action={canCreate && <Button size="sm" variant="secondary" icon="add" onClick={() => { const d = new Date(); setBudgetEdit({ year: d.getFullYear(), month: d.getMonth() + 1, department: 'All' }) }}>New Budget</Button>} />
         <p className="-mt-1 mb-3 text-xs text-ink-faint">Monthly spend budget per department (or All for the whole warehouse). Shown live on the procurement form and dashboard.</p>
-        {(budgets as any[]).length === 0 ? (
+        {budgets.length === 0 ? (
           <p className="rounded-xl border border-dashed border-surface-line px-3 py-3 text-sm text-ink-faint">No budgets set.</p>
         ) : (
           <div className="overflow-hidden rounded-xl border border-surface-line">
             <div className="grid grid-cols-[1fr_1fr_130px_80px] gap-2 border-b border-surface-line bg-surface-sunken px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
               <span>Month</span><span>Department</span><span className="text-right">Budget (BDT)</span><span className="text-right">Action</span>
             </div>
-            {(budgets as any[]).map((b, i) => (
+            {budgets.map((b, i) => (
               <div key={b.id} className={'grid grid-cols-[1fr_1fr_130px_80px] items-center gap-2 px-3 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                 <span className="text-ink">{monthLabel(b.year, b.month)}</span>
                 <span className="text-ink-soft">{b.department}</span>
@@ -96,11 +99,11 @@ export function FinanceSetup() {
         <SectionHeader icon="account_balance_wallet" title="Opening Balance"
           action={canCreate && <Button size="sm" variant="secondary" icon="add" onClick={() => setOpening(true)}>Set Opening Balance</Button>} />
         <p className="-mt-1 mb-3 text-xs text-ink-faint">Cash-in-hand carried into the module before any tracked receipt. Seeds the cash book's brought-down figure.</p>
-        {(openings as any[]).length === 0 ? (
+        {openings.length === 0 ? (
           <p className="rounded-xl border border-dashed border-surface-line px-3 py-3 text-sm text-ink-faint">No opening balance / adjustments recorded.</p>
         ) : (
           <div className="overflow-hidden rounded-xl border border-surface-line">
-            {(openings as any[]).map((o, i) => (
+            {openings.map((o, i) => (
               <div key={o.id} className={'grid grid-cols-[120px_1fr_130px] items-center gap-2 px-3 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                 <span className="text-ink-soft">{formatDate(o.adjustment_date)}</span>
                 <span className="text-ink">{o.remarks || '—'}</span>
@@ -111,14 +114,14 @@ export function FinanceSetup() {
         )}
       </Card>
 
-      {edit && <MasterForm kind={edit.kind} rec={edit.rec} clientId={currentClientId!} cats={cats as any[]} notify={notify}
+      {edit && <MasterForm kind={edit.kind} rec={edit.rec} clientId={currentClientId!} cats={cats} notify={notify}
         onClose={() => setEdit(null)} onDone={() => { setEdit(null); refreshCats(); refreshItems() }} />}
       {budgetEdit && <BudgetForm rec={budgetEdit} clientId={currentClientId!} notify={notify}
         onClose={() => setBudgetEdit(null)} onDone={() => { setBudgetEdit(null); refreshBudgets() }} />}
       {opening && <OpeningBalanceForm clientId={currentClientId!} notify={notify} onClose={() => setOpening(false)} onDone={() => { setOpening(false); refreshOpenings() }} />}
       <ConfirmDelete open={!!del} onClose={() => setDel(null)} name={del?.label}
         onConfirm={async () => {
-          const res = await supabase.from(del!.table as any).delete().eq('id', del!.rec.id)
+          const res = await supabase.from(del!.table).delete().eq('id', del!.rec.id)
           if (!res.error) { setDel(null); refreshCats(); refreshItems(); refreshBudgets() }
           return res
         }} />
@@ -126,8 +129,13 @@ export function FinanceSetup() {
   )
 }
 
-function MasterCard({ icon, title, hint, rows, perms, cols, onNew, onEdit, onToggle, onDelete }: any) {
-  const template = `${cols.map((c: any) => c.w).join(' ')} 90px 96px`
+interface MasterPerms { canCreate: boolean; canEdit: boolean; canDelete: boolean }
+function MasterCard<R extends { id: string; name: string | null; is_active: boolean | null }>({ icon, title, hint, rows, perms, cols, onNew, onEdit, onToggle, onDelete }: {
+  icon: string; title: string; hint: string; rows: R[]; perms: MasterPerms
+  cols: { h: string; w: string; render: (r: R) => ReactNode }[]
+  onNew: () => void; onEdit: (r: R) => void; onToggle: (r: R) => void; onDelete: (r: R) => void
+}) {
+  const template = `${cols.map(c => c.w).join(' ')} 90px 96px`
   return (
     <Card className="p-4">
       <SectionHeader icon={icon} title={title}
@@ -136,11 +144,11 @@ function MasterCard({ icon, title, hint, rows, perms, cols, onNew, onEdit, onTog
       <div className="overflow-x-auto">
         <div className="min-w-[560px] overflow-hidden rounded-xl border border-surface-line">
           <div className="grid gap-2 border-b border-surface-line bg-surface-sunken px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-soft" style={{ gridTemplateColumns: template }}>
-            {cols.map((c: any) => <span key={c.h}>{c.h}</span>)}<span>Status</span><span className="text-right">Action</span>
+            {cols.map(c => <span key={c.h}>{c.h}</span>)}<span>Status</span><span className="text-right">Action</span>
           </div>
-          {rows.length === 0 ? <p className="p-4 text-sm text-ink-faint">Nothing yet.</p> : rows.map((r: any, i: number) => (
+          {rows.length === 0 ? <p className="p-4 text-sm text-ink-faint">Nothing yet.</p> : rows.map((r, i) => (
             <div key={r.id} className={'grid items-center gap-2 px-3 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')} style={{ gridTemplateColumns: template }}>
-              {cols.map((c: any) => <span key={c.h} className={'min-w-0 truncate ' + (r.is_active === false ? 'text-ink-faint line-through' : 'text-ink')}>{c.render(r)}</span>)}
+              {cols.map(c => <span key={c.h} className={'min-w-0 truncate ' + (r.is_active === false ? 'text-ink-faint line-through' : 'text-ink')}>{c.render(r)}</span>)}
               <span><Badge tone={r.is_active !== false ? 'positive' : 'neutral'}>{r.is_active !== false ? 'Active' : 'Inactive'}</Badge></span>
               <span className="flex items-center justify-end gap-1">
                 {perms.canEdit && <button title={r.is_active !== false ? 'Deactivate' : 'Activate'} className="rounded-lg p-1.5 text-ink-faint hover:bg-surface-sunken hover:text-ink" onClick={() => onToggle(r)}><Icon name={r.is_active !== false ? 'toggle_on' : 'toggle_off'} className="text-[18px]" /></button>}
@@ -155,21 +163,30 @@ function MasterCard({ icon, title, hint, rows, perms, cols, onNew, onEdit, onTog
   )
 }
 
-const TABLES: Record<string, string> = { category: 'finance_expense_categories', item: 'finance_items' }
-const TITLES: Record<string, string> = { category: 'Category', item: 'Item' }
+type MasterKind = 'category' | 'item'
+type MasterTable = 'finance_expense_categories' | 'finance_items'
+const TABLES: Record<MasterKind, MasterTable> = { category: 'finance_expense_categories', item: 'finance_items' }
+const TITLES: Record<MasterKind, string> = { category: 'Category', item: 'Item' }
 
-function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: any) {
-  const [r, setR] = useState<any>(rec)
+type MasterRec = Partial<FinanceItem & ExpenseCategory>
+function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: {
+  kind: MasterKind; rec: MasterRec; clientId: string; cats: ExpenseCategory[]
+  notify: (kind: 'success' | 'error', msg: string) => void; onClose: () => void; onDone: () => void
+}) {
+  const [r, setR] = useState<MasterRec>(rec)
   const [saving, setSaving] = useState(false)
-  const set = (patch: any) => setR((x: any) => ({ ...x, ...patch }))
+  const set = (patch: MasterRec) => setR(x => ({ ...x, ...patch }))
   const save = async () => {
     if (!r.name?.trim()) { notify('error', 'Enter a name'); return }
     setSaving(true)
-    const base: any = { client_id: clientId, name: r.name.trim(), is_active: r.is_active ?? true }
-    if (kind === 'category') base.code = r.code?.trim() || null
-    if (kind === 'item') { base.category_id = r.category_id || null; base.unit = r.unit?.trim() || null }
-    const table = TABLES[kind]
-    const res = r.id ? await supabase.from(table as any).update(base).eq('id', r.id) : await supabase.from(table as any).insert(base)
+    const name = r.name!.trim(), is_active = r.is_active ?? true
+    const res = kind === 'category'
+      ? (r.id
+          ? await supabase.from('finance_expense_categories').update({ name, is_active, code: r.code?.trim() || null }).eq('id', r.id)
+          : await supabase.from('finance_expense_categories').insert({ client_id: clientId, name, is_active, code: r.code?.trim() || null }))
+      : (r.id
+          ? await supabase.from('finance_items').update({ name, is_active, category_id: r.category_id || null, unit: r.unit?.trim() || null }).eq('id', r.id)
+          : await supabase.from('finance_items').insert({ client_id: clientId, name, is_active, category_id: r.category_id || null, unit: r.unit?.trim() || null }))
     setSaving(false)
     if (res.error) { notify('error', res.error.message); return }
     notify('success', `${TITLES[kind]} ${r.id ? 'updated' : 'added'}`); onDone()
@@ -181,7 +198,7 @@ function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: any)
           {kind === 'category' && <Field label="Code"><Input value={r.code ?? ''} onChange={e => set({ code: e.target.value })} placeholder="e.g. FUEL" /></Field>}
           <Field label="Name" required className={kind === 'category' ? '' : 'sm:col-span-2'}><Input value={r.name ?? ''} onChange={e => set({ name: e.target.value })} /></Field>
           {kind === 'item' && <>
-            <Field label="Category"><Select value={r.category_id ?? ''} onChange={e => set({ category_id: e.target.value })}><option value="">—</option>{(cats as any[]).filter(c => c.is_active !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
+            <Field label="Category"><Select value={r.category_id ?? ''} onChange={e => set({ category_id: e.target.value })}><option value="">—</option>{cats.filter(c => c.is_active !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
             <Field label="Unit"><Input value={r.unit ?? ''} onChange={e => set({ unit: e.target.value })} placeholder="pcs, Ltr, kg…" /></Field>
           </>}
         </div>
@@ -197,8 +214,11 @@ function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: any)
   )
 }
 
-function BudgetForm({ rec, clientId, notify, onClose, onDone }: any) {
-  const [b, setB] = useState<any>({ month: `${rec.year}-${String(rec.month).padStart(2, '0')}`, department: rec.department || 'All', amount: rec.amount ?? '' })
+function BudgetForm({ rec, clientId, notify, onClose, onDone }: {
+  rec: Partial<Tables<'finance_budgets'>>; clientId: string
+  notify: (kind: 'success' | 'error', msg: string) => void; onClose: () => void; onDone: () => void
+}) {
+  const [b, setB] = useState<{ month: string; department: string; amount: number | string }>({ month: `${rec.year}-${String(rec.month).padStart(2, '0')}`, department: rec.department || 'All', amount: rec.amount ?? '' })
   const [saving, setSaving] = useState(false)
   const save = async () => {
     const [y, m] = (b.month || '').split('-').map(Number)
@@ -230,8 +250,10 @@ function BudgetForm({ rec, clientId, notify, onClose, onDone }: any) {
   )
 }
 
-function OpeningBalanceForm({ clientId, notify, onClose, onDone }: any) {
-  const [o, setO] = useState<any>({ adjustment_date: today(), amount: '', remarks: 'Opening Balance' })
+function OpeningBalanceForm({ clientId, notify, onClose, onDone }: {
+  clientId: string; notify: (kind: 'success' | 'error', msg: string) => void; onClose: () => void; onDone: () => void
+}) {
+  const [o, setO] = useState<{ adjustment_date: string; amount: number | string; remarks: string }>({ adjustment_date: today(), amount: '', remarks: 'Opening Balance' })
   const [saving, setSaving] = useState(false)
   const save = async () => {
     const amt = Number(o.amount)

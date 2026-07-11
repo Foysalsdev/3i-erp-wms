@@ -5,7 +5,7 @@ import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -14,7 +14,8 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate } from '@/lib/utils'
 import type { ReqLine } from '@/pdf/FinancePDF'
-import { SUBMITTED_TO } from './financeCash'
+import { SUBMITTED_TO, type FundReceipt } from './financeCash'
+import type { Tables } from '@/types/database.types'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { useRememberedField } from '@/hooks/useRememberedField'
@@ -23,6 +24,11 @@ import { LineGrid, type LineColumn } from './components/LineGrid'
 import { ExpenseForm } from './ExpenseForm'
 
 const today = () => new Date().toISOString().slice(0, 10)
+type Requisition = Tables<'finance_requisitions'>
+type RequisitionLine = Tables<'finance_requisition_lines'>
+type ReqView = Requisition & { __lines?: RequisitionLine[] }
+type Notify = (kind: 'success' | 'error', msg: string) => void
+
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
 const blankLine = (): ReqLine => ({ purpose: '', unit: '', qty: undefined, remarks: '', amount: undefined })
 const REQ_COLUMNS: LineColumn[] = [
@@ -46,13 +52,13 @@ export function Requisitions() {
   const [q, setQ] = useState('')
   const [month, setMonth] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
+  const [editing, setEditing] = useState<ReqView | null>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
-  const [viewing, setViewing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
-  const [converting, setConverting] = useState<{ req: any; line: any } | null>(null)
+  const [viewing, setViewing] = useState<ReqView | null>(null)
+  const [deleting, setDeleting] = useState<Requisition | null>(null)
+  const [converting, setConverting] = useState<{ req: Requisition; line: RequisitionLine } | null>(null)
 
-  const receiptsFor = (reqId: string) => (allReceipts as any[]).filter(r => r.requisition_id === reqId)
+  const receiptsFor = (reqId: string) => allReceipts.filter(r => r.requisition_id === reqId)
   const receivedTotal = (reqId: string) => receiptsFor(reqId).reduce((s, r) => s + (Number(r.amount) || 0), 0)
 
   const fetchLines = async (reqId: string) => {
@@ -60,10 +66,10 @@ export function Requisitions() {
     return lines ?? []
   }
 
-  const openView = async (r: any) => setViewing({ ...r, __lines: await fetchLines(r.id) })
-  const openEdit = async (r: any) => { const lines = await fetchLines(r.id); setEditing({ ...r, __lines: lines }); setModal(true) }
+  const openView = async (r: Requisition) => setViewing({ ...r, __lines: await fetchLines(r.id) })
+  const openEdit = async (r: Requisition) => { const lines = await fetchLines(r.id); setEditing({ ...r, __lines: lines }); setModal(true) }
 
-  const printReq = async (r: any) => {
+  const printReq = async (r: Requisition) => {
     try {
       const lines = await fetchLines(r.id)
       const { downloadRequisitionPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
@@ -76,7 +82,7 @@ export function Requisitions() {
           { label: 'Submitted To', value: SUBMITTED_TO },
           ...(r.remarks ? [{ label: 'Note', value: r.remarks, wide: true }] : [])
         ],
-        lines: lines.map((l: any) => ({ purpose: l.purpose, unit: l.unit, qty: l.qty ? Number(l.qty) : undefined, remarks: l.remarks, amount: Number(l.amount) || 0 })),
+        lines: lines.map(l => ({ purpose: l.purpose, unit: l.unit ?? undefined, qty: l.qty ? Number(l.qty) : undefined, remarks: l.remarks ?? undefined, amount: Number(l.amount) || 0 })),
         grandTotal: Number(r.grand_total) || 0
       })
     } catch (e: any) {
@@ -86,7 +92,7 @@ export function Requisitions() {
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return (data as any[]).filter(r =>
+    return data.filter(r =>
       (!month || monthOf(r.req_date) === month) &&
       (!t || String(r.req_no ?? '').toLowerCase().includes(t) || String(r.sender_name ?? '').toLowerCase().includes(t)))
   }, [data, q, month])
@@ -105,15 +111,15 @@ export function Requisitions() {
   const exportTotal = rows.reduce((s, r) => s + (Number(r.grand_total) || 0), 0)
   const exportSubtitle = `Total requested ${formatNumber(exportTotal, 2)} BDT · ${rows.length} entries${month ? ` · ${month}` : ''}`
 
-  const columns = [
-    { key: 'req_no', header: 'Requisition No', accessor: (r: any) => r.req_no, sortable: true, className: 'font-medium' },
-    { key: 'req_date', header: 'Date', render: (r: any) => formatDate(r.req_date) },
-    { key: 'sender_name', header: 'Sent By', render: (r: any) => r.sender_name || '—' },
-    { key: 'grand_total', header: 'Requested', accessor: (r: any) => formatNumber(r.grand_total, 2), className: 'text-right' },
-    { key: 'received', header: 'Received', render: (r: any) => formatNumber(receivedTotal(r.id), 2), className: 'text-right' },
+  const columns: Column<Requisition>[] = [
+    { key: 'req_no', header: 'Requisition No', accessor: r => r.req_no, sortable: true, className: 'font-medium' },
+    { key: 'req_date', header: 'Date', render: r => formatDate(r.req_date) },
+    { key: 'sender_name', header: 'Sent By', render: r => r.sender_name || '—' },
+    { key: 'grand_total', header: 'Requested', accessor: r => formatNumber(r.grand_total, 2), className: 'text-right' },
+    { key: 'received', header: 'Received', render: r => formatNumber(receivedTotal(r.id), 2), className: 'text-right' },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: r => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => openView(r) },
@@ -137,7 +143,7 @@ export function Requisitions() {
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           onRowClick={canEdit ? openEdit : openView} emptyTitle="No requisitions yet" />
       </Card>
 
@@ -151,7 +157,7 @@ export function Requisitions() {
           onEdit={() => { const r = viewing; setViewing(null); openEdit(r) }}
           onPrint={() => printReq(viewing)}
           onReceiptAdded={() => { refreshReceipts(); openView(viewing) }}
-          onConvertLine={(l: any) => setConverting({ req: viewing, line: l })}
+          onConvertLine={(l: RequisitionLine) => setConverting({ req: viewing, line: l })}
           onClose={() => setViewing(null)} />
       )}
 
@@ -168,7 +174,7 @@ export function Requisitions() {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `Requisition · ${deleting.req_no}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from('finance_requisitions').delete().eq('id', deleting.id)
+          const res = await supabase.from('finance_requisitions').delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }} />
@@ -176,12 +182,16 @@ export function Requisitions() {
   )
 }
 
-function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
+function ReqForm({ record, clientId, notify, onClose, onDone }: {
+  record: ReqView | null; clientId: string; notify: Notify; onClose: () => void; onDone: () => void
+}) {
   const [rememberedSender, rememberSender] = useRememberedField('sender_name')
-  const [h, setH] = useState<any>(record ?? { req_date: today(), sender_name: rememberedSender })
-  const [lines, setLines] = useState<ReqLine[]>(record?.__lines?.length ? record.__lines : [blankLine()])
+  const [h, setH] = useState<Partial<Requisition>>(record ?? { req_date: today(), sender_name: rememberedSender })
+  const [lines, setLines] = useState<ReqLine[]>(record?.__lines?.length
+    ? record.__lines.map(l => ({ purpose: l.purpose, unit: l.unit ?? '', qty: l.qty != null ? Number(l.qty) : undefined, remarks: l.remarks ?? '', amount: l.amount != null ? Number(l.amount) : undefined }))
+    : [blankLine()])
   const [saving, setSaving] = useState(false)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const set = (patch: Partial<Requisition>) => setH(x => ({ ...x, ...patch }))
   const grandTotal = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0)
 
   const save = async () => {
@@ -202,6 +212,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
         if (error) throw error
         reqId = data.id
       }
+      if (!reqId) throw new Error('Requisition id missing after save')
       await supabase.from('finance_requisition_lines').delete().eq('requisition_id', reqId)
       const payload = valid.map(l => ({
         client_id: clientId, requisition_id: reqId, purpose: l.purpose.trim(),
@@ -246,10 +257,13 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: any) {
   )
 }
 
-function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEdit, onPrint, onReceiptAdded, onConvertLine, onClose }: any) {
-  const lines: any[] = req.__lines ?? []
+function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEdit, onPrint, onReceiptAdded, onConvertLine, onClose }: {
+  req: ReqView; receipts: FundReceipt[]; clientId: string; canCreate: boolean; canEdit: boolean; notify: Notify
+  onEdit: () => void; onPrint: () => void; onReceiptAdded: () => void; onConvertLine: (l: RequisitionLine) => void; onClose: () => void
+}) {
+  const lines: RequisitionLine[] = req.__lines ?? []
   const [addingReceipt, setAddingReceipt] = useState(false)
-  const receivedTotal = receipts.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0)
+  const receivedTotal = receipts.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   const fullyReceived = receivedTotal >= Number(req.grand_total) - 0.004
   return (
     <Modal open onClose={onClose} title={`Requisition — ${req.req_no}`} size="lg">
@@ -290,7 +304,7 @@ function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEd
           )}
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {receipts.length === 0 && !addingReceipt ? <p className="p-3 text-sm text-ink-faint">No fund received yet</p> :
-              receipts.map((r: any, i: number) => (
+              receipts.map((r, i) => (
                 <div key={r.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="text-ink">{formatDate(r.receipt_date)}{r.remarks ? <span className="text-ink-faint"> · {r.remarks}</span> : null}</span>
                   <span className="font-semibold text-ink">{formatNumber(r.amount, 2)}</span>
@@ -311,7 +325,9 @@ function ReqOverview({ req, receipts, clientId, canCreate, canEdit, notify, onEd
   )
 }
 
-function AddReceiptRow({ requisitionId, clientId, notify, remaining, onDone, onCancel }: any) {
+function AddReceiptRow({ requisitionId, clientId, notify, remaining, onDone, onCancel }: {
+  requisitionId: string; clientId: string; notify: Notify; remaining: number; onDone: () => void; onCancel: () => void
+}) {
   const [date, setDate] = useState(today())
   const [amount, setAmount] = useState('')
   const [remarks, setRemarks] = useState('')

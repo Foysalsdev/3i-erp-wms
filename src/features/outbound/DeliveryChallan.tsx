@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { nextChallanNumber } from '@/hooks/useDocNumber'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
@@ -31,6 +31,19 @@ import { VehicleLoadingScan } from './VehicleLoadingScan'
 import { useRememberedField } from '@/hooks/useRememberedField'
 import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
 import { fetchStockAvailability } from '@/lib/stockAvailability'
+import type { Tables } from '@/types/database.types'
+
+export type Challan = Tables<'delivery_challans'>
+export type ChallanItem = Tables<'delivery_challan_items'>
+export type ChallanView = Challan & { __items?: ChallanItem[] }
+// Master lists arrive as narrow projections (only the columns the form needs).
+export type CustomerLite = Pick<Tables<'customers'>, 'id' | 'customer_code' | 'name' | 'billing_address' | 'shipping_address'>
+export type WarehouseLite = Pick<Tables<'warehouses'>, 'id' | 'code' | 'name'>
+export type VehicleLite = Pick<Tables<'vehicles'>, 'id' | 'vehicle_number' | 'vehicle_type'>
+export type ProductLite = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'barcode' | 'category' | 'uom' | 'plant'>
+export type TransportVendorLite = Pick<Tables<'transport_vendors'>, 'id' | 'vendor_code' | 'name'>
+export type CourierLite = Pick<Tables<'couriers'>, 'id' | 'courier_code' | 'name' | 'rate_per_unit'>
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
 
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'delivered' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'issued' ? 'info' : 'neutral'
@@ -49,34 +62,34 @@ export function DeliveryChallan() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
+  const [editing, setEditing] = useState<ChallanView | null>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
-  const [overview, setOverview] = useState<any>(null)
-  const [cnFor, setCnFor] = useState<any>(null)
-  const [loadingScan, setLoadingScan] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [overview, setOverview] = useState<Challan | null>(null)
+  const [cnFor, setCnFor] = useState<Challan | null>(null)
+  const [loadingScan, setLoadingScan] = useState<Challan | null>(null)
+  const [deleting, setDeleting] = useState<Challan | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [customers, setCustomers] = useState<any[]>([])
-  const [warehouses, setWarehouses] = useState<any[]>([])
-  const [vehicles, setVehicles] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
-  const [transportVendors, setTransportVendors] = useState<any[]>([])
-  const [couriers, setCouriers] = useState<any[]>([])
+  const [customers, setCustomers] = useState<CustomerLite[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([])
+  const [vehicles, setVehicles] = useState<VehicleLite[]>([])
+  const [products, setProducts] = useState<ProductLite[]>([])
+  const [transportVendors, setTransportVendors] = useState<TransportVendorLite[]>([])
+  const [couriers, setCouriers] = useState<CourierLite[]>([])
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name,billing_address').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
+    supabase.from('customers').select('id,customer_code,name,billing_address,shipping_address').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
     supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
     supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
-    ;(supabase as any).from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }: any) => setCouriers(data ?? []))
+    supabase.from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
   }, [currentClientId])
 
-  const customerName = (id: string) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} - ${c.name}` : '-' }
+  const customerName = (id: string | null) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} - ${c.name}` : '-' }
 
   const rows = useMemo(() => {
-    let out = statusFilter === 'all' ? (data as any[]) : (data as any[]).filter(r => r.status === statusFilter)
+    let out = statusFilter === 'all' ? data : data.filter(r => r.status === statusFilter)
     if (customerFilter) out = out.filter(r => r.customer_id === customerFilter)
     if (dateFrom) { const from = new Date(dateFrom); out = out.filter(r => new Date(r.challan_date) >= from) }
     if (dateTo) { const to = new Date(dateTo); to.setHours(23, 59, 59, 999); out = out.filter(r => new Date(r.challan_date) <= to) }
@@ -93,12 +106,12 @@ export function DeliveryChallan() {
   // pass — all in one DB transaction. A multi-line challan where a later line
   // is short on stock now rolls back completely instead of leaving earlier
   // lines' stock already deducted while the challan itself stays unposted.
-  const issue = async (c: any) => {
+  const issue = async (c: Challan) => {
     if (c.posted_at) { notify('info', 'This challan is already issued & stock deducted'); return }
     if (!c.warehouse_id) { notify('error', 'Set a warehouse on the challan before issuing'); return }
     setBusy(c.id)
     try {
-      const { data: gpNo, error } = await (supabase as any).rpc('post_delivery_challan', { p_challan_id: c.id })
+      const { data: gpNo, error } = await supabase.rpc('post_delivery_challan', { p_challan_id: c.id })
       if (error) throw error
       notify('success', `${c.challan_no} issued - stock deducted${gpNo ? ' & gate pass ' + gpNo + ' created' : ''}`)
       refresh()
@@ -109,23 +122,23 @@ export function DeliveryChallan() {
     }
   }
 
-  const printChallan = async (c: any) => {
+  const printChallan = async (c: Challan) => {
     try { await downloadChallanPdfFor(c, { customers, vehicles, products }) }
     catch (e: any) { notify('error', e?.message ?? 'Could not generate PDF') }
   }
 
-  const openEdit = async (r: any) => {
+  const openEdit = async (r: Challan) => {
     const { data: items } = await supabase.from('delivery_challan_items').select('*').eq('challan_id', r.id)
     setEditing({ ...r, __items: items ?? [] }); setModal(true)
   }
 
-  const columns = [
-    { key: 'challan_no', header: 'Challan No', accessor: (r: any) => r.challan_no, sortable: true, className: 'font-medium' },
-    { key: 'invoice_no', header: 'SAP Invoice', accessor: (r: any) => r.invoice_no ?? '-', sortable: true },
-    { key: 'customer', header: 'Customer', accessor: (r: any) => customerName(r.customer_id), sortable: true },
-    { key: 'challan_date', header: 'Date', accessor: (r: any) => r.challan_date, render: (r: any) => formatDate(r.challan_date), sortable: true },
-    { key: 'total_qty', header: 'Qty', accessor: (r: any) => r.total_qty, render: (r: any) => formatNumber(r.total_qty), className: 'text-right', sortable: true },
-    { key: 'status', header: 'Status', accessor: (r: any) => r.status, sortable: true, render: (r: any) => (
+  const columns: Column<Challan>[] = [
+    { key: 'challan_no', header: 'Challan No', accessor: r => r.challan_no, sortable: true, className: 'font-medium' },
+    { key: 'invoice_no', header: 'SAP Invoice', accessor: r => r.invoice_no ?? '-', sortable: true },
+    { key: 'customer', header: 'Customer', accessor: r => customerName(r.customer_id), sortable: true },
+    { key: 'challan_date', header: 'Date', accessor: r => r.challan_date, render: r => formatDate(r.challan_date), sortable: true },
+    { key: 'total_qty', header: 'Qty', accessor: r => r.total_qty, render: r => formatNumber(r.total_qty), className: 'text-right', sortable: true },
+    { key: 'status', header: 'Status', accessor: r => r.status, sortable: true, render: r => (
       <div className="flex items-center gap-1">
         <Badge tone={tone(r.status)}>{statusLabel(r.status)}</Badge>
         {r.posted_at && <Badge tone="positive">Stock out</Badge>}
@@ -133,7 +146,7 @@ export function DeliveryChallan() {
     ) },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: r => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => setOverview(r) },
@@ -165,7 +178,7 @@ export function DeliveryChallan() {
           onClear={() => { setCustomerFilter(''); setDateFrom(''); setDateTo('') }}>
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-soft">Customer</label>
-            <Combobox items={customers.map((c: any) => ({ id: c.id, label: `${c.customer_code} — ${c.name}` }))}
+            <Combobox items={customers.map(c => ({ id: c.id, label: `${c.customer_code} — ${c.name}` }))}
               value={customerFilter} onChange={setCustomerFilter} placeholder="All customers" />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -190,7 +203,7 @@ export function DeliveryChallan() {
         }} />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           onRowClick={canEdit ? openEdit : undefined} emptyTitle="No delivery challans yet" />
       </Card>
 
@@ -221,7 +234,7 @@ export function DeliveryChallan() {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `Challan - ${deleting.challan_no}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from('delivery_challans').delete().eq('id', deleting.id)
+          const res = await supabase.from('delivery_challans').delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }} />
@@ -231,13 +244,13 @@ export function DeliveryChallan() {
 
 // Quick CN entry: the consignment number only exists once the courier picks the
 // parcel up, so it's added to an already-created challan without a full edit.
-function CnModal({ challan, notify, onClose, onDone }: any) {
+function CnModal({ challan, notify, onClose, onDone }: { challan: Challan; notify: Notify; onClose: () => void; onDone: () => void }) {
   const [cn, setCn] = useState(challan.courier_tracking_no ?? '')
   const [saving, setSaving] = useState(false)
   const save = async () => {
     setSaving(true)
     const { error } = await supabase.from('delivery_challans')
-      .update({ courier_tracking_no: cn.trim() || null } as any).eq('id', challan.id)
+      .update({ courier_tracking_no: cn.trim() || null }).eq('id', challan.id)
     setSaving(false)
     if (error) { notify('error', error.message); return }
     notify('success', `CN saved for ${challan.challan_no}`)
@@ -261,15 +274,28 @@ function CnModal({ challan, notify, onClose, onDone }: any) {
 
 // `lockSo` opens the form straight from an order: customer / warehouse / invoice /
 // PO are pulled in and locked, and the lines default to the still-pending qty.
-export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, transportVendors = [], couriers = [], clientId, notify, onClose, onDone }: any) {
+type SalesOrderLite = Pick<Tables<'sales_orders'>, 'id' | 'so_no' | 'customer_id' | 'warehouse_id' | 'reference_no' | 'billing_doc_no' | 'invoice_no'>
+// delivery_cost may hold the raw input string while the form is being typed into.
+type ChallanDraft = Omit<Partial<Challan>, 'delivery_cost'> & { delivery_cost?: number | string | null; __items?: ChallanItem[] }
+
+export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, products, transportVendors = [], couriers = [], clientId, notify, onClose, onDone }: {
+  record?: ChallanDraft | null; lockSo?: SalesOrderLite | null
+  customers: CustomerLite[]; warehouses: WarehouseLite[]; vehicles: VehicleLite[]; products: ProductLite[]
+  transportVendors?: TransportVendorLite[]; couriers?: CourierLite[]
+  clientId: string; notify: Notify; onClose: () => void; onDone: () => void
+}) {
   const profile = useAuth(s => s.profile)
   // The printed acknowledgement note is always pre-filled and remembers the
   // user's last edit across challans (per browser); an existing challan keeps
   // the note it was saved with.
   const [rememberedNote, rememberNote] = useRememberedField('print_note', DEFAULT_CHALLAN_NOTE, 'challan')
   // Prepared By defaults to whoever is logged in creating the challan.
-  const [h, setH] = useState<any>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '', print_note: rememberedNote })
-  const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
+  const [h, setH] = useState<ChallanDraft>(record ?? { challan_date: today(), status: 'draft', delivery_method: 'transport', prepared_by: profile?.full_name || '', print_note: rememberedNote })
+  const [lines, setLines] = useState<LineRow[]>((record?.__items ?? []).map(it => ({
+    product_id: it.product_id ?? '', qty: it.qty, unit_price: it.unit_price,
+    stock_status: it.stock_status, location_id: it.location_id ?? undefined,
+    serial_no: it.serial_no ?? undefined, so_item_id: it.so_item_id ?? undefined
+  })))
   // Saleable stock per product, shown in the line picker so a shortage is
   // visible up front — issuing already blocks any line that would drive stock
   // negative, but this surfaces it before that point. The linked SO is
@@ -277,7 +303,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const [stockMap, setStockMap] = useState<Record<string, number>>({})
   useEffect(() => {
     if (!clientId) return
-    fetchStockAvailability(clientId, h.sales_order_id).then(avail => {
+    fetchStockAvailability(clientId, h.sales_order_id ?? undefined).then(avail => {
       const m: Record<string, number> = {}
       Object.entries(avail).forEach(([pid, a]) => { m[pid] = a.saleable })
       setStockMap(m)
@@ -285,7 +311,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   }, [clientId, h.sales_order_id])
   // Saved Bill-To / Ship-To addresses for the chosen customer (customer master
   // → Addresses). A customer can have many; the challan picks from them.
-  const [custAddresses, setCustAddresses] = useState<any[]>([])
+  const [custAddresses, setCustAddresses] = useState<Tables<'customer_addresses'>[]>([])
   useEffect(() => {
     if (!h.customer_id) { setCustAddresses([]); return }
     supabase.from('customer_addresses').select('*').eq('customer_id', h.customer_id).then(({ data }) => {
@@ -294,9 +320,9 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       // On a NEW challan, prefill from the customer's saved addresses: a
       // Billing-type for Bill-To, a Shipping-type for Ship-To, else the default.
       if (!record && list.length) {
-        const def = list.find((a: any) => a.is_default)
-        const bill = list.find((a: any) => a.address_type === 'Billing' || a.address_type === 'Both') || def || list[0]
-        const ship = list.find((a: any) => a.address_type === 'Shipping' || a.address_type === 'Both') || def || list[0]
+        const def = list.find(a => a.is_default)
+        const bill = list.find(a => a.address_type === 'Billing' || a.address_type === 'Both') || def || list[0]
+        const ship = list.find(a => a.address_type === 'Shipping' || a.address_type === 'Both') || def || list[0]
         set({
           bill_to_address_id: bill?.id ?? null, bill_to_address: bill?.address ?? h.bill_to_address,
           ship_to_address_id: ship?.id ?? null, ship_to_address: ship?.address ?? h.ship_to_address
@@ -305,24 +331,24 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     })
   }, [h.customer_id])
   // Driver master for the picker; ad-hoc vendor drivers can still be typed free.
-  const [drivers, setDrivers] = useState<any[]>([])
+  const [drivers, setDrivers] = useState<Pick<Tables<'drivers'>, 'id' | 'name' | 'phone' | 'driver_code'>[]>([])
   useEffect(() => { supabase.from('drivers').select('id,name,phone,driver_code').order('name').then(({ data }) => setDrivers(data ?? [])) }, [])
-  const [locations, setLocations] = useState<any[]>([])
+  const [locations, setLocations] = useState<Pick<Tables<'locations'>, 'id' | 'location_code'>[]>([])
   const [saving, setSaving] = useState(false)
   const [more, setMore] = useState(false)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const set = (patch: ChallanDraft) => setH(x => ({ ...x, ...patch }))
 
   // Bill-To / Ship-To: pick a saved customer address (sets the link + copies
   // the text as a snapshot), still fully editable as free text below.
-  const renderAddr = (label: string, idKey: string, textKey: string) => (
+  const renderAddr = (label: string, idKey: 'bill_to_address_id' | 'ship_to_address_id', textKey: 'bill_to_address' | 'ship_to_address') => (
     <Field label={label} className="sm:col-span-2">
       {custAddresses.length > 0 && (
         <SelectBox className="mb-2" value={h[idKey] ?? ''} onChange={e => {
-          const a = custAddresses.find((x: any) => x.id === e.target.value)
+          const a = custAddresses.find(x => x.id === e.target.value)
           set({ [idKey]: e.target.value || null, ...(a ? { [textKey]: a.address } : {}) })
         }}>
           <option value="">— Pick a saved address —</option>
-          {custAddresses.map((a: any) => (
+          {custAddresses.map(a => (
             <option key={a.id} value={a.id}>{[a.label, a.address_type].filter(Boolean).join(' · ') || 'Address'}{a.is_default ? ' (default)' : ''}</option>
           ))}
         </SelectBox>
@@ -334,29 +360,29 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const posted = !!record?.posted_at
   const mode: 'transport' | 'courier' = h.delivery_method === 'courier' ? 'courier' : 'transport'
   const locked = !!lockSo && !record   // creating a new challan from a specific order
-  const [vehs, setVehs] = useState<any[]>(vehicles)
-  const vehItems = vehs.map((v: any) => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type }))
-  const tVendorItems = transportVendors.map((v: any) => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
-  const driverItems = drivers.map((d: any) => ({ id: d.id, label: d.name, sublabel: d.phone || d.driver_code }))
-  const courierItems = couriers.map((v: any) => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
+  const [vehs, setVehs] = useState<VehicleLite[]>(vehicles)
+  const vehItems = vehs.map(v => ({ id: v.id, label: v.vehicle_number, sublabel: v.vehicle_type ?? undefined }))
+  const tVendorItems = transportVendors.map(v => ({ id: v.id, label: v.vendor_code, sublabel: v.name }))
+  const driverItems = drivers.map(d => ({ id: d.id, label: d.name, sublabel: d.phone || d.driver_code || undefined }))
+  const courierItems = couriers.map(v => ({ id: v.id, label: v.courier_code, sublabel: v.name }))
 
   // Courier rate card: per-piece rate by product category, falling back to the
   // courier's flat rate_per_unit for categories without one.
-  const [courierRates, setCourierRates] = useState<any[]>([])
+  const [courierRates, setCourierRates] = useState<Pick<Tables<'courier_rates'>, 'courier_id' | 'category' | 'rate'>[]>([])
   useEffect(() => {
     if (!clientId) return
-    ;(supabase as any).from('courier_rates').select('courier_id,category,rate').eq('client_id', clientId)
-      .then(({ data }: any) => setCourierRates(data ?? []))
+    supabase.from('courier_rates').select('courier_id,category,rate').eq('client_id', clientId)
+      .then(({ data }) => setCourierRates(data ?? []))
   }, [clientId])
   const courierBill = (courierId: string) => {
-    const c = couriers.find((x: any) => x.id === courierId)
+    const c = couriers.find(x => x.id === courierId)
     if (!c) return null
-    const rateMap = Object.fromEntries(courierRates.filter((r: any) => r.courier_id === courierId).map((r: any) => [r.category, Number(r.rate) || 0]))
+    const rateMap: Record<string, number> = Object.fromEntries(courierRates.filter(r => r.courier_id === courierId).map(r => [r.category, Number(r.rate) || 0]))
     const fallback = Number(c.rate_per_unit) || 0
     const byCat: Record<string, number> = {}
     for (const l of lines) {
       if (!l.product_id || !(Number(l.qty) > 0)) continue
-      const cat = products.find((p: any) => p.id === l.product_id)?.category || 'Other'
+      const cat = products.find(p => p.id === l.product_id)?.category || 'Other'
       byCat[cat] = (byCat[cat] || 0) + Number(l.qty)
     }
     let total = 0
@@ -369,30 +395,30 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     return { total, formula: parts.join(' + ') }
   }
   const createVehicle = async (name: string) => {
-    const { data, error } = await (supabase as any).from('vehicles').insert({ client_id: clientId, vehicle_number: name }).select('*').single()
+    const { data, error } = await supabase.from('vehicles').insert({ client_id: clientId, vehicle_number: name }).select('*').single()
     if (error) { notify('error', error.message); return null }
-    setVehs(v => [...v, data]); return { id: data.id, label: data.vehicle_number, sublabel: data.vehicle_type }
+    setVehs(v => [...v, data]); return { id: data.id, label: data.vehicle_number, sublabel: data.vehicle_type ?? undefined }
   }
 
-  const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
+  const n = (v: number | string | null | undefined) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
   // Pull an order's customer, warehouse, PO, SAP invoice and still-pending lines
   // (so nothing is typed twice). Each line keeps its so_item_id for tracking.
-  const loadFromSO = async (so: any) => {
+  const loadFromSO = async (so: SalesOrderLite) => {
     const { data: items } = await supabase.from('sales_order_items').select('id,product_id,qty,delivered_qty,unit_price').eq('so_id', so.id)
-    const cust = customers.find((c: any) => c.id === so.customer_id)
-    setH((x: any) => ({ ...x, sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
+    const cust = customers.find(c => c.id === so.customer_id)
+    setH(x => ({ ...x, sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
       po_no: so.reference_no || x.po_no, invoice_no: so.billing_doc_no || so.invoice_no || x.invoice_no,
       bill_to_address: x.bill_to_address || cust?.billing_address || '',
       ship_to_address: x.ship_to_address || cust?.shipping_address || '' }))
-    setLines((items ?? []).map((it: any) => ({
-      product_id: it.product_id, qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
+    setLines((items ?? []).map(it => ({
+      product_id: it.product_id ?? '', qty: Math.max(0, n(it.qty) - n(it.delivered_qty)),
       unit_price: it.unit_price ?? 0, stock_status: 'good', so_item_id: it.id,
       ordered_qty: n(it.qty), already_delivered: n(it.delivered_qty)
-    })).filter((l: any) => l.qty > 0))
+    })).filter(l => l.qty > 0))
   }
 
   // Order picker (only when not locked to a specific order).
-  const [sos, setSos] = useState<any[]>([])
+  const [sos, setSos] = useState<SalesOrderLite[]>([])
   useEffect(() => {
     if (!clientId || locked) return
     // Delivered orders have nothing left to plan (see loadFromSO below), so
@@ -400,7 +426,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(delivered,closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
   }, [clientId, locked])
   const selectSO = async (soId: string) => {
-    const so = sos.find((x: any) => x.id === soId)
+    const so = sos.find(x => x.id === soId)
     if (!so) { set({ sales_order_id: soId }); return }
     await loadFromSO(so)
   }
@@ -453,19 +479,20 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       if (h.print_note) rememberNote(h.print_note)
       let challanId = record?.id
       if (record) {
-        const { error } = await supabase.from('delivery_challans').update(header as any).eq('id', record.id)
+        const { error } = await supabase.from('delivery_challans').update(header).eq('id', record.id!)
         if (error) throw error
       } else {
         const challan_no = await nextChallanNumber(clientId, invoice)
         if (!challan_no) throw new Error('Could not generate challan number')
-        const { data, error } = await supabase.from('delivery_challans').insert({ ...header, challan_no } as any).select('id').single()
+        const { data, error } = await supabase.from('delivery_challans').insert({ ...header, challan_no }).select('id').single()
         if (error) throw error
         challanId = data.id
       }
+      if (!challanId) throw new Error('Challan id missing after save')
       await supabase.from('delivery_challan_items').delete().eq('challan_id', challanId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
         client_id: clientId, challan_id: challanId, product_id: r.product_id, qty: Number(r.qty) || 0,
-        unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null, so_item_id: (r as any).so_item_id || null
+        unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null, so_item_id: r.so_item_id || null
       }))
       if (payloadLines.length) {
         const { error } = await supabase.from('delivery_challan_items').insert(payloadLines)
@@ -480,7 +507,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     }
   }
 
-  const ModeButton = ({ m, icon, label }: any) => (
+  const ModeButton = ({ m, icon, label }: { m: 'transport' | 'courier'; icon: string; label: string }) => (
     <button type="button" onClick={() => set({ delivery_method: m })}
       className={'flex-1 rounded-lg border px-3 py-2 text-sm font-medium ' + (mode === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-line text-ink-soft hover:bg-surface-sunken')}>
       <Icon name={icon} className="mr-1 text-[18px]" /> {label}
@@ -495,25 +522,25 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
 
         {locked ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-surface-line bg-surface-sunken/40 p-3 text-sm sm:grid-cols-4">
-            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Customer</p><p className="font-medium text-ink">{customers.find((c: any) => c.id === h.customer_id)?.name ?? '—'}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Customer</p><p className="font-medium text-ink">{customers.find(c => c.id === h.customer_id)?.name ?? '—'}</p></div>
             <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Order Ref</p><p className="font-medium text-ink">{h.po_no || '—'}</p></div>
             <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">SAP Invoice</p><p className="font-medium text-ink">{h.invoice_no || '—'}</p></div>
-            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Warehouse</p><p className="font-medium text-ink">{warehouses.find((w: any) => w.id === h.warehouse_id)?.code ?? '—'}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Warehouse</p><p className="font-medium text-ink">{warehouses.find(w => w.id === h.warehouse_id)?.code ?? '—'}</p></div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Sales Order (auto-fills customer, items, PO & invoice)" className="sm:col-span-2">
-              <Combobox items={sos.map((o: any) => ({ id: o.id, label: o.so_no, sublabel: customers.find((c: any) => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
+              <Combobox items={sos.map(o => ({ id: o.id, label: o.so_no, sublabel: customers.find(c => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
             </Field>
             <Field label="Customer" required>
-              <Combobox items={customers.map((c: any) => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''}
-                onChange={(id: string) => { const c = customers.find((x: any) => x.id === id); set({ customer_id: id, bill_to_address: c?.billing_address || '', ship_to_address: c?.shipping_address || '' }) }}
+              <Combobox items={customers.map(c => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''}
+                onChange={(id: string) => { const c = customers.find(x => x.id === id); set({ customer_id: id, bill_to_address: c?.billing_address || '', ship_to_address: c?.shipping_address || '' }) }}
                 placeholder="Search customer by code or name" />
             </Field>
             <Field label="Warehouse" required>
               <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
                 <option value="">Select...</option>
-                {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
+                {warehouses.map(w => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
               </SelectBox>
             </Field>
             <Field label="SAP Invoice No" required>
@@ -545,14 +572,14 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
               </Field>
               <Field label="Driver">
                 <Combobox items={driverItems} value={h.driver_id ?? ''}
-                  onChange={(id: string) => { const d = drivers.find((x: any) => x.id === id); set({ driver_id: id, driver_name: d?.name || h.driver_name, driver_phone: d?.phone || h.driver_phone }) }}
+                  onChange={(id: string) => { const d = drivers.find(x => x.id === id); set({ driver_id: id, driver_name: d?.name || h.driver_name, driver_phone: d?.phone || h.driver_phone }) }}
                   placeholder="Pick a saved driver" />
               </Field>
               <Field label="Driver Name"><Input value={h.driver_name ?? ''} onChange={e => set({ driver_id: null, driver_name: e.target.value })} placeholder="Or type — ad-hoc / vendor driver" /></Field>
               <Field label="Driver Phone"><Input value={h.driver_phone ?? ''} onChange={e => set({ driver_phone: e.target.value })} /></Field>
               <Field label="Transport Vendor">
                 <Combobox items={tVendorItems} value={h.transporter_id ?? ''}
-                  onChange={(id: string) => { const v = transportVendors.find((x: any) => x.id === id); set({ transporter_id: id, transport_vendor: v?.name || '' }) }}
+                  onChange={(id: string) => { const v = transportVendors.find(x => x.id === id); set({ transporter_id: id, transport_vendor: v?.name || '' }) }}
                   placeholder="Search transporter by code or name" />
               </Field>
               <Field label="Lock No"><Input value={h.lock_no ?? ''} onChange={e => set({ lock_no: e.target.value })} /></Field>
@@ -565,7 +592,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
               <Field label="Courier">
                 <Combobox items={courierItems} value={h.courier_id ?? ''}
                   onChange={(id: string) => {
-                    const v = couriers.find((x: any) => x.id === id)
+                    const v = couriers.find(x => x.id === id)
                     // Couriers bill per piece with category-wise rates — prime the
                     // bill from the rate card; stays editable for negotiated cases.
                     const bill = courierBill(id)
@@ -631,29 +658,33 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
 
 // Read-only 360° view of a challan: header, linked SO & gate pass, line items
 // (with per-unit serials) and the full audit trail (WES: connected + audited).
-function ChallanOverview({ challan, customerName, vehicles, products, transportVendors = [], couriers = [], canEdit, onEdit, onClose }: any) {
-  const [items, setItems] = useState<any[]>([])
-  const [so, setSo] = useState<any>(null)
-  const [gatePasses, setGatePasses] = useState<any[]>([])
+function ChallanOverview({ challan, customerName, vehicles, products, transportVendors = [], couriers = [], canEdit, onEdit, onClose }: {
+  challan: Challan; customerName: string; vehicles: VehicleLite[]; products: ProductLite[]
+  transportVendors?: TransportVendorLite[]; couriers?: CourierLite[]
+  canEdit: boolean; onEdit: () => void; onClose: () => void
+}) {
+  const [items, setItems] = useState<ChallanItem[]>([])
+  const [so, setSo] = useState<Pick<Tables<'sales_orders'>, 'so_no' | 'status' | 'reference_no'> | null>(null)
+  const [gatePasses, setGatePasses] = useState<Pick<Tables<'gate_passes'>, 'gate_pass_no' | 'status' | 'gate_out_date'>[]>([])
 
   useEffect(() => {
     if (!challan?.id) return
     supabase.from('delivery_challan_items').select('*').eq('challan_id', challan.id).then(({ data }) => setItems(data ?? []))
     if (challan.sales_order_id) supabase.from('sales_orders').select('so_no,status,reference_no').eq('id', challan.sales_order_id).single().then(({ data }) => setSo(data))
     // Gate pass auto-created on issue references the challan number in its purpose.
-    ;(supabase as any).from('gate_passes').select('gate_pass_no,status,gate_out_date').ilike('purpose', `%${challan.challan_no}%`).then(({ data }: any) => setGatePasses(data ?? []))
+    supabase.from('gate_passes').select('gate_pass_no,status,gate_out_date').ilike('purpose', `%${challan.challan_no}%`).then(({ data }) => setGatePasses(data ?? []))
   }, [challan?.id])
 
-  const productName = (id: string) => products.find((p: any) => p.id === id)?.name ?? id
-  const vehicleNo = vehicles.find((v: any) => v.id === challan.vehicle_id)?.vehicle_number
+  const productName = (id: string | null) => products.find(p => p.id === id)?.name ?? id ?? '—'
+  const vehicleNo = vehicles.find(v => v.id === challan.vehicle_id)?.vehicle_number
   const carrier = challan.delivery_method === 'courier'
-    ? (couriers.find((c: any) => c.id === challan.courier_id)?.name || challan.courier_name || '—')
-    : (transportVendors.find((v: any) => v.id === challan.transporter_id)?.name || challan.transport_vendor || '—')
+    ? (couriers.find(c => c.id === challan.courier_id)?.name || challan.courier_name || '—')
+    : (transportVendors.find(v => v.id === challan.transporter_id)?.name || challan.transport_vendor || '—')
 
-  const Stat = ({ label, value }: any) => (
+  const Stat = ({ label, value }: { label: string; value: ReactNode }) => (
     <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
   )
-  const Section = ({ title, children }: any) => (<div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">{title}</p>{children}</div>)
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (<div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">{title}</p>{children}</div>)
 
   return (
     <Modal open onClose={onClose} title={`Delivery Challan — ${challan.challan_no}`} size="lg">
@@ -673,13 +704,13 @@ function ChallanOverview({ challan, customerName, vehicles, products, transportV
         <DocumentFlow nodes={[
           so ? { icon: 'shopping_cart', type: 'Sales Order', number: so.so_no, status: so.status, to: `/outbound/sales-order?q=${encodeURIComponent(so.so_no)}` } : null,
           { icon: 'local_shipping', type: 'Delivery Challan', number: challan.challan_no, status: statusLabel(challan.status), tone: tone(challan.status), current: true },
-          ...gatePasses.map((g: any) => ({ icon: 'door_front', type: 'Gate Pass', number: g.gate_pass_no, status: g.status, to: `/outbound/gate-pass?q=${encodeURIComponent(g.gate_pass_no)}` }))
+          ...gatePasses.map(g => ({ icon: 'door_front', type: 'Gate Pass', number: g.gate_pass_no, status: g.status, to: `/outbound/gate-pass?q=${encodeURIComponent(g.gate_pass_no)}` }))
         ]} />
 
         <Section title="Items">
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
-              items.map((it: any, i: number) => (
+              items.map((it, i) => (
                 <div key={it.id} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{productName(it.product_id)}{it.serial_no ? <span className="ml-2 font-mono text-xs text-ink-faint">SN {it.serial_no}</span> : null}</span>
                   <span className="shrink-0 text-ink-soft">{formatNumber(it.qty)}</span>

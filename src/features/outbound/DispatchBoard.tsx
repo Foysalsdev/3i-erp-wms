@@ -31,7 +31,7 @@ export function DispatchBoard() {
       supabase.from('customers').select('id,name').eq('client_id', currentClientId)
     ]).then(([so, cust]) => {
       setOrders(so.data ?? [])
-      setCustomers(Object.fromEntries((cust.data ?? []).map((c: any) => [c.id, c.name])))
+      setCustomers(Object.fromEntries((cust.data ?? []).map(c => [c.id, c.name])))
       setLoading(false)
     })
   }, [currentClientId])

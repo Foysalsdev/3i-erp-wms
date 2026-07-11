@@ -963,7 +963,6 @@ export type Database = {
         Row: {
           bill_to_address: string | null
           bill_to_address_id: string | null
-          ship_to_address_id: string | null
           challan_date: string
           challan_no: string
           client_id: string
@@ -986,12 +985,13 @@ export type Database = {
           po_no: string | null
           posted_at: string | null
           prepared_by: string | null
+          print_note: string | null
           receiver_name: string | null
           receiver_phone: string | null
           remarks: string | null
           sales_order_id: string | null
           ship_to_address: string | null
-          print_note: string | null
+          ship_to_address_id: string | null
           status: string
           total_qty: number
           transport_vendor: string | null
@@ -1004,7 +1004,6 @@ export type Database = {
         Insert: {
           bill_to_address?: string | null
           bill_to_address_id?: string | null
-          ship_to_address_id?: string | null
           challan_date?: string
           challan_no: string
           client_id: string
@@ -1027,12 +1026,13 @@ export type Database = {
           po_no?: string | null
           posted_at?: string | null
           prepared_by?: string | null
+          print_note?: string | null
           receiver_name?: string | null
           receiver_phone?: string | null
           remarks?: string | null
           sales_order_id?: string | null
           ship_to_address?: string | null
-          print_note?: string | null
+          ship_to_address_id?: string | null
           status?: string
           total_qty?: number
           transport_vendor?: string | null
@@ -1045,7 +1045,6 @@ export type Database = {
         Update: {
           bill_to_address?: string | null
           bill_to_address_id?: string | null
-          ship_to_address_id?: string | null
           challan_date?: string
           challan_no?: string
           client_id?: string
@@ -1068,12 +1067,13 @@ export type Database = {
           po_no?: string | null
           posted_at?: string | null
           prepared_by?: string | null
+          print_note?: string | null
           receiver_name?: string | null
           receiver_phone?: string | null
           remarks?: string | null
           sales_order_id?: string | null
           ship_to_address?: string | null
-          print_note?: string | null
+          ship_to_address_id?: string | null
           status?: string
           total_qty?: number
           transport_vendor?: string | null
@@ -1084,6 +1084,13 @@ export type Database = {
           warehouse_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "delivery_challans_bill_to_address_id_fkey"
+            columns: ["bill_to_address_id"]
+            isOneToOne: false
+            referencedRelation: "customer_addresses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "delivery_challans_client_id_fkey"
             columns: ["client_id"]
@@ -1124,6 +1131,13 @@ export type Database = {
             columns: ["sales_order_id"]
             isOneToOne: false
             referencedRelation: "sales_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_challans_ship_to_address_id_fkey"
+            columns: ["ship_to_address_id"]
+            isOneToOne: false
+            referencedRelation: "customer_addresses"
             referencedColumns: ["id"]
           },
           {
@@ -1659,6 +1673,51 @@ export type Database = {
           },
         ]
       }
+      finance_additional_expenses: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          expense_id: string
+          expense_type: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          client_id: string
+          created_at?: string
+          expense_id: string
+          expense_type?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          expense_id?: string
+          expense_type?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_additional_expenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_additional_expenses_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "finance_expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_balance_adjustments: {
         Row: {
           adjustment_date: string
@@ -1667,9 +1726,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          kind: string
           remarks: string | null
           updated_at: string
-          kind: string
         }
         Insert: {
           adjustment_date?: string
@@ -1678,9 +1737,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          kind?: string
           remarks?: string | null
           updated_at?: string
-          kind?: string
         }
         Update: {
           adjustment_date?: string
@@ -1689,9 +1748,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          kind?: string
           remarks?: string | null
           updated_at?: string
-          kind?: string
         }
         Relationships: [
           {
@@ -1747,66 +1806,289 @@ export type Database = {
           },
         ]
       }
-      finance_vendor_payments: {
+      finance_document_sequences: {
         Row: {
-          amount: number
           client_id: string
-          created_at: string
-          created_by: string | null
-          expense_id: string | null
-          id: string
-          method: string | null
-          payment_date: string
-          remarks: string | null
-          updated_at: string
-          vendor_id: string | null
-          payee_name: string | null
+          next_number: number
+          prefix: string
+          year_month: string
         }
         Insert: {
-          amount?: number
           client_id: string
-          created_at?: string
-          created_by?: string | null
-          expense_id?: string | null
-          id?: string
-          method?: string | null
-          payment_date?: string
-          remarks?: string | null
-          updated_at?: string
-          vendor_id?: string | null
-          payee_name?: string | null
+          next_number?: number
+          prefix: string
+          year_month: string
         }
         Update: {
-          amount?: number
           client_id?: string
-          created_at?: string
-          created_by?: string | null
-          expense_id?: string | null
-          id?: string
-          method?: string | null
-          payment_date?: string
-          remarks?: string | null
-          updated_at?: string
-          vendor_id?: string | null
-          payee_name?: string | null
+          next_number?: number
+          prefix?: string
+          year_month?: string
         }
         Relationships: [
           {
-            foreignKeyName: "finance_vendor_payments_client_id_fkey"
+            foreignKeyName: "finance_document_sequences_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_expense_bills: {
+        Row: {
+          amount: number
+          bill_ref: string | null
+          category_id: string | null
+          client_id: string
+          created_at: string
+          expense_id: string
+          id: string
+          item_id: string | null
+          memo_no: string | null
+          qty: number | null
+          rate: number | null
+          remarks: string | null
+          unit: string | null
+          updated_at: string
+          vendor_name: string | null
+        }
+        Insert: {
+          amount?: number
+          bill_ref?: string | null
+          category_id?: string | null
+          client_id: string
+          created_at?: string
+          expense_id: string
+          id?: string
+          item_id?: string | null
+          memo_no?: string | null
+          qty?: number | null
+          rate?: number | null
+          remarks?: string | null
+          unit?: string | null
+          updated_at?: string
+          vendor_name?: string | null
+        }
+        Update: {
+          amount?: number
+          bill_ref?: string | null
+          category_id?: string | null
+          client_id?: string
+          created_at?: string
+          expense_id?: string
+          id?: string
+          item_id?: string | null
+          memo_no?: string | null
+          qty?: number | null
+          rate?: number | null
+          remarks?: string | null
+          unit?: string | null
+          updated_at?: string
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_expense_bills_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "finance_expense_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_expense_bills_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "finance_vendor_payments_expense_id_fkey"
+            foreignKeyName: "finance_expense_bills_expense_id_fkey"
             columns: ["expense_id"]
             isOneToOne: false
             referencedRelation: "finance_expenses"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "finance_vendor_payments_vendor_id_fkey"
+            foreignKeyName: "finance_expense_bills_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "finance_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_expense_categories: {
+        Row: {
+          client_id: string
+          code: string | null
+          created_at: string
+          default_line_signature: boolean
+          default_sign_labels: string | null
+          id: string
+          is_active: boolean
+          name: string
+          owner_copy_required: boolean
+          updated_at: string
+          voucher_mode: string
+        }
+        Insert: {
+          client_id: string
+          code?: string | null
+          created_at?: string
+          default_line_signature?: boolean
+          default_sign_labels?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          owner_copy_required?: boolean
+          updated_at?: string
+          voucher_mode?: string
+        }
+        Update: {
+          client_id?: string
+          code?: string | null
+          created_at?: string
+          default_line_signature?: boolean
+          default_sign_labels?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          owner_copy_required?: boolean
+          updated_at?: string
+          voucher_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_expense_categories_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_expenses: {
+        Row: {
+          amount: number
+          bill_ref: string | null
+          category_id: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          department: string | null
+          description: string | null
+          details: Json
+          doc_no: string | null
+          doc_type: string
+          due_date: string | null
+          expense_date: string
+          expense_type: string
+          id: string
+          is_draft: boolean
+          less_deduction: number
+          payee_name: string | null
+          payment_mode: string | null
+          print_count: number
+          procurement_type: string | null
+          show_line_signature: boolean
+          sign_labels: string | null
+          status: string
+          submission_id: string | null
+          updated_at: string
+          vendor_bill_no: string | null
+          vendor_id: string | null
+          voucher_status: string
+        }
+        Insert: {
+          amount?: number
+          bill_ref?: string | null
+          category_id?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          department?: string | null
+          description?: string | null
+          details?: Json
+          doc_no?: string | null
+          doc_type?: string
+          due_date?: string | null
+          expense_date?: string
+          expense_type?: string
+          id?: string
+          is_draft?: boolean
+          less_deduction?: number
+          payee_name?: string | null
+          payment_mode?: string | null
+          print_count?: number
+          procurement_type?: string | null
+          show_line_signature?: boolean
+          sign_labels?: string | null
+          status?: string
+          submission_id?: string | null
+          updated_at?: string
+          vendor_bill_no?: string | null
+          vendor_id?: string | null
+          voucher_status?: string
+        }
+        Update: {
+          amount?: number
+          bill_ref?: string | null
+          category_id?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          department?: string | null
+          description?: string | null
+          details?: Json
+          doc_no?: string | null
+          doc_type?: string
+          due_date?: string | null
+          expense_date?: string
+          expense_type?: string
+          id?: string
+          is_draft?: boolean
+          less_deduction?: number
+          payee_name?: string | null
+          payment_mode?: string | null
+          print_count?: number
+          procurement_type?: string | null
+          show_line_signature?: boolean
+          sign_labels?: string | null
+          status?: string
+          submission_id?: string | null
+          updated_at?: string
+          vendor_bill_no?: string | null
+          vendor_id?: string | null
+          voucher_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "finance_expense_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_expenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_expenses_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "finance_ho_submissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_expenses_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "finance_vendors"
@@ -1814,47 +2096,167 @@ export type Database = {
           },
         ]
       }
-      finance_additional_expenses: {
+      finance_fund_receipts: {
         Row: {
           amount: number
           client_id: string
           created_at: string
-          expense_id: string
-          expense_type: string | null
+          created_by: string | null
           id: string
+          receipt_date: string
+          remarks: string | null
+          requisition_id: string
           updated_at: string
         }
         Insert: {
           amount?: number
           client_id: string
           created_at?: string
-          expense_id: string
-          expense_type?: string | null
+          created_by?: string | null
           id?: string
+          receipt_date?: string
+          remarks?: string | null
+          requisition_id: string
           updated_at?: string
         }
         Update: {
           amount?: number
           client_id?: string
           created_at?: string
-          expense_id?: string
-          expense_type?: string | null
+          created_by?: string | null
           id?: string
+          receipt_date?: string
+          remarks?: string | null
+          requisition_id?: string
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "finance_additional_expenses_client_id_fkey"
+            foreignKeyName: "finance_fund_receipts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "finance_additional_expenses_expense_id_fkey"
+            foreignKeyName: "finance_fund_receipts_requisition_id_fkey"
+            columns: ["requisition_id"]
+            isOneToOne: false
+            referencedRelation: "finance_requisitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_ho_submission_vouchers: {
+        Row: {
+          category_label: string
+          client_id: string
+          created_at: string
+          expense_id: string
+          id: string
+          return_note: string | null
+          returned_at: string | null
+          sl_no: number
+          submission_id: string
+        }
+        Insert: {
+          category_label: string
+          client_id: string
+          created_at?: string
+          expense_id: string
+          id?: string
+          return_note?: string | null
+          returned_at?: string | null
+          sl_no: number
+          submission_id: string
+        }
+        Update: {
+          category_label?: string
+          client_id?: string
+          created_at?: string
+          expense_id?: string
+          id?: string
+          return_note?: string | null
+          returned_at?: string | null
+          sl_no?: number
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_ho_submission_vouchers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ho_submission_vouchers_expense_id_fkey"
             columns: ["expense_id"]
             isOneToOne: false
             referencedRelation: "finance_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ho_submission_vouchers_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "finance_ho_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_ho_submissions: {
+        Row: {
+          category_order: Json
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          remarks: string | null
+          status: string
+          submission_date: string
+          submission_no: string
+          total_amount: number
+          updated_at: string
+          verified_at: string | null
+          voucher_count: number
+        }
+        Insert: {
+          category_order?: Json
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          remarks?: string | null
+          status?: string
+          submission_date?: string
+          submission_no: string
+          total_amount?: number
+          updated_at?: string
+          verified_at?: string | null
+          voucher_count?: number
+        }
+        Update: {
+          category_order?: Json
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          remarks?: string | null
+          status?: string
+          submission_date?: string
+          submission_no?: string
+          total_amount?: number
+          updated_at?: string
+          verified_at?: string | null
+          voucher_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_ho_submissions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -1919,474 +2321,6 @@ export type Database = {
             columns: ["last_vendor_id"]
             isOneToOne: false
             referencedRelation: "finance_vendors"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_vendors: {
-        Row: {
-          client_id: string
-          contact_number: string | null
-          created_at: string
-          created_by: string | null
-          id: string
-          is_active: boolean
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          client_id: string
-          contact_number?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          is_active?: boolean
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          client_id?: string
-          contact_number?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          is_active?: boolean
-          name?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_vendors_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_expense_bills: {
-        Row: {
-          amount: number
-          bill_ref: string | null
-          category_id: string | null
-          client_id: string
-          created_at: string
-          expense_id: string
-          id: string
-          item_id: string | null
-          memo_no: string | null
-          qty: number | null
-          rate: number | null
-          remarks: string | null
-          unit: string | null
-          updated_at: string
-          vendor_name: string | null
-        }
-        Insert: {
-          amount?: number
-          bill_ref?: string | null
-          category_id?: string | null
-          client_id: string
-          created_at?: string
-          expense_id: string
-          id?: string
-          item_id?: string | null
-          memo_no?: string | null
-          qty?: number | null
-          rate?: number | null
-          remarks?: string | null
-          unit?: string | null
-          updated_at?: string
-          vendor_name?: string | null
-        }
-        Update: {
-          amount?: number
-          bill_ref?: string | null
-          category_id?: string | null
-          client_id?: string
-          created_at?: string
-          expense_id?: string
-          id?: string
-          item_id?: string | null
-          memo_no?: string | null
-          qty?: number | null
-          rate?: number | null
-          remarks?: string | null
-          unit?: string | null
-          updated_at?: string
-          vendor_name?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_expense_bills_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "finance_expense_bills_expense_id_fkey"
-            columns: ["expense_id"]
-            isOneToOne: false
-            referencedRelation: "finance_expenses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_expense_categories: {
-        Row: {
-          client_id: string
-          created_at: string
-          id: string
-          name: string
-          code: string | null
-          is_active: boolean
-          voucher_mode: string
-          default_line_signature: boolean
-          default_sign_labels: string | null
-          owner_copy_required: boolean
-          updated_at: string
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          id?: string
-          name: string
-          code?: string | null
-          is_active?: boolean
-          voucher_mode?: string
-          default_line_signature?: boolean
-          default_sign_labels?: string | null
-          owner_copy_required?: boolean
-          updated_at?: string
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          code?: string | null
-          is_active?: boolean
-          voucher_mode?: string
-          default_line_signature?: boolean
-          default_sign_labels?: string | null
-          owner_copy_required?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_expense_categories_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_expenses: {
-        Row: {
-          amount: number
-          bill_ref: string | null
-          category_id: string | null
-          client_id: string
-          created_at: string
-          created_by: string | null
-          department: string | null
-          description: string | null
-          doc_no: string | null
-          due_date: string | null
-          expense_date: string
-          id: string
-          less_deduction: number
-          payee_name: string | null
-          payment_mode: string | null
-          procurement_type: string | null
-          status: string
-          vendor_bill_no: string | null
-          vendor_id: string | null
-          show_line_signature: boolean
-          sign_labels: string | null
-          updated_at: string
-          expense_type: string
-          details: Json
-          doc_type: string
-          voucher_status: string
-          is_draft: boolean
-          deleted_at: string | null
-          print_count: number
-          submission_id: string | null
-        }
-        Insert: {
-          amount?: number
-          bill_ref?: string | null
-          category_id?: string | null
-          client_id: string
-          created_at?: string
-          created_by?: string | null
-          department?: string | null
-          description?: string | null
-          doc_no?: string | null
-          due_date?: string | null
-          expense_date?: string
-          id?: string
-          less_deduction?: number
-          payee_name?: string | null
-          payment_mode?: string | null
-          procurement_type?: string | null
-          status?: string
-          vendor_bill_no?: string | null
-          vendor_id?: string | null
-          show_line_signature?: boolean
-          sign_labels?: string | null
-          updated_at?: string
-          expense_type?: string
-          details?: Json
-          doc_type?: string
-          voucher_status?: string
-          is_draft?: boolean
-          deleted_at?: string | null
-          print_count?: number
-          submission_id?: string | null
-        }
-        Update: {
-          amount?: number
-          bill_ref?: string | null
-          category_id?: string | null
-          client_id?: string
-          created_at?: string
-          created_by?: string | null
-          department?: string | null
-          description?: string | null
-          doc_no?: string | null
-          due_date?: string | null
-          expense_date?: string
-          id?: string
-          less_deduction?: number
-          payee_name?: string | null
-          payment_mode?: string | null
-          procurement_type?: string | null
-          status?: string
-          vendor_bill_no?: string | null
-          vendor_id?: string | null
-          show_line_signature?: boolean
-          sign_labels?: string | null
-          updated_at?: string
-          expense_type?: string
-          details?: Json
-          doc_type?: string
-          voucher_status?: string
-          is_draft?: boolean
-          deleted_at?: string | null
-          print_count?: number
-          submission_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_expenses_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "finance_expense_categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "finance_expenses_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_ho_submissions: {
-        Row: {
-          id: string
-          client_id: string
-          submission_no: string
-          submission_date: string
-          voucher_count: number
-          total_amount: number
-          remarks: string | null
-          category_order: Json
-          status: string
-          verified_at: string | null
-          created_by: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          client_id: string
-          submission_no: string
-          submission_date?: string
-          voucher_count?: number
-          total_amount?: number
-          remarks?: string | null
-          category_order?: Json
-          status?: string
-          verified_at?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          client_id?: string
-          submission_no?: string
-          submission_date?: string
-          voucher_count?: number
-          total_amount?: number
-          remarks?: string | null
-          category_order?: Json
-          status?: string
-          verified_at?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_ho_submissions_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_ho_submission_vouchers: {
-        Row: {
-          id: string
-          client_id: string
-          submission_id: string
-          expense_id: string
-          sl_no: number
-          category_label: string
-          returned_at: string | null
-          return_note: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          client_id: string
-          submission_id: string
-          expense_id: string
-          sl_no: number
-          category_label: string
-          returned_at?: string | null
-          return_note?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          client_id?: string
-          submission_id?: string
-          expense_id?: string
-          sl_no?: number
-          category_label?: string
-          returned_at?: string | null
-          return_note?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_ho_submission_vouchers_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "finance_ho_submission_vouchers_submission_id_fkey"
-            columns: ["submission_id"]
-            isOneToOne: false
-            referencedRelation: "finance_ho_submissions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "finance_ho_submission_vouchers_expense_id_fkey"
-            columns: ["expense_id"]
-            isOneToOne: false
-            referencedRelation: "finance_expenses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_document_sequences: {
-        Row: {
-          client_id: string
-          prefix: string
-          year_month: string
-          next_number: number
-        }
-        Insert: {
-          client_id: string
-          prefix: string
-          year_month: string
-          next_number?: number
-        }
-        Update: {
-          client_id?: string
-          prefix?: string
-          year_month?: string
-          next_number?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_document_sequences_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      finance_fund_receipts: {
-        Row: {
-          amount: number
-          client_id: string
-          created_at: string
-          created_by: string | null
-          id: string
-          receipt_date: string
-          remarks: string | null
-          requisition_id: string
-          updated_at: string
-        }
-        Insert: {
-          amount?: number
-          client_id: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          receipt_date?: string
-          remarks?: string | null
-          requisition_id: string
-          updated_at?: string
-        }
-        Update: {
-          amount?: number
-          client_id?: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          receipt_date?: string
-          remarks?: string | null
-          requisition_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_fund_receipts_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "finance_fund_receipts_requisition_id_fkey"
-            columns: ["requisition_id"]
-            isOneToOne: false
-            referencedRelation: "finance_requisitions"
             referencedColumns: ["id"]
           },
         ]
@@ -2535,6 +2469,114 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "finance_requisitions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_vendor_payments: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          created_by: string | null
+          expense_id: string | null
+          id: string
+          method: string | null
+          payee_name: string | null
+          payment_date: string
+          remarks: string | null
+          updated_at: string
+          vendor_id: string | null
+        }
+        Insert: {
+          amount?: number
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          expense_id?: string | null
+          id?: string
+          method?: string | null
+          payee_name?: string | null
+          payment_date?: string
+          remarks?: string | null
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          expense_id?: string | null
+          id?: string
+          method?: string | null
+          payee_name?: string | null
+          payment_date?: string
+          remarks?: string | null
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_vendor_payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_vendor_payments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "finance_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_vendor_payments_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_vendors: {
+        Row: {
+          client_id: string
+          contact_number: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          contact_number?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          contact_number?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_vendors_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -6714,8 +6756,16 @@ export type Database = {
         Args: { p_hold: boolean; p_qty: number; p_stock_id: string }
         Returns: undefined
       }
+      next_challan_number: {
+        Args: { p_client: string; p_invoice: string }
+        Returns: string
+      }
       next_document_number: {
         Args: { p_client: string; p_doc_type: string }
+        Returns: string
+      }
+      next_finance_document_number: {
+        Args: { p_client: string; p_prefix: string }
         Returns: string
       }
       post_asset_allocation: { Args: { p_id: string }; Returns: undefined }
@@ -6763,6 +6813,15 @@ export type Database = {
           p_stock_status: string
           p_to_location: string
           p_to_warehouse: string
+        }
+        Returns: undefined
+      }
+      update_doc_numbering: {
+        Args: {
+          p_client: string
+          p_doc_type: string
+          p_padding: number
+          p_prefix: string
         }
         Returns: undefined
       }

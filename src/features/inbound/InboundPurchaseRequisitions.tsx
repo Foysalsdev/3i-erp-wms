@@ -16,7 +16,6 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
-import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 
 const PR_STATUS = ['draft', 'pending', 'approved', 'received', 'closed', 'cancelled']
@@ -73,6 +72,7 @@ export function InboundPurchaseRequisitions() {
     try {
       const items = await fetchItems(r.id)
       const lines = items.map((it: any) => ({ name: productLabel(it.product_id), qty: Number(it.qty) || 0 }))
+      const { downloadDocPDF } = await import('@/pdf/DocumentPDF')  // lazy: pdf chunk loads on demand
       await downloadDocPDF({ client: clientName, title: 'Inward Requisition', docNo: r.pr_no ?? '', meta: prMeta(r), lines })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate PDF — check the company logo URL in Settings')

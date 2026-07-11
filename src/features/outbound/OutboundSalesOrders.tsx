@@ -27,7 +27,6 @@ import { SerialScan } from './SerialScan'
 import { ChallanForm } from './DeliveryChallan'
 import { formatNumber, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { fetchStockAvailability } from '@/lib/stockAvailability'
-import { downloadDocPDF } from '@/pdf/DocumentPDF'
 import { TimelinePanel, NotesPanel } from '@/features/masters/components/Panels'
 import { DocVersions } from '@/components/shared/DocVersions'
 import { WorkflowPanel } from './WorkflowPanel'
@@ -208,6 +207,7 @@ export function OutboundSalesOrders() {
   const printSO = async (r: any) => {
     try {
       const lines = await soLines(r)
+      const { downloadDocPDF } = await import('@/pdf/DocumentPDF')  // lazy: pdf chunk loads on demand
       await downloadDocPDF({ client: clientName, title: 'Sales Order', docNo: r.so_no ?? '', meta: soMeta(r), lines, showPrice: true })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate PDF')

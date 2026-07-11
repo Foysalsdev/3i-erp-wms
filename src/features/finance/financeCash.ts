@@ -6,13 +6,18 @@ import { supabase } from '@/lib/supabase'
 
 const amt = (r: any) => Number(r?.amount) || 0
 
+// The Head Office entity finance documents are submitted to. Lives here (not
+// in FinancePDF) so screens can render it without pulling the pdf chunk.
+export const SUBMITTED_TO = '3i Logistics Pvt Limited'
+
 // Procurement's item grid + additional expenses for one expense — shared by
 // every screen that views/edits/prints/duplicates a Procurement-type row.
 export async function fetchExpenseLines(expId: string) {
-  const [{ data: bills }, { data: extra }] = await Promise.all([
+  const [{ data: bills, error: e1 }, { data: extra, error: e2 }] = await Promise.all([
     supabase.from('finance_expense_bills').select('*').eq('expense_id', expId).order('created_at'),
     supabase.from('finance_additional_expenses').select('*').eq('expense_id', expId).order('created_at')
   ])
+  if (e1 || e2) throw new Error(`Could not load expense lines: ${(e1 ?? e2)!.message}`)
   const __items = (bills ?? []).map((b: any) => ({ item_id: b.item_id || '', name: b.bill_ref || '', category_id: b.category_id || '', unit: b.unit || '', qty: b.qty != null ? Number(b.qty) : undefined, rate: b.rate != null ? Number(b.rate) : undefined }))
   const __addl = (extra ?? []).map((a: any) => ({ expense_type: a.expense_type || '', amount: a.amount != null ? Number(a.amount) : undefined }))
   return { __items, __addl }

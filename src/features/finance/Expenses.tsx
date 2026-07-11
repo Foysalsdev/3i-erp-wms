@@ -13,7 +13,6 @@ import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
-import { downloadBillVoucherPDF } from '@/pdf/FinancePDF'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '@/features/reports/export'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 import { StatCard, SectionHeader } from './components/FinanceUI'
@@ -70,14 +69,20 @@ export function Expenses() {
 
   const fetchLines = fetchExpenseLines
 
-  const openView = async (r: any) => setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchLines(r.id)) } : r)
+  const openView = async (r: any) => {
+    try { setViewing(r.expense_type === 'Procurement' ? { ...r, ...(await fetchLines(r.id)) } : r) }
+    catch (e: any) { notify('error', e?.message ?? 'Could not load the expense') }
+  }
   const openEdit = async (r: any) => {
     if (r.submission_id) { notify('error', 'This voucher is submitted to Head Office (locked). Unlock it from Voucher Register first.'); return }
-    const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id) : {}
-    setModal({ record: { ...r, ...extra } })
+    try {
+      const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id) : {}
+      setModal({ record: { ...r, ...extra } })
+    } catch (e: any) { notify('error', e?.message ?? 'Could not load the expense') }
   }
   const duplicate = async (r: any) => {
-    const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id) : {}
+    const extra = r.expense_type === 'Procurement' ? await fetchLines(r.id).catch((e: any) => { notify('error', e?.message ?? 'Could not load the expense'); return null }) : {}
+    if (extra === null) return
     setModal({
       record: {
         expense_type: r.expense_type, department: r.department, payment_mode: r.payment_mode,
@@ -96,6 +101,7 @@ export function Expenses() {
         ...__items.map((it: any) => ({ particulars: it.name || '—', unit: it.unit || undefined, qty: it.qty ?? undefined, rate: it.rate ?? undefined, amount: (Number(it.qty) || 0) * (Number(it.rate) || 0) })),
         ...__addl.map((a: any) => ({ particulars: a.expense_type || 'Additional', amount: Number(a.amount) || 0 }))
       ]
+      const { downloadBillVoucherPDF } = await import('@/pdf/FinancePDF')  // lazy: pdf chunk loads on demand
       await downloadBillVoucherPDF({
         title: r.expense_type || 'Expense',
         billRef: r.doc_no || r.vendor_bill_no || r.id.slice(0, 8).toUpperCase(),

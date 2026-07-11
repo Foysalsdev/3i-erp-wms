@@ -177,6 +177,7 @@ function CountForm({ countType, title, singular, record, clientId, products, war
         await (supabase as any).from('stock_count_items').delete().eq('count_id', record.id)
       } else {
         hdr.doc_no = await nextDocNumber(clientId, 'CNT')
+        if (!hdr.doc_no) throw new Error('Could not generate the count number')
         const { data, error } = await supabase.from('stock_counts' as any).insert(hdr).select('id').single()
         if (error) throw error
         docId = (data as any).id

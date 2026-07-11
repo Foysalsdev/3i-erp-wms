@@ -18,14 +18,16 @@ export interface LineColumn {
 // and a real in-grid totals footer (not a floating pill). Enter on the last
 // row's amount commits the row and opens a fresh one (SAP fast-entry); Tab moves
 // cell to cell. Kept generic so the requisition and voucher grids share it.
-export function LineGrid({
+type CellValue = string | number | null | undefined
+
+export function LineGrid<R extends object>({
   columns, rows, onChange, blank, recompute, totalKey, footerLabel, footerExtra, minRows = 0
 }: {
   columns: LineColumn[]
-  rows: any[]
-  onChange: (rows: any[]) => void
-  blank: () => any
-  recompute?: (row: any, patch: any) => any
+  rows: R[]
+  onChange: (rows: R[]) => void
+  blank: () => R
+  recompute?: (row: R, patch: Partial<R>) => R
   totalKey: string
   footerLabel: string
   footerExtra?: (total: number) => ReactNode
@@ -37,10 +39,13 @@ export function LineGrid({
   // width (fixed cols as-is, flexible cols ~140px) so it scrolls sideways
   // instead. Each '1fr'/'auto' column counts as 140.
   const minWidth = 40 + 36 + columns.reduce((s, c) => s + (c.width.endsWith('px') ? parseInt(c.width) || 120 : 140), 0)
+  // Single indexing point: line rows are flat cell bags; the generic keeps
+  // the caller's row type intact while the grid reads cells dynamically.
+  const cell = (r: R, k: string) => (r as Record<string, CellValue>)[k]
   const totalIndex = columns.findIndex(c => c.key === totalKey)
-  const total = rows.reduce((s, r) => s + (Number(r[totalKey]) || 0), 0)
+  const total = rows.reduce((s, r) => s + (Number(cell(r, totalKey)) || 0), 0)
 
-  const patchRow = (i: number, patch: any) => onChange(rows.map((r, idx) => {
+  const patchRow = (i: number, patch: Partial<R>) => onChange(rows.map((r, idx) => {
     if (idx !== i) return r
     const merged = { ...r, ...patch }
     return recompute ? recompute(merged, patch) : merged
@@ -77,9 +82,9 @@ export function LineGrid({
             <input key={c.key} data-row={i} data-col={ci}
               type={c.type === 'number' ? 'number' : 'text'}
               className={cn('h-8 w-full min-w-0 bg-transparent px-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:bg-brand-500/5', c.align === 'right' && 'text-right tabular-nums')}
-              value={r[c.key] ?? ''}
+              value={cell(r, c.key) ?? ''}
               placeholder={c.placeholder}
-              onChange={e => patchRow(i, { [c.key]: c.type === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value })}
+              onChange={e => patchRow(i, { [c.key]: c.type === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value } as Partial<R>)}
               onKeyDown={c.key === totalKey ? e => onAmountKeyDown(e, i) : undefined} />
           ))}
           <button type="button" className="flex items-center justify-center text-ink-faint hover:text-bad disabled:opacity-25 disabled:hover:text-ink-faint"

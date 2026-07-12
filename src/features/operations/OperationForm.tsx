@@ -48,7 +48,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     setSaving(true)
     try {
       // Build the payload from this document's own fields only.
-      const payload: Record<string, any> = { client_id: clientId }
+      const payload: Record<string, unknown> = { client_id: clientId }
       def.fields.forEach(f => {
         let v = values[f.name]
         if (f.type === 'number') v = v === '' || v == null ? null : Number(v)

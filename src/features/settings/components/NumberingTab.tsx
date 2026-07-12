@@ -11,6 +11,9 @@ import { Spinner } from '@/components/ui/States'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { OPERATIONS } from '@/features/operations/registry'
 import { DOC_CONFIGS } from '@/features/inbound/docConfigs'
+import type { Tables } from '@/types/database.types'
+
+type DocSequence = Tables<'document_sequences'>
 
 // SAP-style number ranges: one row per document type, its prefix and digit
 // padding editable, next number visible. The doc-type catalog is assembled
@@ -25,7 +28,7 @@ const EXTRA_TYPES: Record<string, string> = {
 function docTypeCatalog(): Record<string, string> {
   const out: Record<string, string> = {}
   Object.values(OPERATIONS).forEach(d => { out[d.docType] = d.title })
-  Object.values(DOC_CONFIGS).forEach((d: any) => { out[d.docType] = d.title })
+  Object.values(DOC_CONFIGS).forEach(d => { out[d.docType] = d.title })
   Object.entries(EXTRA_TYPES).forEach(([k, v]) => { out[k] ??= v })
   return out
 }
@@ -54,7 +57,8 @@ export function NumberingTab({ canEdit }: { canEdit: boolean }) {
       .eq('client_id', currentClientId)
       .then(({ data }) => {
         const catalog = docTypeCatalog()
-        const byType: Record<string, any> = Object.fromEntries((data ?? []).map((r: any) => [r.doc_type, r]))
+        const byType: Record<string, Pick<DocSequence, 'prefix' | 'padding' | 'next_number' | 'last_date'>> =
+          Object.fromEntries((data ?? []).map(r => [r.doc_type, r]))
         const todayIso = new Date().toISOString().slice(0, 10)
         const all = new Set([...Object.keys(catalog), ...Object.keys(byType)])
         const out: Row[] = [...all].sort().map(t => {
@@ -87,7 +91,7 @@ export function NumberingTab({ canEdit }: { canEdit: boolean }) {
     setSaving(true)
     try {
       for (const r of rows.filter(x => dirty.has(x.doc_type))) {
-        const { error } = await (supabase as any).rpc('update_doc_numbering', {
+        const { error } = await supabase.rpc('update_doc_numbering', {
           p_client: currentClientId, p_doc_type: r.doc_type, p_prefix: r.prefix, p_padding: r.padding
         })
         if (error) throw new Error(`${r.doc_type}: ${error.message}`)

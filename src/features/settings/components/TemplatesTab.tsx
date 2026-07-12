@@ -4,7 +4,7 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -12,8 +12,10 @@ import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { formatDate } from '@/lib/utils'
+import type { Tables } from '@/types/database.types'
 
 type Channel = 'print' | 'email'
+type Template = Tables<'document_templates'>
 
 // CRUD for print layouts / email templates (public.document_templates).
 export function TemplatesTab({ channel, canEdit, canDelete }: { channel: Channel; canEdit: boolean; canDelete: boolean }) {
@@ -21,20 +23,20 @@ export function TemplatesTab({ channel, canEdit, canDelete }: { channel: Channel
   const { currentClientId } = useAuth()
   const notify = useUI(s => s.notify)
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [editing, setEditing] = useState<Template | null>(null)
+  const [deleting, setDeleting] = useState<Template | null>(null)
 
-  const rows = useMemo(() => (data as any[]).filter(r => r.channel === channel), [data, channel])
+  const rows = useMemo(() => data.filter(r => r.channel === channel), [data, channel])
 
-  const columns = [
-    { key: 'code', header: 'Code', accessor: (r: any) => r.code, sortable: true, className: 'font-medium' },
-    { key: 'name', header: 'Name', accessor: (r: any) => r.name },
-    ...(channel === 'email' ? [{ key: 'subject', header: 'Subject', accessor: (r: any) => r.subject ?? '—' }] : []),
-    { key: 'is_active', header: 'Status', render: (r: any) => <Badge tone={r.is_active ? 'positive' : 'neutral'}>{r.is_active ? 'Active' : 'Inactive'}</Badge> },
-    { key: 'updated_at', header: 'Updated', render: (r: any) => formatDate(r.updated_at) },
+  const columns: Column<Template>[] = [
+    { key: 'code', header: 'Code', accessor: r => r.code, sortable: true, className: 'font-medium' },
+    { key: 'name', header: 'Name', accessor: r => r.name },
+    ...(channel === 'email' ? [{ key: 'subject', header: 'Subject', accessor: (r: Template) => r.subject ?? '—' }] : []),
+    { key: 'is_active', header: 'Status', render: r => <Badge tone={r.is_active ? 'positive' : 'neutral'}>{r.is_active ? 'Active' : 'Inactive'}</Badge> },
+    { key: 'updated_at', header: 'Updated', render: r => formatDate(r.updated_at) },
     ...(canEdit || canDelete ? [{
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: (r: Template) => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(r); setModal(true) } }] : []),
@@ -54,8 +56,8 @@ export function TemplatesTab({ channel, canEdit, canDelete }: { channel: Channel
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {title}</Button>}
       </div>
       <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={canEdit ? (r: any) => { setEditing(r); setModal(true) } : undefined}
+        <DataTable columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
+          onRowClick={canEdit ? (r: Template) => { setEditing(r); setModal(true) } : undefined}
           emptyTitle={`No ${title.toLowerCase()}s yet`} />
       </Card>
 
@@ -67,7 +69,7 @@ export function TemplatesTab({ channel, canEdit, canDelete }: { channel: Channel
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${title} · ${deleting.code}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from('document_templates').delete().eq('id', deleting.id)
+          const res = await supabase.from('document_templates').delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }} />
@@ -75,10 +77,18 @@ export function TemplatesTab({ channel, canEdit, canDelete }: { channel: Channel
   )
 }
 
-function TemplateForm({ channel, record, clientId, notify, onClose, onDone }: any) {
-  const [f, setF] = useState<any>(record ?? { code: '', name: '', subject: '', body: '', is_active: true })
+interface TemplateFormState { code: string; name: string; subject: string; body: string; is_active: boolean }
+
+function TemplateForm({ channel, record, clientId, notify, onClose, onDone }: {
+  channel: Channel; record: Template | null; clientId: string
+  notify: (kind: 'success' | 'error', msg: string) => void
+  onClose: () => void; onDone: () => void
+}) {
+  const [f, setF] = useState<TemplateFormState>(record
+    ? { code: record.code, name: record.name, subject: record.subject ?? '', body: record.body, is_active: record.is_active }
+    : { code: '', name: '', subject: '', body: '', is_active: true })
   const [saving, setSaving] = useState(false)
-  const set = (patch: any) => setF((x: any) => ({ ...x, ...patch }))
+  const set = (patch: Partial<TemplateFormState>) => setF(x => ({ ...x, ...patch }))
   const title = channel === 'email' ? 'Email Template' : 'Print Template'
 
   const save = async () => {
@@ -97,8 +107,8 @@ function TemplateForm({ channel, record, clientId, notify, onClose, onDone }: an
       if (res.error) throw res.error
       notify('success', `${title} ${record ? 'updated' : 'created'}`)
       onDone()
-    } catch (e: any) {
-      notify('error', e?.message ?? `Could not save ${title.toLowerCase()}`)
+    } catch (e) {
+      notify('error', e instanceof Error ? e.message : `Could not save ${title.toLowerCase()}`)
     } finally { setSaving(false) }
   }
 

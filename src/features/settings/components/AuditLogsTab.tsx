@@ -3,12 +3,15 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useCollection } from '@/hooks/useCollection'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatDateTime } from '@/lib/utils'
+import type { Tables, Json } from '@/types/database.types'
+
+type AuditLog = Tables<'audit_logs'>
 
 const actionTone = (a: string) => a === 'INSERT' ? 'positive' : a === 'DELETE' ? 'negative' : 'info'
 
@@ -20,34 +23,34 @@ export function AuditLogsTab() {
   const [q, setQ] = useState('')
   const [action, setAction] = useState('')
   const [table, setTable] = useState('')
-  const [detail, setDetail] = useState<any>(null)
+  const [detail, setDetail] = useState<AuditLog | null>(null)
   const [people, setPeople] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!currentClientId) return
     supabase.from('profiles').select('id, full_name, email').then(({ data }) => {
       const m: Record<string, string> = {}
-      ;(data ?? []).forEach((p: any) => { m[p.id] = p.full_name || p.email || p.id })
+      ;(data ?? []).forEach(p => { m[p.id] = p.full_name || p.email || p.id })
       setPeople(m)
     })
   }, [currentClientId])
 
-  const tables = useMemo(() => Array.from(new Set((data as any[]).map(r => r.table_name))).sort(), [data])
+  const tables = useMemo(() => Array.from(new Set(data.map(r => r.table_name))).sort(), [data])
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return (data as any[]).filter(r =>
+    return data.filter(r =>
       (!action || r.action === action) &&
       (!table || r.table_name === table) &&
       (!t || String(r.table_name).toLowerCase().includes(t) || String(r.record_id).toLowerCase().includes(t)))
   }, [data, q, action, table])
 
-  const columns = [
-    { key: 'changed_at', header: 'When', render: (r: any) => formatDateTime(r.changed_at), sortable: true },
-    { key: 'table_name', header: 'Table', accessor: (r: any) => r.table_name, className: 'font-medium' },
-    { key: 'action', header: 'Action', render: (r: any) => <Badge tone={actionTone(r.action)}>{r.action}</Badge> },
-    { key: 'record_id', header: 'Record', render: (r: any) => <span className="font-mono text-xs">{String(r.record_id).slice(0, 8)}</span> },
-    { key: 'changed_by', header: 'By', render: (r: any) => people[r.changed_by] ?? (r.changed_by ? String(r.changed_by).slice(0, 8) : 'system') }
+  const columns: Column<AuditLog>[] = [
+    { key: 'changed_at', header: 'When', render: r => formatDateTime(r.changed_at), sortable: true },
+    { key: 'table_name', header: 'Table', accessor: r => r.table_name, className: 'font-medium' },
+    { key: 'action', header: 'Action', render: r => <Badge tone={actionTone(r.action)}>{r.action}</Badge> },
+    { key: 'record_id', header: 'Record', render: r => <span className="font-mono text-xs">{String(r.record_id).slice(0, 8)}</span> },
+    { key: 'changed_by', header: 'By', render: r => people[r.changed_by ?? ''] ?? (r.changed_by ? String(r.changed_by).slice(0, 8) : 'system') }
   ]
 
   return (
@@ -68,20 +71,20 @@ export function AuditLogsTab() {
       </div>
 
       <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
-          onRowClick={(r: any) => setDetail(r)} emptyTitle="No audit entries" />
+        <DataTable columns={columns} rows={rows} loading={loading} rowKey={r => String(r.id)}
+          onRowClick={r => setDetail(r)} emptyTitle="No audit entries" />
       </Card>
 
-      {detail && <AuditDetail row={detail} who={people[detail.changed_by]} onClose={() => setDetail(null)} />}
+      {detail && <AuditDetail row={detail} who={people[detail.changed_by ?? '']} onClose={() => setDetail(null)} />}
     </div>
   )
 }
 
-function AuditDetail({ row, who, onClose }: { row: any; who?: string; onClose: () => void }) {
-  const oldD = (row.old_data ?? {}) as Record<string, any>
-  const newD = (row.new_data ?? {}) as Record<string, any>
+function AuditDetail({ row, who, onClose }: { row: AuditLog; who?: string; onClose: () => void }) {
+  const oldD = (row.old_data ?? {}) as Record<string, Json>
+  const newD = (row.new_data ?? {}) as Record<string, Json>
   const keys = Array.from(new Set([...Object.keys(oldD), ...Object.keys(newD)])).sort()
-  const fmt = (v: any) => v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v)
+  const fmt = (v: Json | undefined) => v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v)
   const changed = (k: string) => row.action === 'UPDATE' && JSON.stringify(oldD[k]) !== JSON.stringify(newD[k])
 
   return (

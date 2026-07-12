@@ -22,7 +22,7 @@ const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').r
 
 // Manage custom roles and grant access per-permission (module × action matrix).
 export function RoleManagement() {
-  const { isPlatformAdmin } = useAuth()
+  const canManage = useAuth(s => s.isPlatformAdmin || s.permissions.has('hr.role.manage'))
   const notify = useUI(s => s.notify)
   const [loading, setLoading] = useState(true)
   const [roles, setRoles] = useState<Role[]>([])
@@ -62,7 +62,7 @@ export function RoleManagement() {
     { key: 'description', header: 'Description', accessor: r => r.description || '—' },
     { key: 'type', header: 'Type', render: r => <Badge tone={r.is_system ? 'neutral' : 'info'}>{r.is_system ? 'System' : 'Custom'}</Badge> },
     { key: 'perms', header: 'Permissions', className: 'text-right', accessor: r => String((rolePerms[r.id]?.size ?? 0)) },
-    ...(isPlatformAdmin ? [{
+    ...(canManage ? [{
       key: '__actions', header: '', className: 'w-px whitespace-nowrap', render: (r: Role) => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
@@ -88,11 +88,15 @@ export function RoleManagement() {
         const { error } = await supabase.from('roles').update({ name: editing.name.trim(), description: editing.description || null }).eq('id', roleId!)
         if (error) throw error
       }
-      // Sync permissions: replace the role's set with the selected one.
+      // Sync permissions atomically server-side. The old client-side delete+insert
+      // was two round trips: a failed/blocked delete left the old rows in place and
+      // the re-insert collided on role_permissions_pkey ("duplicate key"). One
+      // race-safe RPC (which also enforces hr.role.manage) replaces the whole set.
       if (!roleId) throw new Error('Role id missing after save')
-      await supabase.from('role_permissions').delete().eq('role_id', roleId)
-      const rows = Array.from(sel).map(pid => ({ role_id: roleId, permission_id: pid }))
-      if (rows.length) { const { error } = await supabase.from('role_permissions').insert(rows); if (error) throw error }
+      const { error: permErr } = await (supabase as any).rpc('set_role_permissions', {
+        p_role_id: roleId, p_permission_ids: Array.from(sel)
+      })
+      if (permErr) throw permErr
       notify('success', `Role "${editing.name}" saved`); setEditing(null); load()
     } catch (e: any) { notify('error', e?.message ?? 'Could not save role') } finally { setBusy(false) }
   }
@@ -102,10 +106,10 @@ export function RoleManagement() {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-sm text-ink-soft">{roles.length} roles</span>
-        {isPlatformAdmin && <Button className="ml-auto" icon="add" onClick={() => { setEditing({ __new: true, name: '', description: '' }); setSel(new Set()) }}>Add Role</Button>}
+        {canManage && <Button className="ml-auto" icon="add" onClick={() => { setEditing({ __new: true, name: '', description: '' }); setSel(new Set()) }}>Add Role</Button>}
       </div>
       <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={roles} rowKey={r => r.id} onRowClick={isPlatformAdmin ? openEdit : undefined} emptyTitle="No roles" />
+        <DataTable columns={columns} rows={roles} rowKey={r => r.id} onRowClick={canManage ? openEdit : undefined} emptyTitle="No roles" />
       </Card>
 
       {editing && (

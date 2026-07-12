@@ -8,7 +8,6 @@ import { OperationList } from '@/features/operations/OperationList'
 import { OutboundSalesOrders } from './OutboundSalesOrders'
 import { SalesOrderApprovals } from './SalesOrderApprovals'
 import { DeliveryChallan } from './DeliveryChallan'
-import { DispatchBoard } from './DispatchBoard'
 
 export default function OutboundPage() {
   const { tab } = useParams()
@@ -34,7 +33,6 @@ export default function OutboundPage() {
       {tabs.length > 1 && <Tabs tabs={tabs} active={active} onChange={k => nav(`/outbound/${k}`)} />}
       {active === 'sales-order' && <OutboundSalesOrders />}
       {active === 'approvals' && approvalAccess && <SalesOrderApprovals />}
-      {active === 'board' && <DispatchBoard />}
       {active === 'delivery-challan' && <DeliveryChallan />}
       {active === 'gate-pass' && <OperationList def={OPERATIONS['gate-pass']} />}
       {active === 'pod-upload' && <OperationList def={OPERATIONS['pod-upload']} />}

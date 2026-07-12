@@ -10,15 +10,21 @@
      gray ONLY for hover states, chips and table headers, which would vanish
      on pure white. Separation otherwise comes from hairline borders. */
   --bg-sunken: 246 246 245; --surface: 255 255 255; --line: 228 228 226;
-  --ink: 0 0 0; --ink-soft: 82 85 90; --ink-faint: 140 143 148;
-  --sidebar: 255 255 255; --sidebar-fg: 0 0 0; --sidebar-muted: 110 113 119;
+  /* No grey text anywhere: ink / ink-soft / ink-faint are ALL literal pure
+     black. "Soft" text is softer in weight (font-normal vs font-semibold) or
+     smaller in size, never a lighter shade of the color — a blended grey
+     renders as a muddy, blurry mid-tone on cheap/low-res warehouse screens,
+     while pure black stays crisp at any resolution. */
+  --ink: 0 0 0; --ink-soft: 0 0 0; --ink-faint: 0 0 0;
+  --sidebar: 255 255 255; --sidebar-fg: 0 0 0; --sidebar-muted: 0 0 0;
   --sidebar-active: 253 246 230; --sidebar-active-fg: 124 83 0;
 }
 .dark {
   color-scheme: dark;
   --bg-sunken: 20 21 24; --surface: 28 30 34; --line: 46 48 54;
-  --ink: 233 234 238; --ink-soft: 159 162 169; --ink-faint: 115 118 125;
-  --sidebar: 23 24 28; --sidebar-fg: 233 234 238; --sidebar-muted: 145 148 155;
+  /* Dark mode's "pure black" equivalent is pure white — same rule, inverted. */
+  --ink: 255 255 255; --ink-soft: 255 255 255; --ink-faint: 255 255 255;
+  --sidebar: 23 24 28; --sidebar-fg: 255 255 255; --sidebar-muted: 255 255 255;
   --sidebar-active: 50 40 16; --sidebar-active-fg: 246 198 84;
 }
 
@@ -37,12 +43,14 @@ h1,h2,h3,h4 { @apply font-sans font-semibold tracking-tight; }
 
 @layer components {
   .fiori-input {
-    /* Neutral hairline fields; the brand colour appears only on focus.
+    /* High-contrast field borders: operators on warehouse floors / cheap
+       panels couldn't see the old hairline grey. Near-black in light mode,
+       clearly visible in dark. Brand colour still marks focus.
        16px on mobile prevents iOS Safari from auto-zooming on focus; 14px from sm up. */
-    @apply w-full rounded-lg border border-surface-line bg-surface px-3.5 py-2.5 text-base sm:text-sm text-ink
+    @apply w-full rounded-lg border border-ink/60 bg-surface px-3.5 py-2.5 text-base sm:text-sm text-ink
            placeholder:text-ink-faint outline-none transition-colors
-           hover:border-ink-faint/40 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
-           disabled:bg-surface-sunken disabled:text-ink-faint;
+           hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
+           disabled:bg-surface-sunken disabled:text-ink-faint disabled:border-surface-line;
   }
   .fiori-label { @apply mb-1.5 block text-xs font-semibold text-ink-soft; }
   /* shadow-card (not shadow-soft) gives every card real, if quiet, depth —

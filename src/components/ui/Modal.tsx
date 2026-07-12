@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils'
 export function Modal({ open, onClose, title, children, size = 'md' }:
   { open: boolean; onClose: () => void; title: string; children: React.ReactNode; size?: 'md' | 'lg' | 'xl' }) {
   if (!open) return null
-  const w = { md: 'max-w-xl', lg: 'max-w-4xl', xl: 'max-w-6xl' }[size]
+  // Wide by design: operators asked to see more fields without scrolling, so
+  // lg/xl stretch close to the full page width instead of a narrow column.
+  const w = { md: 'max-w-2xl', lg: 'max-w-6xl', xl: 'max-w-[1440px]' }[size]
   // Portal to <body> so the modal escapes any ancestor stacking context /
   // containing block (transforms, filters, sticky headers) — otherwise a modal
   // opened from inside the Topbar (My Profile) can get trapped behind the page.

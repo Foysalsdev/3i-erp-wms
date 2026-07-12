@@ -980,6 +980,7 @@ export type Database = {
           driver_name: string | null
           driver_phone: string | null
           id: string
+          invoice_id: string | null
           invoice_no: string | null
           lock_no: string | null
           po_no: string | null
@@ -1021,6 +1022,7 @@ export type Database = {
           driver_name?: string | null
           driver_phone?: string | null
           id?: string
+          invoice_id?: string | null
           invoice_no?: string | null
           lock_no?: string | null
           po_no?: string | null
@@ -1062,6 +1064,7 @@ export type Database = {
           driver_name?: string | null
           driver_phone?: string | null
           id?: string
+          invoice_id?: string | null
           invoice_no?: string | null
           lock_no?: string | null
           po_no?: string | null
@@ -1124,6 +1127,13 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_challans_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "so_invoices"
             referencedColumns: ["id"]
           },
           {
@@ -5348,6 +5358,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           customer_id: string | null
+          delivered_qty: number
           deposited_amount: number
           deposited_date: string | null
           id: string
@@ -5382,6 +5393,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          delivered_qty?: number
           deposited_amount?: number
           deposited_date?: string | null
           id?: string
@@ -5416,6 +5428,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          delivered_qty?: number
           deposited_amount?: number
           deposited_date?: string | null
           id?: string
@@ -5784,6 +5797,119 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      so_invoice_items: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          invoice_id: string
+          product_id: string | null
+          qty: number
+          so_item_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          invoice_id: string
+          product_id?: string | null
+          qty?: number
+          so_item_id: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          product_id?: string | null
+          qty?: number
+          so_item_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "so_invoice_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "so_invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "so_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "so_invoice_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "so_invoice_items_so_item_id_fkey"
+            columns: ["so_item_id"]
+            isOneToOne: false
+            referencedRelation: "sales_order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      so_invoices: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          invoice_date: string
+          invoice_no: string
+          remarks: string | null
+          so_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_date?: string
+          invoice_no: string
+          remarks?: string | null
+          so_id: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_date?: string
+          invoice_no?: string
+          remarks?: string | null
+          so_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "so_invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "so_invoices_so_id_fkey"
+            columns: ["so_id"]
+            isOneToOne: false
+            referencedRelation: "sales_orders"
             referencedColumns: ["id"]
           },
         ]
@@ -6814,6 +6940,10 @@ export type Database = {
           p_to_location: string
           p_to_warehouse: string
         }
+        Returns: undefined
+      }
+      set_role_permissions: {
+        Args: { p_permission_ids: string[]; p_role_id: string }
         Returns: undefined
       }
       update_doc_numbering: {

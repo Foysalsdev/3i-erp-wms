@@ -86,7 +86,7 @@ export const PENDING_RULES: PendingRule[] = [
     key: 'challan-draft', icon: 'receipt', label: 'Challans to issue', owner: 'Warehouse', perms: ['outbound.post', 'outbound.approve'], slaDays: 1,
     fetch: c => supabase.from('delivery_challans').select('challan_no,challan_date').eq('client_id', c)
       .eq('status', 'draft').order('challan_date').limit(50).then(({ data }) => (data ?? []) as PendingRow[]),
-    docNo: r => r.challan_no as string, matter: () => 'Issue challan — stock out + gate pass',
+    docNo: r => r.challan_no as string, matter: () => 'Confirm dispatch — deduct stock + gate pass',
     route: r => `/outbound/delivery-challan?q=${encodeURIComponent(r.challan_no as string)}`, ageFrom: r => r.challan_date as string | null
   },
   {

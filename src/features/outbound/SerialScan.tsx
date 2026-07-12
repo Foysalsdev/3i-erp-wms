@@ -125,7 +125,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
   // The order must clear approval before the warehouse commits stock/labour to
   // it — picking is blocked here too, not just via the "Approve" action menu,
   // since this stage can also be opened directly from the order's Scan tab.
-  const needsApproval = soRow && ['draft', 'pending'].includes(soRow.status)
+  const needsApproval = soRow && ['draft', 'pending', 'rejected'].includes(soRow.status)
   if (needsApproval) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center dark:border-amber-500/30 dark:bg-amber-500/10">

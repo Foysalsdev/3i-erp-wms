@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
+
+type SerialJoined = Tables<'serial_numbers'> & {
+  products: Pick<Tables<'products'>, 'name' | 'material_code'> | null
+  warehouses: Pick<Tables<'warehouses'>, 'code'> | null
+}
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -17,10 +23,10 @@ export function SerialsTab() {
   const clientId = useAuth(s => s.currentClientId)
   const isAdmin = useAuth(s => s.isPlatformAdmin)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<SerialJoined[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useUrlSearch()
-  const [deleting, setDeleting] = useState<any>(null)
+  const [deleting, setDeleting] = useState<SerialJoined | null>(null)
 
   const load = () => {
     if (!clientId) return
@@ -40,20 +46,20 @@ export function SerialsTab() {
     return rows.filter(r => [r.serial_no, r.products?.name, r.products?.material_code].some(v => String(v ?? '').toLowerCase().includes(t)))
   }, [rows, q])
 
-  const columns = [
-    { key: 'serial', header: 'Serial No', accessor: (r: any) => r.serial_no, sortable: true, className: 'font-medium' },
-    { key: 'code', header: 'Material', accessor: (r: any) => r.products?.material_code },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name },
-    { key: 'wh', header: 'Warehouse', accessor: (r: any) => r.warehouses?.code ?? '—' },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone[r.status]}>{r.status}</Badge> },
-    { key: 'wstart', header: 'Warranty Start', render: (r: any) => formatDate(r.warranty_start) },
-    { key: 'wend', header: 'Warranty End', render: (r: any) => formatDate(r.warranty_end) }
+  const columns: Column<SerialJoined>[] = [
+    { key: 'serial', header: 'Serial No', accessor: r => r.serial_no, sortable: true, className: 'font-medium' },
+    { key: 'code', header: 'Material', accessor: r => r.products?.material_code },
+    { key: 'name', header: 'Product', accessor: r => r.products?.name },
+    { key: 'wh', header: 'Warehouse', accessor: r => r.warehouses?.code ?? '—' },
+    { key: 'status', header: 'Status', render: r => <Badge tone={tone[r.status]}>{r.status}</Badge> },
+    { key: 'wstart', header: 'Warranty Start', render: r => formatDate(r.warranty_start) },
+    { key: 'wend', header: 'Warranty End', render: r => formatDate(r.warranty_end) }
   ]
 
   // Delete is restricted to platform admins and requires password confirmation.
-  const actionCol = {
+  const actionCol: Column<SerialJoined> = {
     key: '__actions', header: '', className: 'w-px whitespace-nowrap',
-    render: (r: any) => (
+    render: r => (
       <div className="flex justify-end" onClick={e => e.stopPropagation()}>
         <ActionMenu items={[{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }]} />
       </div>
@@ -65,12 +71,12 @@ export function SerialsTab() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search serial / product…" /></div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={allColumns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No serial numbers tracked yet" />
+        <DataTable fill loading={loading} columns={allColumns} rows={filtered} rowKey={r => r.id} emptyTitle="No serial numbers tracked yet" />
       </Card>
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `serial · ${deleting.serial_no}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from('serial_numbers').delete().eq('id', deleting.id)
+          const res = await supabase.from('serial_numbers').delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); load() }
           return res
         }} />

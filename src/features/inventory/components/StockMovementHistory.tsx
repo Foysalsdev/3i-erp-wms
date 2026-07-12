@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
+
+type LedgerJoined = Tables<'inventory_ledger'> & {
+  products: Pick<Tables<'products'>, 'name' | 'material_code'> | null
+  warehouses: Pick<Tables<'warehouses'>, 'code'> | null
+}
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Spinner } from '@/components/ui/States'
@@ -15,7 +21,7 @@ import { movementLabel } from '@/lib/movements'
 export function StockMovementHistory({ movementTypes, emptyTitle }: { movementTypes: string[]; emptyTitle: string }) {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<LedgerJoined[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
 
@@ -37,16 +43,16 @@ export function StockMovementHistory({ movementTypes, emptyTitle }: { movementTy
     return rows.filter(r => [r.products?.name, r.products?.material_code, r.reference_no, r.remarks].some(v => String(v ?? '').toLowerCase().includes(t)))
   }, [rows, q])
 
-  const columns = [
-    { key: 'date', header: 'Date', render: (r: any) => formatDateTime(r.created_at), sortable: true, accessor: (r: any) => r.created_at },
-    { key: 'type', header: 'Movement', render: (r: any) => <Badge tone="info">{movementLabel(r.movement_type)}</Badge> },
-    { key: 'code', header: 'Material', accessor: (r: any) => r.products?.material_code, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name },
-    { key: 'wh', header: 'WH', accessor: (r: any) => r.warehouses?.code },
-    { key: 'in', header: 'In', render: (r: any) => r.qty_in > 0 ? <span className="text-green-600">+{formatNumber(r.qty_in)}</span> : '—', className: 'text-right' },
-    { key: 'out', header: 'Out', render: (r: any) => r.qty_out > 0 ? <span className="text-orange-600">−{formatNumber(r.qty_out)}</span> : '—', className: 'text-right' },
-    { key: 'bal', header: 'Balance', accessor: (r: any) => r.balance_after, className: 'text-right font-medium' },
-    { key: 'ref', header: 'Reference', accessor: (r: any) => r.reference_no ?? '—' }
+  const columns: Column<LedgerJoined>[] = [
+    { key: 'date', header: 'Date', render: r => formatDateTime(r.created_at), sortable: true, accessor: r => r.created_at },
+    { key: 'type', header: 'Movement', render: r => <Badge tone="info">{movementLabel(r.movement_type)}</Badge> },
+    { key: 'code', header: 'Material', accessor: r => r.products?.material_code, className: 'font-medium' },
+    { key: 'name', header: 'Product', accessor: r => r.products?.name },
+    { key: 'wh', header: 'WH', accessor: r => r.warehouses?.code },
+    { key: 'in', header: 'In', render: r => r.qty_in > 0 ? <span className="text-green-600">+{formatNumber(r.qty_in)}</span> : '—', className: 'text-right' },
+    { key: 'out', header: 'Out', render: r => r.qty_out > 0 ? <span className="text-orange-600">−{formatNumber(r.qty_out)}</span> : '—', className: 'text-right' },
+    { key: 'bal', header: 'Balance', accessor: r => r.balance_after, className: 'text-right font-medium' },
+    { key: 'ref', header: 'Reference', accessor: r => r.reference_no ?? '—' }
   ]
 
   if (loading) return <Spinner label="Loading movements…" />
@@ -54,7 +60,7 @@ export function StockMovementHistory({ movementTypes, emptyTitle }: { movementTy
     <div className="space-y-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search movements…" /></div>
       <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={filtered} rowKey={(r: any) => String(r.id)} emptyTitle={emptyTitle} />
+        <DataTable columns={columns} rows={filtered} rowKey={r => String(r.id)} emptyTitle={emptyTitle} />
       </Card>
     </div>
   )

@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
+
+type SnapJoined = Tables<'inventory_snapshots'> & {
+  products: Pick<Tables<'products'>, 'name' | 'material_code'> | null
+  warehouses: Pick<Tables<'warehouses'>, 'code'> | null
+}
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { formatNumber, formatDate } from '@/lib/utils'
 
@@ -11,7 +17,7 @@ import { formatNumber, formatDate } from '@/lib/utils'
 export function SnapshotTab() {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<SnapJoined[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
 
@@ -41,20 +47,20 @@ export function SnapshotTab() {
     setBusy(false); load()
   }
 
-  const columns = [
-    { key: 'date', header: 'Snapshot Date', render: (r: any) => formatDate(r.snapshot_date), sortable: true, accessor: (r: any) => r.snapshot_date },
-    { key: 'code', header: 'Material', accessor: (r: any) => r.products?.material_code, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name },
-    { key: 'wh', header: 'Warehouse', accessor: (r: any) => r.warehouses?.code },
-    { key: 'status', header: 'Condition', accessor: (r: any) => r.stock_status },
-    { key: 'qty', header: 'Quantity', render: (r: any) => formatNumber(r.quantity), className: 'text-right font-medium' }
+  const columns: Column<SnapJoined>[] = [
+    { key: 'date', header: 'Snapshot Date', render: r => formatDate(r.snapshot_date), sortable: true, accessor: r => r.snapshot_date },
+    { key: 'code', header: 'Material', accessor: r => r.products?.material_code, className: 'font-medium' },
+    { key: 'name', header: 'Product', accessor: r => r.products?.name },
+    { key: 'wh', header: 'Warehouse', accessor: r => r.warehouses?.code },
+    { key: 'status', header: 'Condition', accessor: r => r.stock_status },
+    { key: 'qty', header: 'Quantity', render: r => formatNumber(r.quantity), className: 'text-right font-medium' }
   ]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex justify-end"><Button icon="photo_camera" loading={busy} onClick={capture}>Capture Snapshot</Button></div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={columns} rows={rows} rowKey={(r: any) => r.id}
+        <DataTable fill loading={loading} columns={columns} rows={rows} rowKey={r => r.id}
           emptyIcon="photo_camera" emptyTitle="No snapshots yet" emptyHint="Capture a point-in-time view of current stock for audit & reconciliation." />
       </Card>
     </div>

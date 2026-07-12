@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Button } from '@/components/ui/Button'
@@ -33,12 +34,12 @@ export function TransferTab() {
 function TransferModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [products, setProducts] = useState<any[]>([])
-  const [warehouses, setWarehouses] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
+  const [products, setProducts] = useState<Pick<Tables<'products'>, 'id' | 'name' | 'material_code'>[]>([])
+  const [warehouses, setWarehouses] = useState<Pick<Tables<'warehouses'>, 'id' | 'name' | 'code'>[]>([])
+  const [locations, setLocations] = useState<Pick<Tables<'locations'>, 'id' | 'location_code' | 'warehouse_id'>[]>([])
   const [saving, setSaving] = useState(false)
-  const [f, setF] = useState<any>({ stock_status: 'good', qty: '' })
-  const set = (patch: any) => setF((x: any) => ({ ...x, ...patch }))
+  const [f, setF] = useState<{ product_id?: string; from_warehouse_id?: string; from_location_id?: string; to_warehouse_id?: string; to_location_id?: string; stock_status: string; qty: string; remarks?: string }>({ stock_status: 'good', qty: '' })
+  const set = (patch: Partial<typeof f>) => setF(x => ({ ...x, ...patch }))
 
   useEffect(() => {
     if (!clientId) return
@@ -64,12 +65,14 @@ function TransferModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
       const ref = `Transfer ${prod?.material_code ?? ''}`.trim()
       // Both legs post in ONE database transaction — a half-done transfer
       // (deducted from source, never added to destination) cannot happen.
-      const { error } = await (supabase as any).rpc('post_stock_transfer', {
-        p_client: clientId, p_product: f.product_id,
-        p_from_warehouse: f.from_warehouse_id, p_from_location: f.from_location_id || null,
-        p_to_warehouse: f.to_warehouse_id, p_to_location: f.to_location_id || null,
+      const { error } = await supabase.rpc('post_stock_transfer', {
+        p_client: clientId!, p_product: f.product_id!,
+        // the SQL function takes nullable locations, but typegen marks
+        // non-default args with their base type — hence the null casts
+        p_from_warehouse: f.from_warehouse_id!, p_from_location: (f.from_location_id || null) as unknown as string,
+        p_to_warehouse: f.to_warehouse_id!, p_to_location: (f.to_location_id || null) as unknown as string,
         p_stock_status: f.stock_status, p_qty: qty,
-        p_reference_no: ref, p_remarks: f.remarks || null
+        p_reference_no: ref, p_remarks: f.remarks || undefined
       })
       if (error) throw error
       notify('success', 'Stock transfer posted')

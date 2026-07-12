@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
-import { OP_RELATIONS, type OpDef } from './registry'
+import { OP_RELATIONS, type OpDef, type OpRecord } from './registry'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Button } from '@/components/ui/Button'
@@ -13,7 +13,7 @@ import { ImageUpload } from '@/features/masters/components/ImageUpload'
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function OperationForm({ def, record, onDone, onCancel }:
-  { def: OpDef; record?: any; onDone: () => void; onCancel: () => void }) {
+  { def: OpDef; record?: OpRecord | null; onDone: () => void; onCancel: () => void }) {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
   const [saving, setSaving] = useState(false)
@@ -34,7 +34,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
       const { data } = await supabase.from(rel.table as any).select(cols).eq('client_id', clientId)
       setRelOptions(o => ({
         ...o,
-        [f.name]: (data ?? []).map((r: any) => ({
+        [f.name]: ((data ?? []) as unknown as Record<string, string>[]).map(r => ({
           id: r.id, label: rel.name ? `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` : r[rel.code]
         }))
       }))
@@ -43,7 +43,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     })
   }, [def, clientId, record, setValue])
 
-  const submit = async (values: any) => {
+  const submit = async (values: Record<string, unknown>) => {
     if (!clientId) { notify('error', 'No client selected. Pick a client first.'); return }
     setSaving(true)
     try {
@@ -83,14 +83,14 @@ export function OperationForm({ def, record, onDone, onCancel }:
       {record && (
         <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm">
           <span className="text-ink-faint">Document No: </span>
-          <span className="font-semibold text-ink">{record[def.numberField]}</span>
+          <span className="font-semibold text-ink">{String(record[def.numberField] ?? '')}</span>
         </div>
       )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {def.fields.map(f => {
           if (f.type === 'image')
             return <div key={f.name} className={f.span2 ? 'sm:col-span-2' : ''}>
-              <ImageUpload label={f.label} value={watch(f.name)} onChange={v => setValue(f.name, v)} />
+              <ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} />
             </div>
           const opts = f.relation ? (relOptions[f.name] ?? [])
             : (f.options?.map(o => ({ id: o, label: o })) ?? [])

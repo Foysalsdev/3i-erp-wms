@@ -43,9 +43,9 @@ export function OperationList({ def }: { def: OpDef }) {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  const [viewing, setViewing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [editing, setEditing] = useState<OpRecord | null>(null)
+  const [viewing, setViewing] = useState<OpRecord | null>(null)
+  const [deleting, setDeleting] = useState<OpRecord | null>(null)
   const [rel, setRel] = useState<Record<string, Record<string, string>>>({})
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -106,7 +106,7 @@ export function OperationList({ def }: { def: OpDef }) {
     ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(row) }] : [])
   ]
 
-  const actionCol: Column<any> = {
+  const actionCol: Column<OpRecord> = {
     key: '__actions', header: '', className: 'w-px whitespace-nowrap',
     render: (row: OpRecord) => (
       <div className="flex justify-end" onClick={e => e.stopPropagation()}>
@@ -208,7 +208,7 @@ export function OperationList({ def }: { def: OpDef }) {
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{def.singular} No</p>
-                <p className="mt-0.5 text-sm font-medium text-ink break-words">{viewing[def.numberField] ?? '—'}</p>
+                <p className="mt-0.5 text-sm font-medium text-ink break-words">{viewing[def.numberField] != null ? String(viewing[def.numberField]) : '—'}</p>
               </div>
               {def.fields.filter(f => f.type !== 'image').map(f => (
                 <div key={f.name} className={'min-w-0' + (f.type === 'textarea' ? ' col-span-2 sm:col-span-3' : '')}>
@@ -223,13 +223,13 @@ export function OperationList({ def }: { def: OpDef }) {
             {def.fields.filter(f => f.type === 'image' && viewing[f.name]).map(f => (
               <div key={f.name}>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">{f.label}</p>
-                <img src={viewing[f.name]} alt={f.label} className="max-h-72 rounded-lg border border-surface-line object-contain" />
+                <img src={viewing[f.name] as string} alt={f.label} className="max-h-72 rounded-lg border border-surface-line object-contain" />
               </div>
             ))}
 
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Activity & stock movement</p>
-              <TrailPanel table={def.table} recordId={viewing.id} referenceNo={viewing[def.numberField]} />
+              <TrailPanel table={def.table} recordId={viewing.id} referenceNo={viewing[def.numberField] as string | null | undefined} />
             </div>
 
             <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
@@ -244,7 +244,7 @@ export function OperationList({ def }: { def: OpDef }) {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${def.singular} · ${deleting[def.numberField]}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from(def.table as any).delete().eq('id', deleting.id)
+          const res = await supabase.from(def.table as any).delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }}

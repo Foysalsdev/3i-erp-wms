@@ -58,7 +58,7 @@ export interface OpDef {
   statuses: StatusDef[]
   openStatuses: string[] // statuses counted as pending/open on the dashboard
   fields: OpFieldDef[]
-  listColumns: Column<any>[]
+  listColumns: Column<OpRecord>[]
   searchFields: string[]
   // When set, the list shows a Print action that renders the header via the
   // matching PDF layout. 'gatepass' uses the security gate-pass template.

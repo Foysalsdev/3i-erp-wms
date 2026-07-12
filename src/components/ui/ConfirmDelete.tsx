@@ -14,7 +14,7 @@ export function ConfirmDelete({ open, onClose, name, onConfirm, onUndo }: {
   open: boolean
   onClose: () => void
   name?: string
-  onConfirm: () => Promise<{ error?: any } | void>
+  onConfirm: () => Promise<{ error?: { code?: string; message?: string } | null } | void>
   onUndo?: () => Promise<void> | void
 }) {
   const email = useAuth(s => s.session?.user.email)
@@ -36,7 +36,7 @@ export function ConfirmDelete({ open, onClose, name, onConfirm, onUndo }: {
 
       const res = await onConfirm()
       if (res && res.error) {
-        const err: any = res.error
+        const err = res.error
         // Postgres 23503 = foreign-key violation: the row is still referenced by
         // linked documents (e.g. a challan's gate pass / POD, or an SO's challan).
         // Show a plain-language reason instead of the raw constraint message.

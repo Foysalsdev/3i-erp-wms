@@ -23,7 +23,7 @@ export interface Column<T> {
   // opt a specific one out (e.g. a computed column that shouldn't be sorted).
   sortable?: boolean
 }
-const isSortable = (c: Column<any>) => !!c.accessor && c.sortable !== false
+const isSortable = <T,>(c: Column<T>) => !!c.accessor && c.sortable !== false
 interface Selection {
   selected: Set<string>
   onToggle: (key: string) => void

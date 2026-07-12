@@ -30,12 +30,12 @@ export function SelectBox({ value, onChange, options, children, placeholder = 'S
     // Parse <option value="x">Label</option> children.
     const out: SelectOption[] = []
     // Flatten string/number children (e.g. `{b} days` is an array) into a label.
-    const toLabel = (c: any): string => Array.isArray(c)
+    const toLabel = (c: ReactNode): string => Array.isArray(c)
       ? c.map(toLabel).join('')
       : (typeof c === 'string' || typeof c === 'number') ? String(c) : ''
     Children.forEach(children, c => {
       if (isValidElement(c) && (c.type === 'option')) {
-        const p: any = c.props
+        const p = c.props as { value?: string; children?: ReactNode }
         const lbl = toLabel(p.children).trim()
         out.push({ value: String(p.value ?? ''), label: lbl || String(p.value ?? '') })
       }

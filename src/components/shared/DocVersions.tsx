@@ -4,19 +4,22 @@ import { useTimeline } from '@/hooks/useTimeline'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
 import { formatDateTime } from '@/lib/utils'
+import type { Tables, Json } from '@/types/database.types'
 
 // WES principle #8 "Version Controlled": every save of a document is preserved
 // as an immutable, numbered version (reconstructed from audit_logs, which stores
 // a full row snapshot on every write — nothing is ever overwritten). Old
 // versions stay viewable for audit.
 
+type AuditLog = Tables<'audit_logs'>
+
 const SKIP = new Set(['updated_at', 'created_at', 'id', 'client_id', 'created_by'])
-const show = (v: any) => v === null || v === undefined || v === '' ? '—' : String(v)
+const show = (v: Json | undefined) => v === null || v === undefined || v === '' ? '—' : String(v)
 const label = (f: string) => f.replace(/_id$/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
-function snapshot(row: any): Record<string, any> {
-  const data = (row.action === 'DELETE' ? row.old_data : row.new_data) || {}
-  const out: Record<string, any> = {}
+function snapshot(row: AuditLog): Record<string, Json> {
+  const data = ((row.action === 'DELETE' ? row.old_data : row.new_data) || {}) as Record<string, Json>
+  const out: Record<string, Json> = {}
   Object.keys(data).forEach(k => { if (!SKIP.has(k)) out[k] = data[k] })
   return out
 }
@@ -28,7 +31,7 @@ export function DocVersions({ table, recordId }: { table: string; recordId?: str
 
   useEffect(() => {
     supabase.from('profiles').select('id,full_name').then(({ data }) => {
-      const m: Record<string, string> = {}; (data ?? []).forEach((r: any) => { m[r.id] = r.full_name || '—' }); setNames(m)
+      const m: Record<string, string> = {}; (data ?? []).forEach(r => { m[r.id] = r.full_name || '—' }); setNames(m)
     })
   }, [])
 
@@ -39,7 +42,7 @@ export function DocVersions({ table, recordId }: { table: string; recordId?: str
 
   return (
     <div className="overflow-hidden rounded-xl border border-surface-line">
-      {versions.map((e: any, i) => {
+      {versions.map((e, i) => {
         const isCurrent = i === versions.length - 1 && e.action !== 'DELETE'
         const snap = snapshot(e)
         const opened = open === i
@@ -51,7 +54,7 @@ export function DocVersions({ table, recordId }: { table: string; recordId?: str
               <span className="flex h-7 w-12 shrink-0 items-center justify-center rounded-md bg-surface-sunken font-mono text-xs font-semibold text-ink">v{i + 1}</span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 font-medium text-ink">{action}{isCurrent && <Badge tone="positive">Current</Badge>}</span>
-                <span className="block text-[11px] text-ink-faint">{formatDateTime(e.changed_at)} · by {names[e.changed_by] ?? '—'}</span>
+                <span className="block text-[11px] text-ink-faint">{formatDateTime(e.changed_at)} · by {names[e.changed_by ?? ''] ?? '—'}</span>
               </span>
               <Icon name={opened ? 'expand_less' : 'expand_more'} className="text-[18px] text-ink-faint" />
             </button>

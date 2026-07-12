@@ -2,6 +2,7 @@ import { useEntityTrail } from '@/hooks/useEntityTrail'
 import { Icon } from '@/components/ui/Icon'
 import { formatDateTime, formatNumber } from '@/lib/utils'
 import { movementLabel, MOVEMENT_TYPES } from '@/lib/movements'
+import type { Json } from '@/types/database.types'
 
 // Shared "what happened, when" trail (docs/TRACKING-ARCHITECTURE.md §3.2):
 // merges audit_logs (status/field changes) with inventory_ledger (actual
@@ -9,7 +10,7 @@ import { movementLabel, MOVEMENT_TYPES } from '@/lib/movements'
 // and its stock impact doesn't mean checking two different screens.
 // Replaces the audit-only DocTimeline wherever a document also moves stock.
 
-const show = (v: any) => v === null || v === undefined || v === '' ? '—' : String(v)
+const show = (v: Json | undefined) => v === null || v === undefined || v === '' ? '—' : String(v)
 const fieldLabel = (f: string) => f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
 export function TrailPanel({ table, recordId, referenceNo }: { table: string; recordId?: string; referenceNo?: string | null }) {

@@ -10,18 +10,21 @@
      gray ONLY for hover states, chips and table headers, which would vanish
      on pure white. Separation otherwise comes from hairline borders. */
   --bg-sunken: 246 246 245; --surface: 255 255 255; --line: 228 228 226;
-  /* No grey text anywhere (Notion-style): ink-soft/ink-faint are shades of
-     black, not a separate grey hue — secondary/tertiary text stays dark and
-     readable instead of washing out to light grey. */
-  --ink: 0 0 0; --ink-soft: 45 44 42; --ink-faint: 82 80 75;
-  --sidebar: 255 255 255; --sidebar-fg: 0 0 0; --sidebar-muted: 55 54 50;
+  /* No grey text anywhere: ink / ink-soft / ink-faint are ALL literal pure
+     black. "Soft" text is softer in weight (font-normal vs font-semibold) or
+     smaller in size, never a lighter shade of the color — a blended grey
+     renders as a muddy, blurry mid-tone on cheap/low-res warehouse screens,
+     while pure black stays crisp at any resolution. */
+  --ink: 0 0 0; --ink-soft: 0 0 0; --ink-faint: 0 0 0;
+  --sidebar: 255 255 255; --sidebar-fg: 0 0 0; --sidebar-muted: 0 0 0;
   --sidebar-active: 253 246 230; --sidebar-active-fg: 124 83 0;
 }
 .dark {
   color-scheme: dark;
   --bg-sunken: 20 21 24; --surface: 28 30 34; --line: 46 48 54;
-  --ink: 233 234 238; --ink-soft: 214 211 203; --ink-faint: 176 173 163;
-  --sidebar: 23 24 28; --sidebar-fg: 233 234 238; --sidebar-muted: 198 195 186;
+  /* Dark mode's "pure black" equivalent is pure white — same rule, inverted. */
+  --ink: 255 255 255; --ink-soft: 255 255 255; --ink-faint: 255 255 255;
+  --sidebar: 23 24 28; --sidebar-fg: 255 255 255; --sidebar-muted: 255 255 255;
   --sidebar-active: 50 40 16; --sidebar-active-fg: 246 198 84;
 }
 

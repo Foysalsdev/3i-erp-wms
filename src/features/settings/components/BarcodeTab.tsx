@@ -75,7 +75,7 @@ export function BarcodeTab({ canEdit }: { canEdit: boolean }) {
             ))}
           </div>
           <span className="font-mono text-[11px] tracking-widest text-black">{sample}</span>
-          <span className="text-[10px] text-black/60">{form.symbology} · {form.labelWidthMm}×{form.labelHeightMm} mm</span>
+          <span className="text-[10px] text-black">{form.symbology} · {form.labelWidthMm}×{form.labelHeightMm} mm</span>
         </div>
       </div>
 

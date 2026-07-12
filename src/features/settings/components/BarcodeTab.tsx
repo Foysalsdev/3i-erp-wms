@@ -74,8 +74,8 @@ export function BarcodeTab({ canEdit }: { canEdit: boolean }) {
               <span key={i} className="inline-block w-[3px] bg-slate-800" style={{ height: `${20 + (c.charCodeAt(0) % 20)}px` }} />
             ))}
           </div>
-          <span className="font-mono text-[11px] tracking-widest text-slate-700">{sample}</span>
-          <span className="text-[10px] text-slate-400">{form.symbology} · {form.labelWidthMm}×{form.labelHeightMm} mm</span>
+          <span className="font-mono text-[11px] tracking-widest text-black">{sample}</span>
+          <span className="text-[10px] text-black">{form.symbology} · {form.labelWidthMm}×{form.labelHeightMm} mm</span>
         </div>
       </div>
 

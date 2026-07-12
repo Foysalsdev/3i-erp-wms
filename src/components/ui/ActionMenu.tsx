@@ -35,10 +35,13 @@ export function ActionMenu({ items }: { items: MenuItem[] }) {
     const r = btnRef.current?.getBoundingClientRect()
     if (r) {
       // Flip the menu upward when there isn't room below (rows near the
-      // viewport bottom), so it's never clipped off-screen.
-      const h = items.length * 40 + 8 // ~40px per item + padding
+      // viewport bottom), then clamp inside the viewport so the whole menu is
+      // always visible — a very long menu scrolls internally (max-h below)
+      // instead of ever being cut off.
+      const h = Math.min(items.length * 40 + 8, window.innerHeight - 16) // ~40px per item + padding
       const openUp = r.bottom + h > window.innerHeight - 8 && r.top - h > 8
-      setPos({ top: openUp ? r.top - h - 4 : r.bottom + 4, left: r.right - 176 }) // 176 = w-44, right-aligned
+      const top = Math.max(8, Math.min(openUp ? r.top - h - 4 : r.bottom + 4, window.innerHeight - h - 8))
+      setPos({ top, left: r.right - 224 }) // 224 = w-56, right-aligned
     }
     setOpen(o => !o)
   }
@@ -51,11 +54,11 @@ export function ActionMenu({ items }: { items: MenuItem[] }) {
       </button>
       {open && (
         <div ref={menuRef} role="menu" style={{ top: pos.top, left: Math.max(8, pos.left) }}
-          className="fixed z-50 w-44 overflow-hidden rounded-lg border border-surface-line bg-surface py-1 shadow-card">
+          className="fixed z-50 max-h-[calc(100vh-16px)] w-56 overflow-y-auto rounded-lg border border-surface-line bg-surface py-1 shadow-card">
           {items.map(it => (
             <button key={it.label} role="menuitem" onClick={() => { setOpen(false); it.onClick() }}
-              className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink', it.tone)}>
-              <Icon name={it.icon} className="text-[18px]" /> {it.label}
+              className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-sunken', it.tone)}>
+              <Icon name={it.icon} className="shrink-0 text-[18px]" /> {it.label}
             </button>
           ))}
         </div>

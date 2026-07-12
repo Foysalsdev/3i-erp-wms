@@ -34,6 +34,7 @@ import { DocumentFlow } from '@/components/shared/DocumentFlow'
 import { workflowState } from './workflow'
 import { OrderTimeline } from './OrderTimeline'
 import { downloadChallanPdfFor } from './challanPdf'
+import { loadSoInvoices, invoiceDeliveryTone, invoiceDeliveryLabel, type SoInvoice } from './soInvoices'
 
 const SO_STATUS = ['draft', 'pending', 'approved', 'rejected', 'picking', 'packed', 'invoiced', 'dispatched', 'delivered', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
@@ -50,6 +51,25 @@ type ProductLite = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'b
 type UserLite = Pick<Tables<'profiles'>, 'id' | 'full_name'>
 
 const tone = (s: string) => ['delivered', 'closed'].includes(s) ? 'positive' : ['cancelled', 'rejected'].includes(s) ? 'negative' : s === 'draft' ? 'neutral' : ['dispatched', 'packed', 'picking'].includes(s) ? 'info' : 'critical'
+
+// An order that hasn't cleared approval yet: invoicing / delivery actions are
+// locked until the Pending Approval step runs (also enforced by a DB trigger).
+const preApproval = (status?: string) => ['draft', 'pending', 'rejected'].includes(status ?? 'pending')
+
+// Delivery progress label from the order-level delivered counter maintained by
+// post_delivery_challan: says clearly how much of the order has physically
+// left, instead of the old misleading "stock out" style wording.
+function DeliveryProgress({ so }: { so: any }) {
+  const delivered = Number(so.delivered_qty || 0), total = Number(so.total_qty || 0)
+  if (delivered <= 0 || total <= 0) return null
+  const full = delivered >= total
+  return (
+    <span className="flex items-center gap-1 text-[11px] text-ink-soft">
+      <Badge tone={full ? 'positive' : 'info'}>{full ? 'Fully Delivered' : 'Partially Delivered'}</Badge>
+      <span className="tabular-nums">{formatNumber(delivered)}/{formatNumber(total)}</span>
+    </span>
+  )
+}
 
 // Compact "what's next & who owns it" cell for the order list (WES #6).
 function NextActionCell({ order, ownerName }: { order: SalesOrder; ownerName?: string | null }) {
@@ -135,7 +155,7 @@ export function OutboundSalesOrders() {
   const [customers, setCustomers] = useState<CustomerLite[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseLite[]>([])
   const [products, setProducts] = useState<ProductLite[]>([])
-  const [vehicles, setVehicles] = useState<Pick<Tables<'vehicles'>, 'id' | 'vehicle_number' | 'vehicle_type'>[]>([])
+  const [vehicles, setVehicles] = useState<Pick<Tables<'vehicles'>, 'id' | 'vehicle_number' | 'vehicle_type' | 'vendor_id' | 'driver_name' | 'driver_phone'>[]>([])
   const [transportVendors, setTransportVendors] = useState<Pick<Tables<'transport_vendors'>, 'id' | 'vendor_code' | 'name'>[]>([])
   const [couriers, setCouriers] = useState<Pick<Tables<'couriers'>, 'id' | 'courier_code' | 'name' | 'rate_per_unit'>[]>([])
   const [planning, setPlanning] = useState<SalesOrder | null>(null)
@@ -147,7 +167,7 @@ export function OutboundSalesOrders() {
     supabase.from('customers').select('id,customer_code,name,email,billing_address,shipping_address,sap_customer_code').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
     supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
-    supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
+    supabase.from('vehicles').select('id,vehicle_number,vehicle_type,vendor_id,driver_name,driver_phone').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
     supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
     supabase.from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
     supabase.from('profiles').select('id,full_name').eq('status', 'active').then(({ data }) => setUsers(data ?? []))
@@ -155,6 +175,14 @@ export function OutboundSalesOrders() {
 
   const customerName = (id: string | null) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
   const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
+
+  // The filter dropdown should only offer statuses that actually occur in the
+  // data — not the full hardcoded workflow list (SO_STATUS), which shows dead
+  // options (e.g. 'rejected') when nothing is currently in that state.
+  const presentStatuses = useMemo(() => {
+    const present = new Set(data.map(r => r.status).filter((s): s is string => !!s))
+    return SO_STATUS.filter(s => present.has(s))
+  }, [data])
 
   const rows = useMemo(() => {
     let out = statusFilter === 'all' ? data : data.filter(r => r.status === statusFilter)
@@ -271,7 +299,12 @@ export function OutboundSalesOrders() {
     { key: 'order_date', header: 'Date', accessor: r => r.order_date, render: r => formatDate(r.order_date), sortable: true },
     { key: 'total_qty', header: 'Qty', accessor: r => r.total_qty, render: r => formatNumber(r.total_qty), className: 'text-right', sortable: true },
     { key: 'total_amount', header: 'Amount', accessor: r => r.total_amount, render: r => formatNumber(r.total_amount), className: 'text-right', sortable: true },
-    { key: 'status', header: 'Status', accessor: r => r.status, render: r => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
+    { key: 'status', header: 'Status', accessor: r => r.status, sortable: true, render: r => (
+      <div className="flex flex-col items-start gap-0.5">
+        <Badge tone={tone(r.status)}>{r.status}</Badge>
+        <DeliveryProgress so={r} />
+      </div>
+    ) },
     { key: 'next_action', header: 'Next Action', render: r => <NextActionCell order={r} ownerName={userName(r.assigned_to)} /> },
     {
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
@@ -282,11 +315,15 @@ export function OutboundSalesOrders() {
             ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r) }] : []),
             { icon: 'print', label: 'Print', onClick: () => printSO(r) },
             { icon: 'mail', label: 'Mail', onClick: () => mailSO(r) },
-            ...(canEdit && dispatchAccess && !['draft', 'pending'].includes(r.status) ? [{ icon: 'qr_code_scanner', label: 'Scan Serials', onClick: () => setScanning(r) }] : []),
+            ...(canEdit && dispatchAccess && !preApproval(r.status) ? [{ icon: 'qr_code_scanner', label: 'Scan Serials', onClick: () => setScanning(r) }] : []),
             { icon: 'download', label: 'Export Prework (Excel)', onClick: () => exportPrework(r) },
-            ...(canEdit ? [{ icon: 'receipt_long', label: 'Enter Invoice (SAP)', onClick: () => setInvoicing(r) }] : []),
-            ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled'].includes(r.status) ? [{ icon: 'local_shipping', label: 'Plan Delivery', onClick: () => setPlanning(r) }] : []),
-            ...(canEdit && dispatchAccess && !['delivered', 'closed', 'cancelled', 'draft'].includes(r.status) ? [{ icon: 'block', label: 'Close remaining', onClick: () => closeRemaining(r) }] : []),
+            // Invoicing & delivery only exist after approval — the approval
+            // step can never be skipped (also blocked server-side).
+            ...(canEdit && !preApproval(r.status) && !['cancelled'].includes(r.status) ? [{ icon: 'receipt_long', label: 'Invoices (SAP)', onClick: () => setInvoicing(r) }] : []),
+            ...(canEdit && dispatchAccess && !preApproval(r.status) && !['delivered', 'closed', 'cancelled'].includes(r.status) ? [{ icon: 'local_shipping', label: 'Plan Delivery', onClick: () => setPlanning(r) }] : []),
+            // Closing short only makes sense once the order is in fulfilment —
+            // unapproved orders are rejected/cancelled instead of closed.
+            ...(canEdit && dispatchAccess && !preApproval(r.status) && !['delivered', 'closed', 'cancelled'].includes(r.status) ? [{ icon: 'block', label: 'Close remaining', onClick: () => closeRemaining(r) }] : []),
             ...(isPlatformAdmin && r.status === 'approved' ? [{ icon: 'undo', label: 'Undo Approval', onClick: () => undoApproval(r) }] : []),
             ...(isPlatformAdmin && r.status === 'rejected' ? [{ icon: 'undo', label: 'Undo Rejection', onClick: () => undoRejection(r) }] : []),
             ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
@@ -302,7 +339,7 @@ export function OutboundSalesOrders() {
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search SO…" /></div>
         <SelectBox value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-auto py-2">
           <option value="all">All statuses</option>
-          {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+          {presentStatuses.map(s => <option key={s} value={s}>{s}</option>)}
         </SelectBox>
         <button type="button" onClick={() => setMineOnly(v => !v)}
           className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-semibold',
@@ -361,7 +398,7 @@ export function OutboundSalesOrders() {
       )}
 
       {invoicing && (
-        <InvoiceModal order={invoicing} notify={notify}
+        <InvoiceModal order={invoicing} products={products} notify={notify}
           onClose={() => setInvoicing(null)} onDone={() => { setInvoicing(null); refresh() }} />
       )}
 
@@ -418,19 +455,29 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
   users: UserLite[]; clientId: string; notify: Notify; canApprove: boolean; onClose: () => void; onDone: () => void
 }) {
   const [h, setH] = useState<SODraft>(record ?? { order_date: today(), status: 'pending' })
+  // Lines keep their DB id — updates happen in place (see save below), because
+  // item ids are referenced by challan lines, serials and invoice items and
+  // carry the delivered_qty counter.
   const [lines, setLines] = useState<LineRow[]>((record?.__items ?? []).map(it => ({
-    product_id: it.product_id ?? '', qty: it.qty, unit_price: it.unit_price,
+    id: it.id, product_id: it.product_id ?? '', qty: it.qty, unit_price: it.unit_price,
     basic_price: it.basic_price ?? undefined, vat_rate: it.vat_rate ?? undefined,
     remarks: it.remarks ?? undefined, delivered_qty: it.delivered_qty ?? undefined
-  })))
+  } as LineRow)))
   const [saving, setSaving] = useState(false)
   const readOnly = !!record?.__readOnly
   const set = (patch: SODraft) => setH(x => ({ ...x, ...patch }))
+  // Has the order cleared the approval step? Until it has, the status can't be
+  // pushed past pending and the SAP invoice numbers can't be entered — the
+  // approval sequence always executes (a DB trigger backstops this rule).
+  const approvalCleared = !!record && !preApproval(record.status ?? 'pending')
   // 'approved'/'rejected' are decision outcomes, not manual choices — they're
   // only reachable through the Approve/Reject actions on the Pending Approval
   // tab (which always records who/when/why), so the dropdown hides them here
   // except to show read-only on an order that's already at that status.
-  const statusOptions = SO_STATUS.filter(s =>
+  const statusOptions = (approvalCleared
+    ? SO_STATUS
+    : SO_STATUS.filter(s => ['draft', 'pending', 'cancelled'].includes(s) || s === record?.status)
+  ).filter(s =>
     (s !== 'approved' || canApprove || record?.status === 'approved') &&
     (s !== 'rejected' || record?.status === 'rejected'))
   const [genning, setGenning] = useState(false)
@@ -460,15 +507,19 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
   }, [clientId])
 
   const save = async () => {
+    // An edited line can never drop below what has already been delivered.
+    const under: any = lines.find((r: any) => r.id && Number(r.delivered_qty || 0) > 0 && Number(r.qty) < Number(r.delivered_qty))
+    if (under) { notify('error', `A line cannot go below its already-delivered qty (${under.delivered_qty})`); return }
     setSaving(true)
     try {
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       const totalAmount = lines.reduce((s, r) => s + lineTotal(r), 0)
       // billing_doc_no is the one SAP number that means "invoiced" — entering it
-      // here must advance the workflow exactly like the Enter Invoice modal does,
-      // otherwise the order sits at picking/packed forever.
-      const preInvoice = ['draft', 'pending', 'approved', 'picking', 'packed']
-      const status = String(h.billing_doc_no || '').trim() && preInvoice.includes(h.status || 'pending')
+      // here must advance the workflow exactly like the Invoices modal does,
+      // otherwise the order sits at picking/packed forever. Only after approval:
+      // an unapproved order can never jump to invoiced (DB trigger enforces too).
+      const preInvoice = ['approved', 'picking', 'packed']
+      const status = approvalCleared && String(h.billing_doc_no || '').trim() && preInvoice.includes(h.status || 'pending')
         ? 'invoiced' : (h.status || 'pending')
       const header = {
         client_id: clientId, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
@@ -491,17 +542,52 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
         soId = data.id
       }
       if (!soId) throw new Error('Order id missing after save')
-      await supabase.from('sales_order_items').delete().eq('so_id', soId)
-      const payloadLines = lines.filter(r => r.product_id).map(r => ({
-        client_id: clientId, so_id: soId, product_id: r.product_id,
+      // Lines are updated IN PLACE, never delete+reinsert: item ids are
+      // referenced by challan lines, reserved serials and invoice items, and
+      // each row carries the delivered_qty counter — recreating rows either
+      // fails on those references or silently resets delivery tracking.
+      const lineVals = (r: LineRow) => ({
         qty: Number(r.qty) || 0,
         basic_price: Number(r.basic_price) || 0, vat_rate: Number(r.vat_rate) || 0,
         unit_price: lineUnitPrice(r), line_total: lineTotal(r),
         remarks: r.remarks || null
-      }))
-      if (payloadLines.length) {
-        const { error } = await supabase.from('sales_order_items').insert(payloadLines)
+      })
+      const kept = lines.filter(r => r.product_id && r.id)
+      const added = lines.filter(r => r.product_id && !r.id)
+      if (record) {
+        const keepIds = kept.map(r => r.id!)
+        const delQ = supabase.from('sales_order_items').delete().eq('so_id', soId)
+        const { error: delErr } = keepIds.length ? await delQ.not('id', 'in', `(${keepIds.join(',')})`) : await delQ
+        if (delErr) throw new Error(delErr.message.includes('foreign key')
+          ? 'A removed line already has deliveries/serials against it — it cannot be deleted.' : delErr.message)
+        for (const r of kept) {
+          const { error } = await supabase.from('sales_order_items').update(lineVals(r)).eq('id', r.id!)
+          if (error) throw error
+        }
+      }
+      if (added.length) {
+        const { error } = await supabase.from('sales_order_items').insert(added.map(r => ({
+          client_id: clientId, so_id: soId, product_id: r.product_id, ...lineVals(r)
+        })))
         if (error) throw error
+      }
+      // Billing doc typed straight into the form (instead of the Invoices
+      // modal): make sure an invoice record exists, covering the full ordered
+      // qty, so challans and the fulfilment panel see it. The Invoices modal
+      // is the place for partial/multiple invoices.
+      const bdn = String(h.billing_doc_no || '').trim()
+      if (bdn && approvalCleared) {
+        const { count } = await (supabase as any).from('so_invoices').select('id', { count: 'exact', head: true }).eq('so_id', soId)
+        if (!count) {
+          const { data: curItems } = await supabase.from('sales_order_items').select('id,product_id,qty').eq('so_id', soId)
+          const { data: inv, error: invErr } = await (supabase as any).from('so_invoices')
+            .insert({ client_id: clientId, so_id: soId, invoice_no: bdn }).select('id').single()
+          if (!invErr && inv) {
+            await (supabase as any).from('so_invoice_items').insert((curItems ?? []).map((it: any) => ({
+              client_id: clientId, invoice_id: inv.id, so_item_id: it.id, product_id: it.product_id, qty: it.qty
+            })))
+          }
+        }
       }
       notify('success', `Order ${record ? 'updated' : 'created'}`)
       onDone()
@@ -524,7 +610,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
           const ot = (record.__items ?? []).reduce((a, l) => a + Number(l.qty || 0), 0)
           return ot > 0 ? <p className="text-xs text-ink-soft">Delivered <span className="font-semibold text-ink">{dt}</span> / {ot}{dt > 0 && dt < ot ? ' · partially fulfilled' : ''}</p> : null
         })()}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Customer (Dealer)">
             <Combobox items={customers.map(c => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
             {selCust?.sap_customer_code && <p className="mt-1 text-[11px] text-ink-faint">SAP customer code: <span className="font-mono text-ink-soft">{selCust.sap_customer_code}</span></p>}
@@ -552,14 +638,15 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
             </SelectBox>
             {!['approved', 'rejected'].includes(h.status ?? '') && <p className="mt-1 text-[11px] text-ink-faint">Approve/Reject are separate actions on the Pending Approval tab, not a status choice here.</p>}
           </Field>
-          <Field label="Owner (responsible)">
-            <Combobox items={(users ?? []).map(u => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Assign a responsible user" />
+          <Field label="Follow-up Person">
+            <Combobox items={(users ?? []).map(u => ({ id: u.id, label: u.full_name || u.id }))} value={h.assigned_to ?? ''} onChange={(id: string) => set({ assigned_to: id })} placeholder="Who follows this order through?" />
+            <p className="mt-1 text-[11px] text-ink-faint">The person responsible for pushing this order to completion — shown under “Next Action” in the order list.</p>
           </Field>
-          <Field label="Mail Ref / Link" className="sm:col-span-2">
+          <Field label="Mail Ref / Link" className="col-span-full">
             <Input value={h.mail_ref ?? ''} onChange={e => set({ mail_ref: e.target.value })} placeholder="Mail subject or link (the mail thread holds the full record — no file upload needed)" />
           </Field>
 
-          <div className="sm:col-span-2 mt-1 border-t border-surface-line pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Payment</p></div>
+          <div className="col-span-full mt-1 border-t border-surface-line pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Payment</p></div>
           <Field label="Payment Status">
             <SelectBox value={h.payment_status ?? 'unpaid'} onChange={e => set({ payment_status: e.target.value })}>
               <option value="unpaid">Unpaid</option>
@@ -570,12 +657,15 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
           <Field label="Deposited Amount"><Input type="number" min={0} step="any" value={h.deposited_amount ?? ''} onChange={e => set({ deposited_amount: e.target.value })} placeholder="How much has the customer paid/deposited" /></Field>
           <Field label="Deposited Date"><Input type="date" value={h.deposited_date ?? ''} onChange={e => set({ deposited_date: e.target.value })} /></Field>
 
-          <div className="sm:col-span-2 mt-1 border-t border-surface-line pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">SAP References (enter once when invoiced)</p></div>
-          <Field label="SAP Sales Order No"><Input value={h.sap_so_no ?? ''} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006426" /></Field>
-          <Field label="Outbound Delivery No"><Input value={h.outbound_delivery_no ?? ''} onChange={e => set({ outbound_delivery_no: e.target.value })} placeholder="e.g. 1723056387" /></Field>
-          <Field label="Transfer Order No"><Input value={h.transfer_order_no ?? ''} onChange={e => set({ transfer_order_no: e.target.value })} placeholder="e.g. 8777" /></Field>
-          <Field label="Billing Document No"><Input value={h.billing_doc_no ?? ''} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005379" /></Field>
-          <Field label="Remarks" className="sm:col-span-2"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
+          <div className="col-span-full mt-1 border-t border-surface-line pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">SAP References (enter once when invoiced)</p>
+            {!approvalCleared && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">Locked until the order is approved — invoicing can never skip the approval step.</p>}
+          </div>
+          <Field label="SAP Sales Order No"><Input disabled={!approvalCleared} value={h.sap_so_no ?? ''} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006426" /></Field>
+          <Field label="Outbound Delivery No"><Input disabled={!approvalCleared} value={h.outbound_delivery_no ?? ''} onChange={e => set({ outbound_delivery_no: e.target.value })} placeholder="e.g. 1723056387" /></Field>
+          <Field label="Transfer Order No"><Input disabled={!approvalCleared} value={h.transfer_order_no ?? ''} onChange={e => set({ transfer_order_no: e.target.value })} placeholder="e.g. 8777" /></Field>
+          <Field label="Billing Document No"><Input disabled={!approvalCleared} value={h.billing_doc_no ?? ''} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005379" /></Field>
+          <Field label="Remarks" className="col-span-full"><Textarea value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
         </div>
 
         <LineItems rows={lines} onChange={setLines} products={products} variant="po" priced stock={stockMap} />
@@ -590,43 +680,192 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
   )
 }
 
-// Single place to record the SAP outputs after invoicing — no re-typing into the
-// challan or reports. Marks the order 'invoiced'.
-function InvoiceModal({ order, notify, onClose, onDone }: { order: SalesOrder; notify: Notify; onClose: () => void; onDone: () => void }) {
-  const [h, setH] = useState({
-    sap_so_no: order.sap_so_no ?? '',
-    outbound_delivery_no: order.outbound_delivery_no ?? '', transfer_order_no: order.transfer_order_no ?? '',
-    billing_doc_no: order.billing_doc_no ?? order.invoice_no ?? ''
-  })
+// Invoice register for one order. An order can be invoiced in parts (SAP
+// billing documents); every invoice is its own record with per-model
+// quantities, so the operator always sees: how many invoices exist, which
+// quantities belong to which invoice, which are delivered and which still
+// wait — plus how much of the order has no invoice at all.
+function InvoiceModal({ order, products, notify, onClose, onDone }: {
+  order: SalesOrder; products: ProductLite[]; notify: Notify; onClose: () => void; onDone: () => void
+}) {
+  const { currentClientId } = useAuth()
+  const [items, setItems] = useState<any[]>([])
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
-  const set = (patch: Partial<typeof h>) => setH(x => ({ ...x, ...patch }))
-  const save = async () => {
+  const [changed, setChanged] = useState(false)
+  const [h, setH] = useState<any>({
+    billing_doc_no: '', invoice_date: today(),
+    sap_so_no: order.sap_so_no ?? '',
+    outbound_delivery_no: order.outbound_delivery_no ?? '', transfer_order_no: order.transfer_order_no ?? ''
+  })
+  const [qtys, setQtys] = useState<Record<string, string>>({})
+  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+
+  const reload = () => loadSoInvoices(order.id).then(({ items, invoices }) => { setItems(items); setInvoices(invoices) })
+  useEffect(() => { reload() }, [order.id])
+
+  const productLabel = (id: string) => { const p = products.find((x: any) => x.id === id); return p ? `${p.material_code} — ${p.name}` : id }
+  // Invoiced so far, per order line — the new invoice can only cover the rest.
+  const invoicedFor = (soItemId: string) => invoices.reduce((s, inv) =>
+    s + inv.lines.filter((l: any) => l.so_item_id === soItemId).reduce((a: number, l: any) => a + Number(l.qty || 0), 0), 0)
+
+  const ordered = items.reduce((s, it) => s + Number(it.qty || 0), 0)
+  const invoicedTotal = invoices.reduce((s, inv) => s + inv.qty, 0)
+  const notInvoiced = Math.max(0, ordered - invoicedTotal)
+
+  const startAdd = () => {
+    const q: Record<string, string> = {}
+    items.forEach(it => { q[it.id] = String(Math.max(0, Number(it.qty) - invoicedFor(it.id))) })
+    setQtys(q); setAdding(true)
+  }
+
+  const saveInvoice = async () => {
+    const invoiceNo = String(h.billing_doc_no || '').trim()
+    if (!invoiceNo) { notify('error', 'Billing Document / Invoice No is required'); return }
+    const lines = items
+      .map(it => ({ it, q: Number(qtys[it.id]) || 0 }))
+      .filter(({ q }) => q > 0)
+    if (!lines.length) { notify('error', 'Enter the quantity this invoice covers (at least one line)'); return }
+    const over = lines.find(({ it, q }) => q > Number(it.qty) - invoicedFor(it.id))
+    if (over) { notify('error', `${productLabel(over.it.product_id)}: only ${Number(over.it.qty) - invoicedFor(over.it.id)} left to invoice`); return }
     setSaving(true)
     try {
-      // billing_doc_no is the one SAP number that means "invoiced" — invoice_no just
-      // mirrors it so older search/reports that key off invoice_no keep working.
-      const { error } = await supabase.from('sales_orders').update({
-        invoice_no: h.billing_doc_no || null, sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
-        transfer_order_no: h.transfer_order_no || null, billing_doc_no: h.billing_doc_no || null, status: 'invoiced'
-      }).eq('id', order.id)
+      const { data: inv, error } = await (supabase as any).from('so_invoices').insert({
+        client_id: currentClientId, so_id: order.id, invoice_no: invoiceNo, invoice_date: h.invoice_date || today()
+      }).select('id').single()
       if (error) throw error
-      notify('success', `${order.so_no} marked invoiced`)
-      onDone()
-    } catch (e: any) { notify('error', e?.message ?? 'Could not save invoice details') } finally { setSaving(false) }
+      const { error: e2 } = await (supabase as any).from('so_invoice_items').insert(lines.map(({ it, q }) => ({
+        client_id: currentClientId, invoice_id: inv.id, so_item_id: it.id, product_id: it.product_id, qty: q
+      })))
+      if (e2) throw e2
+      // Order-level SAP refs + status. billing_doc_no/invoice_no mirror the
+      // FIRST invoice so older reports keep working; status moves to invoiced.
+      const patch: any = {
+        sap_so_no: h.sap_so_no || null, outbound_delivery_no: h.outbound_delivery_no || null,
+        transfer_order_no: h.transfer_order_no || null
+      }
+      if (!order.billing_doc_no) { patch.billing_doc_no = invoiceNo; patch.invoice_no = invoiceNo }
+      if (['approved', 'picking', 'packed'].includes(order.status)) patch.status = 'invoiced'
+      const { error: e3 } = await supabase.from('sales_orders').update(patch).eq('id', order.id)
+      if (e3) throw e3
+      notify('success', `Invoice ${invoiceNo} recorded for ${order.so_no}`)
+      setAdding(false); setChanged(true); reload()
+    } catch (e: any) {
+      notify('error', e?.message?.includes('duplicate') ? `Invoice ${invoiceNo} already exists on this order` : (e?.message ?? 'Could not save invoice'))
+    } finally { setSaving(false) }
   }
-  return (
-    <Modal open onClose={onClose} title={`Enter Invoice (SAP) — ${order.so_no}`} size="md">
+
+  const deleteInvoice = async (inv: any) => {
+    if (inv.challans.length) { notify('error', `Invoice ${inv.invoice_no} already has challan(s) — cancel those first`); return }
+    if (!window.confirm(`Delete invoice ${inv.invoice_no} (${formatNumber(inv.qty)} pcs)?`)) return
+    const { error } = await (supabase as any).from('so_invoices').delete().eq('id', inv.id)
+    if (error) { notify('error', error.message); return }
+    setChanged(true); reload()
+  }
+
+  const close = () => changed ? onDone() : onClose()
+
+  if (preApproval(order.status)) return (
+    <Modal open onClose={onClose} title={`Invoices (SAP) — ${order.so_no}`} size="md">
       <div className="space-y-4">
-        <p className="text-xs text-ink-soft">After invoicing in SAP, paste the numbers here once. They flow to the challan, gate pass and reports automatically.</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Billing Document No" required className="sm:col-span-2"><Input value={h.billing_doc_no} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
-          <Field label="SAP Sales Order No"><Input value={h.sap_so_no} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006470" /></Field>
-          <Field label="Outbound Delivery No"><Input value={h.outbound_delivery_no} onChange={e => set({ outbound_delivery_no: e.target.value })} placeholder="e.g. 1723056430" /></Field>
-          <Field label="Transfer Order No"><Input value={h.transfer_order_no} onChange={e => set({ transfer_order_no: e.target.value })} placeholder="e.g. 8892" /></Field>
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+          This order has not been approved yet. Invoicing only opens after the Pending Approval step — the approval sequence can never be skipped.
+        </p>
+        <div className="flex justify-end border-t border-surface-line pt-4"><Button variant="ghost" onClick={onClose}>Close</Button></div>
+      </div>
+    </Modal>
+  )
+
+  return (
+    <Modal open onClose={close} title={`Invoices (SAP) — ${order.so_no}`} size="lg">
+      <div className="space-y-4">
+        {/* The five levels, always visible */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {[
+            { label: 'Ordered', value: ordered },
+            { label: 'Invoiced', value: invoicedTotal },
+            { label: 'Not Yet Invoiced', value: notInvoiced, bad: notInvoiced > 0 },
+            { label: 'Delivered', value: invoices.reduce((s, i) => s + i.delivered, 0) },
+            { label: 'Remaining Under Invoice', value: Math.max(0, invoicedTotal - invoices.reduce((s, i) => s + i.delivered, 0)) }
+          ].map(t => (
+            <div key={t.label} className="rounded-xl border border-surface-line bg-surface-sunken/40 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">{t.label}</p>
+              <p className={'text-lg font-bold tabular-nums ' + (t.bad ? 'text-bad' : 'text-ink')}>{formatNumber(t.value)}</p>
+            </div>
+          ))}
         </div>
+
+        {/* Every invoice with its own tracking */}
+        <div className="overflow-hidden rounded-xl border border-surface-line">
+          {invoices.length === 0 && <p className="p-3 text-sm text-ink-faint">No invoice recorded yet.</p>}
+          {invoices.map((inv, i) => (
+            <div key={inv.id} className={'px-3.5 py-2.5 ' + (i ? 'border-t border-surface-line' : '')}>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Icon name="receipt" className="text-[18px] text-ink-faint" />
+                <span className="font-semibold text-ink">Invoice {inv.invoice_no}</span>
+                <span className="text-ink-soft">· {formatDate(inv.invoice_date)} · {formatNumber(inv.qty)} pcs</span>
+                <Badge tone={invoiceDeliveryTone(inv)}>{invoiceDeliveryLabel(inv)}</Badge>
+                <span className="text-xs text-ink-soft">Delivered {formatNumber(inv.delivered)} · Remaining {formatNumber(Math.max(0, inv.qty - inv.delivered))}</span>
+                {inv.challans.length === 0 && (
+                  <button type="button" title="Delete invoice" onClick={() => deleteInvoice(inv)}
+                    className="ml-auto rounded-md p-1 text-ink-faint hover:bg-bad/10 hover:text-bad"><Icon name="delete" className="text-[16px]" /></button>
+                )}
+              </div>
+              <p className="mt-1 pl-7 text-xs text-ink-faint">
+                {inv.lines.map((l: any) => `${products.find((p: any) => p.id === l.product_id)?.material_code ?? '?'}×${formatNumber(l.qty)}`).join('  ·  ')}
+                {inv.challans.length > 0 && <span> — challan {inv.challans.map((c: any) => c.challan_no).join(', ')}</span>}
+              </p>
+            </div>
+          ))}
+          {notInvoiced > 0 && (
+            <div className="flex items-center gap-2 border-t border-dashed border-surface-line bg-surface-sunken/40 px-3.5 py-2.5 text-sm">
+              <Icon name="pending" className="text-[18px] text-ink-faint" />
+              <span className="text-ink-soft">Invoice not created yet for</span>
+              <span className="font-semibold text-bad">{formatNumber(notInvoiced)} pcs</span>
+              <span className="text-xs text-ink-faint">— this quantity cannot go on a delivery challan</span>
+            </div>
+          )}
+        </div>
+
+        {!adding ? (
+          notInvoiced > 0 && <Button icon="add" variant="secondary" onClick={startAdd}>Add Invoice</Button>
+        ) : (
+          <div className="space-y-4 rounded-xl border border-brand-500/40 bg-brand-50/40 p-4 dark:bg-brand-500/5">
+            <p className="text-sm font-semibold text-ink">New invoice</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Billing Document / Invoice No" required><Input autoFocus value={h.billing_doc_no} onChange={e => set({ billing_doc_no: e.target.value })} placeholder="e.g. 8815005417" /></Field>
+              <Field label="Invoice Date"><Input type="date" value={h.invoice_date} onChange={e => set({ invoice_date: e.target.value })} /></Field>
+              <Field label="SAP Sales Order No"><Input value={h.sap_so_no} onChange={e => set({ sap_so_no: e.target.value })} placeholder="e.g. 1465006470" /></Field>
+              <Field label="Outbound Delivery No"><Input value={h.outbound_delivery_no} onChange={e => set({ outbound_delivery_no: e.target.value })} placeholder="e.g. 1723056430" /></Field>
+              <Field label="Transfer Order No"><Input value={h.transfer_order_no} onChange={e => set({ transfer_order_no: e.target.value })} placeholder="e.g. 8892" /></Field>
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-ink-soft">Quantities on this invoice</p>
+              <div className="overflow-hidden rounded-lg border border-surface-line">
+                {items.map((it, i) => {
+                  const left = Math.max(0, Number(it.qty) - invoicedFor(it.id))
+                  return (
+                    <div key={it.id} className={'flex items-center gap-3 px-3 py-2 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                      <span className="min-w-0 flex-1 truncate text-ink">{productLabel(it.product_id)}</span>
+                      <span className="shrink-0 text-xs text-ink-faint">ordered {formatNumber(it.qty)} · uninvoiced {formatNumber(left)}</span>
+                      <input type="number" min={0} max={left} value={qtys[it.id] ?? ''} disabled={left <= 0}
+                        onChange={e => setQtys(q => ({ ...q, [it.id]: e.target.value }))}
+                        className="fiori-input h-8 w-20 shrink-0 text-right" />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+              <Button icon="receipt_long" loading={saving} onClick={saveInvoice}>Save Invoice</Button>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button icon="receipt_long" loading={saving} onClick={save}>Mark Invoiced</Button>
+          <Button variant="ghost" onClick={close}>Close</Button>
         </div>
       </div>
     </Modal>
@@ -645,10 +884,12 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
   const [tab, setTab] = useState<'details' | 'scan' | 'notes'>('details')
   const [items, setItems] = useState<SalesOrderItem[]>([])
   const [deliveries, setDeliveries] = useState<DeliveryWithItems[]>([])
+  const [invoices, setInvoices] = useState<SoInvoice[]>([])
 
   useEffect(() => {
     if (!so?.id) return
     supabase.from('sales_order_items').select('*').eq('so_id', so.id).then(({ data }) => setItems(data ?? []))
+    loadSoInvoices(so.id).then(({ invoices }) => setInvoices(invoices))
     // Deliveries = the challans raised against this order, each with its mode and product lines.
     ;(async () => {
       // Full row (not a narrow column list) so the same object can also be handed
@@ -719,6 +960,57 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
           <WorkflowPanel order={so} responsibleName={ownerName} />
         </Section>
 
+        {/* The five tracking levels: ordered → invoiced → delivered, with the
+            two gaps (not-yet-invoiced, remaining-under-invoice) always visible. */}
+        <Section title="Fulfilment — Order → Invoice → Delivery">
+          {(() => {
+            const ordered = items.reduce((s: number, it: any) => s + Number(it.qty || 0), 0)
+            const invoicedTotal = invoices.reduce((s: number, i: any) => s + i.qty, 0)
+            const delivered = items.reduce((s: number, it: any) => s + Number(it.delivered_qty || 0), 0)
+            const notInvoiced = Math.max(0, ordered - invoicedTotal)
+            const tiles = [
+              { label: 'Ordered', value: ordered },
+              { label: 'Invoiced', value: invoicedTotal },
+              { label: 'Not Yet Invoiced', value: notInvoiced, bad: notInvoiced > 0 },
+              { label: 'Delivered', value: delivered },
+              { label: 'Remaining Under Invoice', value: Math.max(0, invoicedTotal - delivered) }
+            ]
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {tiles.map(t => (
+                    <div key={t.label} className="rounded-xl border border-surface-line bg-surface-sunken/40 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">{t.label}</p>
+                      <p className={'text-lg font-bold tabular-nums ' + (t.bad ? 'text-bad' : 'text-ink')}>{formatNumber(t.value)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="overflow-hidden rounded-xl border border-surface-line">
+                  {invoices.length === 0 && <p className="p-3 text-sm text-ink-faint">No invoice recorded yet — use “Invoices (SAP)”.</p>}
+                  {invoices.map((inv: any, i: number) => (
+                    <div key={inv.id} className={'flex flex-wrap items-center gap-2 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
+                      <Icon name="receipt" className="text-[18px] text-ink-faint" />
+                      <span className="font-semibold text-ink">Invoice {inv.invoice_no}</span>
+                      <span className="text-ink-soft">· {formatNumber(inv.qty)} pcs</span>
+                      <Badge tone={invoiceDeliveryTone(inv)}>{invoiceDeliveryLabel(inv)}</Badge>
+                      <span className="text-xs text-ink-soft">Delivered {formatNumber(inv.delivered)} · Remaining {formatNumber(Math.max(0, inv.qty - inv.delivered))}</span>
+                      {inv.challans.length > 0 && <span className="text-xs text-ink-faint">— {inv.challans.map((c: any) => c.challan_no).join(', ')}</span>}
+                    </div>
+                  ))}
+                  {notInvoiced > 0 && (
+                    <div className="flex items-center gap-2 border-t border-dashed border-surface-line bg-surface-sunken/40 px-3.5 py-2.5 text-sm">
+                      <Icon name="pending" className="text-[18px] text-ink-faint" />
+                      <span className="text-ink-soft">Invoice not created yet for</span>
+                      <span className="font-semibold text-bad">{formatNumber(notInvoiced)} pcs</span>
+                      <span className="text-xs text-ink-faint">— cannot go on a delivery challan</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+        </Section>
+
         {/* Wide screens: operational sections left, history right — less scrolling */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="space-y-5">
@@ -771,7 +1063,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
                       <span className="truncate text-ink-soft">· {carrier}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-ink-soft">
-                      {formatDate(d.challan_date)} {d.posted_at ? <Badge tone="positive">Stock out</Badge> : <Badge tone={tone(d.status)}>{d.status}</Badge>}
+                      {formatDate(d.challan_date)} {d.status === 'delivered' ? <Badge tone="positive">Delivered</Badge> : d.posted_at ? <Badge tone="info">Dispatched</Badge> : <Badge tone={tone(d.status)}>{d.status}</Badge>}
                       <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products }).catch((e: Error) => notify('error', e?.message ?? 'Could not generate PDF'))}
                         className="rounded-lg p-1 text-ink-faint hover:bg-surface-sunken hover:text-brand-600"><Icon name="download" className="text-[16px]" /></button>
                     </span>

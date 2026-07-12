@@ -31,7 +31,7 @@ export async function downloadPrework(input: PreworkInput) {
   // ---- Summary sheet ----
   const sum = wb.addWorksheet('Summary')
   sum.columns = [{ width: 22 }, { width: 38 }, { width: 16 }, { width: 14 }, { width: 16 }, { width: 16 }]
-  const kv = (label: string, value: any, extra?: any) => {
+  const kv = (label: string, value: string | number, extra?: string | number) => {
     const row = sum.addRow([label, value, extra ?? ''])
     row.getCell(1).font = { bold: true }
   }

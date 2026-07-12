@@ -75,7 +75,9 @@ export const DEFAULT_BARCODE: BarcodeSettings = {
   symbology: 'CODE128', prefix: '', labelWidthMm: 50, labelHeightMm: 25, showPrice: false
 }
 
-const DEFAULTS: Record<SettingsCategory, any> = {
+type AnySettings = CompanySettings | NotificationSettings | WorkflowSettings | BarcodeSettings
+
+const DEFAULTS: Record<SettingsCategory, AnySettings> = {
   company: DEFAULT_COMPANY,
   notifications: DEFAULT_NOTIFICATIONS,
   workflow: DEFAULT_WORKFLOW,
@@ -86,7 +88,7 @@ const DEFAULTS: Record<SettingsCategory, any> = {
 
 // Load a settings category for a client, merged over its defaults so callers
 // always receive a complete object even before anything has been saved.
-export async function loadSettings<T = any>(clientId: string, category: SettingsCategory): Promise<T> {
+export async function loadSettings<T extends AnySettings>(clientId: string, category: SettingsCategory): Promise<T> {
   const { data } = await supabase
     .from('app_settings')
     .select('data')
@@ -96,10 +98,10 @@ export async function loadSettings<T = any>(clientId: string, category: Settings
   return { ...DEFAULTS[category], ...((data?.data as object) ?? {}) } as T
 }
 
-export async function saveSettings(clientId: string, category: SettingsCategory, data: any) {
+export async function saveSettings(clientId: string, category: SettingsCategory, data: AnySettings) {
   const { error } = await supabase
     .from('app_settings')
-    .upsert({ client_id: clientId, category, data }, { onConflict: 'client_id,category' })
+    .upsert({ client_id: clientId, category, data: data as unknown as Record<string, string | number | boolean | null> }, { onConflict: 'client_id,category' })
   if (error) throw error
 }
 

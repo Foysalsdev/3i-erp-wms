@@ -37,16 +37,16 @@ export async function fetchStockAvailability(clientId: string, excludeSoId?: str
       .in('status', [...PENDING_INVOICE_STATUSES, ...PENDING_DELIVERY_STATUSES])
   ])
 
-  const orderIds = (orders ?? []).map((o: any) => o.id).filter((id: string) => id !== excludeSoId)
-  const statusOf = new Map((orders ?? []).map((o: any) => [o.id, o.status]))
+  const orderIds = (orders ?? []).map(o => o.id).filter(id => id !== excludeSoId)
+  const statusOf = new Map((orders ?? []).map(o => [o.id, o.status]))
   const { data: items } = orderIds.length
     ? await supabase.from('sales_order_items').select('so_id,product_id,qty,delivered_qty').in('so_id', orderIds)
-    : { data: [] as any[] }
+    : { data: [] as { so_id: string; product_id: string | null; qty: number; delivered_qty: number | null }[] }
 
   const out: Record<string, StockAvailability> = {}
   const get = (id: string) => out[id] ?? (out[id] = empty())
 
-  ;(stock ?? []).forEach((r: any) => {
+  ;(stock ?? []).forEach(r => {
     const a = get(r.product_id)
     const qty = Number(r.quantity) || 0
     a.total += qty
@@ -54,12 +54,12 @@ export async function fetchStockAvailability(clientId: string, excludeSoId?: str
     else a.nonSaleable += qty
   })
 
-  ;(items ?? []).forEach((it: any) => {
+  ;(items ?? []).forEach(it => {
     if (!it.product_id) return
     const pending = Math.max(0, (Number(it.qty) || 0) - (Number(it.delivered_qty) || 0))
     if (pending <= 0) return
     const a = get(it.product_id)
-    const status = statusOf.get(it.so_id)
+    const status = statusOf.get(it.so_id) ?? ''
     if (PENDING_INVOICE_STATUSES.includes(status)) a.pendingInvoice += pending
     else if (PENDING_DELIVERY_STATUSES.includes(status)) a.pendingDelivery += pending
   })

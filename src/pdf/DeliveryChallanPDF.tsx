@@ -2,6 +2,18 @@ import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer
 import { downloadBlob, formatDate } from '@/lib/utils'
 import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
 import { pdfLayout, PdfFooter, LetterheadSlim, DocInfoBox, Barcode } from './pdfLayout'
+import type { Tables } from '@/types/database.types'
+
+interface ChallanPdfItem {
+  sl: number; description: string; material_code: string; category: string
+  qty: number; unit: string; remarks: string
+}
+interface ChallanPdfProps {
+  challan: Tables<'delivery_challans'>
+  customerName: string
+  vehicleNo: string
+  items: ChallanPdfItem[]
+}
 
 const s = StyleSheet.create({
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
@@ -24,12 +36,12 @@ const s = StyleSheet.create({
   signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 55, fontSize: 9 }
 })
 
-function KV({ k, v }: { k: string; v?: string }) {
+function KV({ k, v }: { k: string; v?: string | null }) {
   return <View style={s.r}><Text style={s.rk}>{k}</Text><Text style={s.rv}>{v || '-'}</Text></View>
 }
 
-function Doc({ challan, customerName, vehicleNo, items }: any) {
-  const total = (items || []).reduce((a: number, it: any) => a + (Number(it.qty) || 0), 0)
+function Doc({ challan, customerName, vehicleNo, items }: ChallanPdfProps) {
+  const total = (items || []).reduce((a, it) => a + (Number(it.qty) || 0), 0)
   const isCourier = challan.delivery_method === 'courier'
   return (
     <Document>
@@ -107,7 +119,7 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
           <Text style={[pdfLayout.th, { width: '7%' }]}>Unit</Text>
           <Text style={[pdfLayout.th, { width: '13%', borderRightWidth: 0 }]}>Remarks</Text>
         </View>
-        {(items || []).map((it: any, i: number) => (
+        {(items || []).map((it, i) => (
           <View key={it.sl} style={[pdfLayout.tr, i % 2 === 1 ? s.stripe : {}]}>
             <Text style={[pdfLayout.td, { width: '5%' }]}>{it.sl}</Text>
             <Text style={[pdfLayout.td, { width: '41%', fontSize: 7.5 }]}>{it.description}</Text>
@@ -134,7 +146,7 @@ function Doc({ challan, customerName, vehicleNo, items }: any) {
   )
 }
 
-export async function downloadChallanPDF(opts: any) {
+export async function downloadChallanPDF(opts: ChallanPdfProps) {
   const blob = await pdf(<Doc {...opts} />).toBlob()
   downloadBlob(blob, `Challan-${String(opts.challan.challan_no || 'DC').replace(/[^\w]+/g, '_')}.pdf`)
 }

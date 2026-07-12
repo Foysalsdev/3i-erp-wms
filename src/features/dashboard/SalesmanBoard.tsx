@@ -6,14 +6,20 @@ import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Spinner } from '@/components/ui/States'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, type RepCol } from '@/features/reports/export'
 import { fetchStockAvailability } from '@/lib/stockAvailability'
+import type { Tables } from '@/types/database.types'
 
-const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
+type SalesOrderRow = Pick<Tables<'sales_orders'>,
+  'id' | 'so_no' | 'customer_id' | 'order_date' | 'total_qty' | 'total_amount' | 'status' | 'billing_doc_no'>
+type ProductRow = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'category' | 'uom'>
+type StockRow = { code: string; name: string; category: string; uom: string; available: number }
+
+const n = (v: number | string | null | undefined) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
 const today = () => new Date().toISOString().slice(0, 10)
 const INVOICED = ['invoiced', 'dispatched', 'delivered', 'closed']
 const DELIVERED = ['delivered', 'closed']
@@ -55,14 +61,14 @@ export default function SalesmanBoard() {
   const { currentClientId, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<'orders' | 'stock'>('orders')
-  const [orders, setOrders] = useState<any[]>([])
+  const [orders, setOrders] = useState<SalesOrderRow[]>([])
   const [delivered, setDelivered] = useState<Record<string, number>>({})
   const [customers, setCustomers] = useState<Record<string, string>>({})
   const [avail, setAvail] = useState<Record<string, number>>({})
-  const [prodMap, setProdMap] = useState<Record<string, any>>({})
+  const [prodMap, setProdMap] = useState<Record<string, ProductRow>>({})
   const [q, setQ] = useState('')
   const [sq, setSq] = useState('')
-  const [view, setView] = useState<any>(null)
+  const [view, setView] = useState<SalesOrderRow | null>(null)
 
   useEffect(() => {
     if (!currentClientId || !uid) return
@@ -75,12 +81,12 @@ export default function SalesmanBoard() {
       supabase.from('products').select('id,material_code,name,category,uom').eq('client_id', currentClientId)
     ]).then(([o, it, c, stockAvail, pr]) => {
       setOrders(o.data ?? [])
-      const d: Record<string, number> = {}; (it.data ?? []).forEach((r: any) => { d[r.so_id] = (d[r.so_id] ?? 0) + n(r.delivered_qty) })
+      const d: Record<string, number> = {}; (it.data ?? []).forEach(r => { if (r.so_id) d[r.so_id] = (d[r.so_id] ?? 0) + n(r.delivered_qty) })
       setDelivered(d)
-      const cm: Record<string, string> = {}; (c.data ?? []).forEach((r: any) => { cm[r.id] = `${r.customer_code} — ${r.name}` })
+      const cm: Record<string, string> = {}; (c.data ?? []).forEach(r => { cm[r.id] = `${r.customer_code} — ${r.name}` })
       setCustomers(cm)
       setAvail(Object.fromEntries(Object.entries(stockAvail).map(([pid, a]) => [pid, a.saleable])))
-      const pm: Record<string, any> = {}; (pr.data ?? []).forEach((r: any) => { pm[r.id] = r })
+      const pm: Record<string, ProductRow> = {}; (pr.data ?? []).forEach(r => { pm[r.id] = r })
       setProdMap(pm); setLoading(false)
     })
   }, [currentClientId, uid])
@@ -98,14 +104,14 @@ export default function SalesmanBoard() {
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return orders.filter(o => !t || String(o.so_no).toLowerCase().includes(t) || (customers[o.customer_id] ?? '').toLowerCase().includes(t))
+    return orders.filter(o => !t || String(o.so_no).toLowerCase().includes(t) || (customers[o.customer_id ?? ''] ?? '').toLowerCase().includes(t))
   }, [orders, customers, q])
 
   const stockRows = useMemo(() => {
     const t = sq.trim().toLowerCase()
     return Object.entries(avail)
-      .map(([pid, available]) => { const p = prodMap[pid]; return p ? { code: p.material_code, name: p.name, category: p.category || '—', uom: p.uom || '', available } : null })
-      .filter((g): g is { code: string; name: string; category: string; uom: string; available: number } => !!g && g.available !== 0)
+      .map(([pid, available]): StockRow | null => { const p = prodMap[pid]; return p ? { code: p.material_code, name: p.name, category: p.category || '—', uom: p.uom || '', available } : null })
+      .filter((g): g is StockRow => !!g && g.available !== 0)
       .filter(g => !t || g.code.toLowerCase().includes(t) || g.name.toLowerCase().includes(t) || g.category.toLowerCase().includes(t))
       .sort((a, b) => b.available - a.available)
   }, [avail, prodMap, sq])
@@ -115,13 +121,13 @@ export default function SalesmanBoard() {
     { key: 'qty', header: 'Qty', align: 'right' }, { key: 'delivered', header: 'Delivered', align: 'right' },
     { key: 'pending', header: 'Pending', align: 'right' }, { key: 'status', header: 'Status' }
   ]
-  const exportRows = rows.map(o => ({ so_no: o.so_no, customer: customers[o.customer_id] ?? '—', date: formatDate(o.order_date), qty: n(o.total_qty), delivered: n(delivered[o.id]), pending: Math.max(0, n(o.total_qty) - n(delivered[o.id])), status: o.status }))
+  const exportRows = rows.map(o => ({ so_no: o.so_no, customer: customers[o.customer_id ?? ''] ?? '—', date: formatDate(o.order_date), qty: n(o.total_qty), delivered: n(delivered[o.id]), pending: Math.max(0, n(o.total_qty) - n(delivered[o.id])), status: o.status }))
 
-  const stockCols = [
-    { key: 'code', header: 'Material Code', accessor: (r: any) => r.code, sortable: true, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.name },
-    { key: 'category', header: 'Category', accessor: (r: any) => r.category },
-    { key: 'available', header: 'Available', className: 'text-right', accessor: (r: any) => `${formatNumber(r.available)}${r.uom ? ' ' + r.uom : ''}` }
+  const stockCols: Column<StockRow>[] = [
+    { key: 'code', header: 'Material Code', accessor: r => r.code, sortable: true, className: 'font-medium' },
+    { key: 'name', header: 'Product', accessor: r => r.name },
+    { key: 'category', header: 'Category', accessor: r => r.category },
+    { key: 'available', header: 'Available', className: 'text-right', accessor: r => `${formatNumber(r.available)}${r.uom ? ' ' + r.uom : ''}` }
   ]
 
   if (loading) return <Spinner label="Loading…" />
@@ -172,7 +178,7 @@ export default function SalesmanBoard() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold text-ink">{o.so_no}</p>
-                    <p className="truncate text-sm text-ink-soft">{customers[o.customer_id] ?? '—'}</p>
+                    <p className="truncate text-sm text-ink-soft">{customers[o.customer_id ?? ''] ?? '—'}</p>
                     <p className="mt-0.5 text-xs text-ink-faint">{formatDate(o.order_date)} · Qty {formatNumber(o.total_qty)} · Delivered {formatNumber(delivered[o.id])}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -193,19 +199,23 @@ export default function SalesmanBoard() {
             <span className="text-sm text-ink-soft">{stockRows.length} products in stock</span>
           </div>
           <Card className="overflow-hidden">
-            <DataTable columns={stockCols} rows={stockRows} rowKey={(r: any) => r.code} emptyTitle="No saleable stock" />
+            <DataTable columns={stockCols} rows={stockRows} rowKey={r => r.code} emptyTitle="No saleable stock" />
           </Card>
           <p className="text-xs text-ink-faint">Available = good stock minus reserved. This is read-only.</p>
         </>
       )}
 
-      {view && <OrderProgress order={view} customerName={customers[view.customer_id] ?? '—'} delivered={n(delivered[view.id])} onClose={() => setView(null)} />}
+      {view && <OrderProgress order={view} customerName={customers[view.customer_id ?? ''] ?? '—'} delivered={n(delivered[view.id])} onClose={() => setView(null)} />}
     </div>
   )
 }
 
-function OrderProgress({ order, customerName, delivered, onClose }: any) {
-  const [events, setEvents] = useState<any[]>([])
+type AuditEvent = Pick<Tables<'audit_logs'>, 'id' | 'action' | 'new_data' | 'changed_by' | 'changed_at'>
+
+function OrderProgress({ order, customerName, delivered, onClose }: {
+  order: SalesOrderRow; customerName: string; delivered: number; onClose: () => void
+}) {
+  const [events, setEvents] = useState<AuditEvent[]>([])
   const [names, setNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   useEffect(() => {
@@ -214,7 +224,7 @@ function OrderProgress({ order, customerName, delivered, onClose }: any) {
       supabase.from('profiles').select('id,full_name')
     ]).then(([a, p]) => {
       setEvents(a.data ?? [])
-      const m: Record<string, string> = {}; (p.data ?? []).forEach((r: any) => { m[r.id] = r.full_name || '—' })
+      const m: Record<string, string> = {}; (p.data ?? []).forEach(r => { m[r.id] = r.full_name || '—' })
       setNames(m); setLoading(false)
     })
   }, [order.id])
@@ -234,7 +244,8 @@ function OrderProgress({ order, customerName, delivered, onClose }: any) {
           {loading ? <p className="py-3 text-sm text-ink-faint">Loading…</p> : events.length === 0 ? <p className="py-3 text-sm text-ink-faint">No history recorded yet.</p> : (
             <div className="space-y-0">
               {events.map((e, i) => {
-                const status = (e.new_data && e.new_data.status) ? e.new_data.status : null
+                const newData = e.new_data as Record<string, unknown> | null
+                const status = newData?.status ? String(newData.status) : null
                 const label = e.action === 'INSERT' ? 'Order created' : status ? `Status → ${status}` : 'Updated'
                 return (
                   <div key={e.id} className="flex gap-3 pb-3">
@@ -246,7 +257,7 @@ function OrderProgress({ order, customerName, delivered, onClose }: any) {
                     </div>
                     <div className="text-sm">
                       <p className="font-medium text-ink">{label}</p>
-                      <p className="text-[11px] text-ink-faint">{formatDateTime(e.changed_at)} · by {names[e.changed_by] ?? '—'}</p>
+                      <p className="text-[11px] text-ink-faint">{formatDateTime(e.changed_at)} · by {names[e.changed_by ?? ''] ?? '—'}</p>
                     </div>
                   </div>
                 )

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-type Tone = 'positive' | 'negative' | 'critical' | 'info' | 'neutral' | 'brand'
+export type Tone = 'positive' | 'negative' | 'critical' | 'info' | 'neutral' | 'brand'
 const tones: Record<Tone, string> = {
   positive: 'bg-green-50 text-green-700 ring-green-200 dark:bg-green-500/15 dark:text-green-400 dark:ring-green-500/30',
   negative: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-400 dark:ring-red-500/30',

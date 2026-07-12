@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables, TablesInsert } from '@/types/database.types'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
@@ -18,11 +19,19 @@ import { SerialHistoryModal } from '@/components/shared/SerialHistoryModal'
 
 interface Row { serial: string; original?: string; existingId?: string; status?: string }
 
+type ProdInfo = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'china_code' | 'barcode'>
+// lines without a product can't capture serials, so they're filtered at load
+// and product_id is non-null from here on.
+type GrnItemLite = Omit<Pick<Tables<'goods_receipt_items'>, 'product_id' | 'received_qty' | 'qty'>, 'product_id'> & { product_id: string }
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
+
 const norm = (s: string) => s.trim().toUpperCase()
 
-export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
-  const [items, setItems] = useState<any[]>([])
-  const [prods, setProds] = useState<Record<string, any>>({})
+export function GrnSerialScan({ grn, clientId, notify, onClose }: {
+  grn: Tables<'goods_receipts'>; clientId: string; notify: Notify; onClose: () => void
+}) {
+  const [items, setItems] = useState<GrnItemLite[]>([])
+  const [prods, setProds] = useState<Record<string, ProdInfo>>({})
   const [rows, setRows] = useState<Record<string, Row[]>>({})       // product_id -> captured serials
   const [input, setInput] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -36,15 +45,15 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
   useEffect(() => {
     Promise.all([
       supabase.from('goods_receipt_items').select('product_id,received_qty,qty').eq('grn_id', grn.id),
-      (supabase as any).from('products').select('id,material_code,name,china_code,barcode').eq('client_id', clientId),
+      supabase.from('products').select('id,material_code,name,china_code,barcode').eq('client_id', clientId),
       supabase.from('serial_numbers').select('id,serial_no,product_id,status').eq('client_id', clientId).eq('reference_no', grn.grn_no)
-    ]).then(([it, pr, sn]: any[]) => {
-      const lines = it.data ?? []
+    ]).then(([it, pr, sn]) => {
+      const lines = (it.data ?? []).filter((l): l is GrnItemLite => !!l.product_id)
       setItems(lines)
-      setProds(Object.fromEntries((pr.data ?? []).map((p: any) => [p.id, p])))
-      const m: Record<string, Row[]> = Object.fromEntries(lines.map((l: any) => [l.product_id, []]))
-      ;(sn.data ?? []).forEach((s: any) => {
-        (m[s.product_id] ??= []).push({ serial: s.serial_no, existingId: s.id, status: s.status })
+      setProds(Object.fromEntries((pr.data ?? []).map(p => [p.id, p])))
+      const m: Record<string, Row[]> = Object.fromEntries(lines.map(l => [l.product_id, []]))
+      ;(sn.data ?? []).forEach(s => {
+        (m[s.product_id ?? ''] ??= []).push({ serial: s.serial_no, existingId: s.id, status: s.status })
       })
       setRows(m)
       seededIds.current = Object.fromEntries(Object.entries(m).map(([pid, list]) => [pid, list.filter(r => r.existingId).map(r => r.existingId!)]))
@@ -102,7 +111,7 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
   const save = async () => {
     setSaving(true)
     try {
-      const toInsert: any[] = []
+      const toInsert: TablesInsert<'serial_numbers'>[] = []
       const toDelete: string[] = []
       for (const it of items) {
         const list = rows[it.product_id] ?? []
@@ -118,11 +127,11 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
       // coming back) are allowed: re-registered to this GRN as in_stock, with
       // a small popup showing where each was last. Same-form duplicates were
       // already blocked at scan time.
-      let reused: any[] = []
+      let reused: Pick<Tables<'serial_numbers'>, 'id' | 'serial_no' | 'reference_no' | 'status'>[] = []
       if (toInsert.length) {
         const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
           .eq('client_id', clientId).in('serial_no', toInsert.map(r => r.serial_no))
-        reused = (clash ?? []).filter((c: any) => c.reference_no !== grn.grn_no)
+        reused = (clash ?? []).filter(c => c.reference_no !== grn.grn_no)
       }
       if (toDelete.length) {
         const { error } = await supabase.from('serial_numbers').delete().in('id', toDelete)
@@ -132,14 +141,14 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
       if (reused.length) {
         hist = await describeSerialHistory(clientId, reused)   // capture before overwriting
         const { error } = await supabase.from('serial_numbers')
-          .update({ reference_no: grn.grn_no, warehouse_id: grn.warehouse_id || null, status: 'in_stock', so_item_id: null } as any)
-          .in('id', reused.map((r: any) => r.id))
+          .update({ reference_no: grn.grn_no, warehouse_id: grn.warehouse_id || null, status: 'in_stock', so_item_id: null })
+          .in('id', reused.map(r => r.id))
         if (error) throw error
       }
-      const reusedSet = new Set(reused.map((r: any) => r.serial_no))
+      const reusedSet = new Set(reused.map(r => r.serial_no))
       const inserts = toInsert.filter(r => !reusedSet.has(r.serial_no))
       if (inserts.length) {
-        const { error } = await supabase.from('serial_numbers').insert(inserts as any)
+        const { error } = await supabase.from('serial_numbers').insert(inserts)
         if (error) throw error
       }
       notify('success', `${grn.grn_no}: ${inserts.length + reused.length} serial(s) saved${toDelete.length ? `, ${toDelete.length} removed` : ''}`)
@@ -163,7 +172,7 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: any) {
           </p>
 
           {items.length === 0 ? <p className="py-4 text-center text-sm text-ink-faint">No line items on this GRN yet.</p> :
-            items.map((it: any) => {
+            items.map(it => {
               const qty = Number(it.received_qty) > 0 ? Number(it.received_qty) : Number(it.qty)
               const list = rows[it.product_id] ?? []
               const complete = list.length >= qty && qty > 0

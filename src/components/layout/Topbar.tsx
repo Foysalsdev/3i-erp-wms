@@ -9,8 +9,9 @@ import { initials } from '@/lib/utils'
 import { GlobalSearch } from './GlobalSearch'
 import { NotificationBell } from './NotificationBell'
 import { MyProfileModal } from '@/features/auth/MyProfileModal'
+import type { Tables } from '@/types/database.types'
 
-function Avatar({ profile, className }: { profile: any; className?: string }) {
+function Avatar({ profile, className }: { profile: Pick<Tables<'profiles'>, 'avatar_url' | 'full_name' | 'email'> | null; className?: string }) {
   return profile?.avatar_url
     ? <img src={profile.avatar_url} alt="" className={`rounded-full object-cover ${className}`} />
     : <span className={`flex items-center justify-center rounded-full bg-surface-sunken text-xs font-bold text-ink-soft ${className}`}>{initials(profile?.full_name || profile?.email)}</span>

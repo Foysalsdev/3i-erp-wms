@@ -4,7 +4,7 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -28,7 +28,17 @@ const statusLabel = (s: string) => s === 'approved' ? 'Approved' : s === 'comple
 //  - SAP GRN ref only            -> Draft
 //  - SAP MIRO ref present        -> Complete
 //  - approved (stock posted)     -> stays Approved
-function deriveStatus(current: string | undefined, grnRef?: string, miroRef?: string) {
+import type { Tables } from '@/types/database.types'
+
+type Grn = Tables<'goods_receipts'>
+type GrnItem = Tables<'goods_receipt_items'>
+type GrnView = Grn & { __items?: GrnItem[] }
+type SupplierLite = Pick<Tables<'suppliers'>, 'id' | 'supplier_code' | 'name'>
+type WarehouseLite = Pick<Tables<'warehouses'>, 'id' | 'code' | 'name'>
+type ProductLite = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'barcode' | 'category' | 'uom' | 'plant'>
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
+
+function deriveStatus(current: string | undefined, grnRef?: string | null, miroRef?: string | null) {
   if (current === 'approved') return 'approved'
   if (current === 'cancelled') return 'cancelled'
   if (miroRef && miroRef.trim()) return 'completed'
@@ -44,15 +54,15 @@ export function InboundGRN() {
   const canApprove = can('inbound.approve') || can('inbound.post') || isPlatformAdmin
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
+  const [editing, setEditing] = useState<GrnView | null>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
-  const [viewing, setViewing] = useState<any>(null)
-  const [scanning, setScanning] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [viewing, setViewing] = useState<GrnView | null>(null)
+  const [scanning, setScanning] = useState<Grn | null>(null)
+  const [deleting, setDeleting] = useState<Grn | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [suppliers, setSuppliers] = useState<any[]>([])
-  const [warehouses, setWarehouses] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierLite[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([])
+  const [products, setProducts] = useState<ProductLite[]>([])
 
   useEffect(() => {
     if (!currentClientId) return
@@ -61,19 +71,19 @@ export function InboundGRN() {
     supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
   }, [currentClientId])
 
-  const supplierName = (id: string) => { const s = suppliers.find(x => x.id === id); return s ? `${s.supplier_code} — ${s.name}` : '—' }
+  const supplierName = (id: string | null) => { const s = suppliers.find(x => x.id === id); return s ? `${s.supplier_code} — ${s.name}` : '—' }
 
   const rows = useMemo(() => {
-    if (!q.trim()) return data as any[]
+    if (!q.trim()) return data
     const t = q.toLowerCase()
-    return (data as any[]).filter(r =>
+    return data.filter(r =>
       String(r.grn_no ?? '').toLowerCase().includes(t) ||
       String(r.sap_grn_ref ?? '').toLowerCase().includes(t) ||
       String(r.sap_miro_ref ?? '').toLowerCase().includes(t))
   }, [data, q])
 
   // Approval posts every GRN line into inventory, then marks the GRN approved.
-  const approve = async (grn: any) => {
+  const approve = async (grn: Grn) => {
     if (grn.posted_at) { notify('info', 'This GRN is already approved & in stock'); return }
     if (grn.status !== 'completed') { notify('error', 'Add the SAP MIRO ref (Complete) before approving'); return }
     if (!grn.warehouse_id) { notify('error', 'Set a warehouse on the GRN before approving'); return }
@@ -81,15 +91,15 @@ export function InboundGRN() {
     try {
       const { data: items } = await supabase.from('goods_receipt_items').select('*').eq('grn_id', grn.id)
       if (!items || items.length === 0) { notify('error', 'Add line items before approving'); return }
-      for (const it of items as any[]) {
+      for (const it of items) {
         const postQty = Number(it.received_qty) > 0 ? Number(it.received_qty) : Number(it.qty)
         if (!it.product_id || !(postQty > 0)) continue
-        const { error } = await (supabase as any).rpc('post_stock_movement', {
-          p_client: currentClientId, p_product: it.product_id, p_warehouse: grn.warehouse_id,
-          p_location: it.location_id || null, p_stock_status: it.stock_status || 'good',
+        const { error } = await supabase.rpc('post_stock_movement', {
+          p_client: currentClientId!, p_product: it.product_id, p_warehouse: grn.warehouse_id!,
+          p_location: it.location_id ?? undefined, p_stock_status: it.stock_status || 'good',
           p_qty_in: postQty, p_qty_out: 0, p_movement_type: 'GRN',
-          p_reference_type: 'goods_receipt', p_reference_id: grn.id, p_reference_no: grn.grn_no,
-          p_serial_no: null,
+          p_reference_type: 'goods_receipt', p_reference_id: grn.id, p_reference_no: grn.grn_no ?? undefined,
+          p_serial_no: undefined,
           p_remarks: `GRN ${grn.grn_no}${grn.sap_grn_ref ? ' · SAP ' + grn.sap_grn_ref : ''}`
         })
         if (error) throw error
@@ -105,22 +115,22 @@ export function InboundGRN() {
     }
   }
 
-  const openEdit = async (r: any) => {
+  const openEdit = async (r: Grn) => {
     const { data: items } = await supabase.from('goods_receipt_items').select('*').eq('grn_id', r.id)
     setEditing({ ...r, __items: items ?? [] }); setModal(true)
   }
 
-  const openView = async (r: any) => {
+  const openView = async (r: Grn) => {
     const { data: items } = await supabase.from('goods_receipt_items').select('*').eq('grn_id', r.id)
     setViewing({ ...r, __items: items ?? [] })
   }
 
-  const columns = [
-    { key: 'grn_no', header: 'GRN (MIGO)', accessor: (r: any) => r.grn_no, sortable: true, className: 'font-medium' },
-    { key: 'sap_miro_ref', header: 'SAP MIRO', accessor: (r: any) => r.sap_miro_ref ?? '—' },
-    { key: 'supplier', header: 'Supplier', render: (r: any) => supplierName(r.supplier_id) },
-    { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
-    { key: 'status', header: 'Status', render: (r: any) => (
+  const columns: Column<Grn>[] = [
+    { key: 'grn_no', header: 'GRN (MIGO)', accessor: r => r.grn_no, sortable: true, className: 'font-medium' },
+    { key: 'sap_miro_ref', header: 'SAP MIRO', accessor: r => r.sap_miro_ref ?? '—' },
+    { key: 'supplier', header: 'Supplier', render: r => supplierName(r.supplier_id) },
+    { key: 'total_qty', header: 'Qty', accessor: r => formatNumber(r.total_qty), className: 'text-right' },
+    { key: 'status', header: 'Status', render: r => (
       <div className="flex items-center gap-1">
         <Badge tone={tone(r.status)}>{statusLabel(r.status)}</Badge>
         {r.billable && <Badge tone="info">Billable</Badge>}
@@ -128,7 +138,7 @@ export function InboundGRN() {
     ) },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: r => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => openView(r) },
@@ -151,7 +161,7 @@ export function InboundGRN() {
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           onRowClick={canEdit ? openEdit : openView} emptyTitle="No goods receipts yet" />
       </Card>
 
@@ -163,20 +173,21 @@ export function InboundGRN() {
 
       {viewing && (
         <GRNOverview grn={viewing} supplierName={supplierName(viewing.supplier_id)}
-          warehouseName={warehouses.find((w: any) => w.id === viewing.warehouse_id)?.name ?? '—'}
+          warehouseName={warehouses.find(w => w.id === viewing.warehouse_id)?.name ?? '—'}
           products={products} canEdit={canEdit}
           onEdit={() => { const r = viewing; setViewing(null); openEdit(r) }}
           onClose={() => setViewing(null)} />
       )}
 
       {scanning && (
-        <GrnSerialScan grn={scanning} products={products} clientId={currentClientId!} notify={notify}
+        <GrnSerialScan grn={scanning} clientId={currentClientId!} notify={notify}
           onClose={() => setScanning(null)} />
       )}
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `GRN · ${deleting.grn_no}` : undefined}
         onConfirm={async () => {
+          if (!deleting) return { error: null }
           const res = await supabase.from('goods_receipts').delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
@@ -185,12 +196,18 @@ export function InboundGRN() {
   )
 }
 
-function GRNForm({ record, suppliers, warehouses, products, clientId, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? { receipt_date: today() })
-  const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
-  const [locations, setLocations] = useState<any[]>([])
+function GRNForm({ record, suppliers, warehouses, products, clientId, notify, onClose, onDone }: {
+  record: GrnView | null; suppliers: SupplierLite[]; warehouses: WarehouseLite[]; products: ProductLite[]
+  clientId: string; notify: Notify; onClose: () => void; onDone: () => void
+}) {
+  const [h, setH] = useState<Partial<Grn>>(record ?? { receipt_date: today() })
+  const [lines, setLines] = useState<LineRow[]>((record?.__items ?? []).map(it => ({
+    product_id: it.product_id ?? '', qty: it.qty, expected_qty: it.expected_qty ?? undefined,
+    unit_price: it.unit_price, stock_status: it.stock_status, location_id: it.location_id ?? undefined
+  })))
+  const [locations, setLocations] = useState<Pick<Tables<'locations'>, 'id' | 'location_code'>[]>([])
   const [saving, setSaving] = useState(false)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const set = (patch: Partial<Grn>) => setH(x => ({ ...x, ...patch }))
   const approved = record?.status === 'approved'
   const previewStatus = deriveStatus(record?.status, h.sap_grn_ref, h.sap_miro_ref)
 
@@ -232,6 +249,7 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
         if (error) throw error
         grnId = data.id
       }
+      if (!grnId) throw new Error('GRN id missing after save')
       await supabase.from('goods_receipt_items').delete().eq('grn_id', grnId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
         client_id: clientId, grn_id: grnId, product_id: r.product_id, qty: Number(r.qty) || 0,
@@ -258,12 +276,12 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
         {approved && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">This GRN is approved and posted to inventory. Editing lines will not change posted stock.</p>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Supplier">
-            <Combobox items={suppliers.map((s: any) => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))} value={h.supplier_id ?? ''} onChange={(id: string) => set({ supplier_id: id })} placeholder="Search supplier by code or name" />
+            <Combobox items={suppliers.map(s => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))} value={h.supplier_id ?? ''} onChange={(id: string) => set({ supplier_id: id })} placeholder="Search supplier by code or name" />
           </Field>
           <Field label="Warehouse">
             <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
               <option value="">Select…</option>
-              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
+              {warehouses.map(w => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
             </SelectBox>
           </Field>
           <Field label="SAP MIGO No" required><Input value={h.sap_grn_ref ?? ''} onChange={e => set({ sap_grn_ref: e.target.value })} placeholder="GRN identity — e.g. 500012345" /></Field>
@@ -306,10 +324,13 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
 // Read-only 360° view of a GRN: header, SAP trail, items, and the merged
 // activity + stock-movement trail (audit_logs + inventory_ledger legs posted
 // on approval) — one place to see everything that happened to this receipt.
-function GRNOverview({ grn, supplierName, warehouseName, products, canEdit, onEdit, onClose }: any) {
-  const items: any[] = grn.__items ?? []
-  const productLabel = (id: string) => { const p = products.find((x: any) => x.id === id); return p ? `${p.material_code} — ${p.name}` : id }
-  const Stat = ({ label, value }: any) => (
+function GRNOverview({ grn, supplierName, warehouseName, products, canEdit, onEdit, onClose }: {
+  grn: GrnView; supplierName: string; warehouseName: string; products: ProductLite[]
+  canEdit: boolean; onEdit: () => void; onClose: () => void
+}) {
+  const items: GrnItem[] = grn.__items ?? []
+  const productLabel = (id: string | null) => { const p = products.find(x => x.id === id); return p ? `${p.material_code} — ${p.name}` : id ?? '—' }
+  const Stat = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
   )
   return (
@@ -328,7 +349,7 @@ function GRNOverview({ grn, supplierName, warehouseName, products, canEdit, onEd
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Items</p>
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
-              items.map((it: any, i: number) => (
+              items.map((it, i) => (
                 <div key={it.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{productLabel(it.product_id)}</span>
                   <span className="shrink-0 text-ink-soft">{formatNumber(Number(it.received_qty) > 0 ? it.received_qty : it.qty)}</span>

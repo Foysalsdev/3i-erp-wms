@@ -5,7 +5,7 @@ import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -18,6 +18,16 @@ import { formatNumber, formatDate } from '@/lib/utils'
 import { LineItems, type LineRow } from '@/components/shared/LineItems'
 import { useAutoOpen } from '@/hooks/useAutoOpen'
 
+import type { Tables } from '@/types/database.types'
+
+type PR = Tables<'purchase_requisitions'>
+type PRItem = Tables<'purchase_requisition_items'>
+type PRView = PR & { __items?: PRItem[] }
+type SupplierLite = Pick<Tables<'suppliers'>, 'id' | 'supplier_code' | 'name'>
+type WarehouseLite = Pick<Tables<'warehouses'>, 'id' | 'code' | 'name'>
+type ProductLite = Pick<Tables<'products'>, 'id' | 'material_code' | 'name'>
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
+
 const PR_STATUS = ['draft', 'pending', 'approved', 'received', 'closed', 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
 const tone = (s: string) => s === 'received' || s === 'closed' ? 'positive' : s === 'cancelled' ? 'negative' : s === 'draft' ? 'neutral' : 'critical'
@@ -25,18 +35,18 @@ const tone = (s: string) => s === 'received' || s === 'closed' ? 'positive' : s 
 export function InboundPurchaseRequisitions() {
   const { data, loading, refresh } = useCollection('purchase_requisitions', { order: 'created_at' })
   const { currentClientId, can, isPlatformAdmin, clients } = useAuth()
-  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
   const notify = useUI(s => s.notify)
   const canEdit = can('inbound.create') || can('inbound.edit')
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
+  const [editing, setEditing] = useState<PRView | null>(null)
   useAutoOpen(() => { setEditing(null); setModal(true) })
-  const [viewing, setViewing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
-  const [suppliers, setSuppliers] = useState<any[]>([])
-  const [warehouses, setWarehouses] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
+  const [viewing, setViewing] = useState<PRView | null>(null)
+  const [deleting, setDeleting] = useState<PR | null>(null)
+  const [suppliers, setSuppliers] = useState<SupplierLite[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([])
+  const [products, setProducts] = useState<ProductLite[]>([])
 
   useEffect(() => {
     if (!currentClientId) return
@@ -45,11 +55,11 @@ export function InboundPurchaseRequisitions() {
     supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
   }, [currentClientId])
 
-  const supplierName = (id: string) => { const s = suppliers.find(x => x.id === id); return s ? `${s.supplier_code} — ${s.name}` : '—' }
-  const warehouseName = (id: string) => { const w = warehouses.find(x => x.id === id); return w ? `${w.code} — ${w.name}` : '—' }
-  const productLabel = (id: string) => { const p = products.find(x => x.id === id); return p ? `${p.material_code} — ${p.name}` : '—' }
+  const supplierName = (id: string | null) => { const s = suppliers.find(x => x.id === id); return s ? `${s.supplier_code} — ${s.name}` : '—' }
+  const warehouseName = (id: string | null) => { const w = warehouses.find(x => x.id === id); return w ? `${w.code} — ${w.name}` : '—' }
+  const productLabel = (id: string | null) => { const p = products.find(x => x.id === id); return p ? `${p.material_code} — ${p.name}` : '—' }
 
-  const prMeta = (r: any) => [
+  const prMeta = (r: PR) => [
     { label: 'Requisition No', value: r.pr_no ?? '' },
     { label: 'Date', value: formatDate(r.order_date) },
     { label: 'Source', value: supplierName(r.supplier_id) },
@@ -64,14 +74,14 @@ export function InboundPurchaseRequisitions() {
   }
 
   // Read-only view: pull the lines, then open the overview modal.
-  const openView = async (r: any) => setViewing({ ...r, __items: await fetchItems(r.id) })
+  const openView = async (r: PR) => setViewing({ ...r, __items: await fetchItems(r.id) })
 
   // Print: an inward requisition is a "goods expected" note — no purchase
   // pricing, so the PDF shows just the products and quantities (showPrice off).
-  const printPR = async (r: any) => {
+  const printPR = async (r: PR) => {
     try {
       const items = await fetchItems(r.id)
-      const lines = items.map((it: any) => ({ name: productLabel(it.product_id), qty: Number(it.qty) || 0 }))
+      const lines = items.map(it => ({ name: productLabel(it.product_id), qty: Number(it.qty) || 0 }))
       const { downloadDocPDF } = await import('@/pdf/DocumentPDF')  // lazy: pdf chunk loads on demand
       await downloadDocPDF({ client: clientName, title: 'Inward Requisition', docNo: r.pr_no ?? '', meta: prMeta(r), lines })
     } catch (e: any) {
@@ -80,26 +90,26 @@ export function InboundPurchaseRequisitions() {
   }
 
   const rows = useMemo(() => {
-    if (!q.trim()) return data as any[]
+    if (!q.trim()) return data
     const t = q.toLowerCase()
-    return (data as any[]).filter(r => String(r.pr_no ?? '').toLowerCase().includes(t))
+    return data.filter(r => String(r.pr_no ?? '').toLowerCase().includes(t))
   }, [data, q])
 
-  const openEdit = async (r: any) => {
+  const openEdit = async (r: PR) => {
     const { data: items } = await supabase.from('purchase_requisition_items').select('*').eq('pr_id', r.id)
     setEditing({ ...r, __items: items ?? [] }); setModal(true)
   }
 
-  const columns = [
-    { key: 'pr_no', header: 'Requisition No', accessor: (r: any) => r.pr_no, sortable: true, className: 'font-medium' },
-    { key: 'supplier', header: 'Source', render: (r: any) => supplierName(r.supplier_id) },
-    { key: 'order_date', header: 'Date', render: (r: any) => formatDate(r.order_date) },
-    { key: 'expected_date', header: 'Expected By', render: (r: any) => r.expected_date ? formatDate(r.expected_date) : '—' },
-    { key: 'total_qty', header: 'Qty', accessor: (r: any) => formatNumber(r.total_qty), className: 'text-right' },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+  const columns: Column<PR>[] = [
+    { key: 'pr_no', header: 'Requisition No', accessor: r => r.pr_no, sortable: true, className: 'font-medium' },
+    { key: 'supplier', header: 'Source', render: r => supplierName(r.supplier_id) },
+    { key: 'order_date', header: 'Date', render: r => formatDate(r.order_date) },
+    { key: 'expected_date', header: 'Expected By', render: r => r.expected_date ? formatDate(r.expected_date) : '—' },
+    { key: 'total_qty', header: 'Qty', accessor: r => formatNumber(r.total_qty), className: 'text-right' },
+    { key: 'status', header: 'Status', render: r => <Badge tone={tone(r.status)}>{r.status}</Badge> },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: r => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'visibility', label: 'View', onClick: () => openView(r) },
@@ -121,7 +131,7 @@ export function InboundPurchaseRequisitions() {
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           onRowClick={canEdit ? openEdit : openView} emptyTitle="No inward requisitions yet" />
       </Card>
 
@@ -141,6 +151,7 @@ export function InboundPurchaseRequisitions() {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `Requisition · ${deleting.pr_no}` : undefined}
         onConfirm={async () => {
+          if (!deleting) return { error: null }
           const res = await supabase.from('purchase_requisitions').delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
@@ -149,11 +160,16 @@ export function InboundPurchaseRequisitions() {
   )
 }
 
-function PRForm({ record, suppliers, warehouses, products, clientId, notify, onClose, onDone }: any) {
-  const [h, setH] = useState<any>(record ?? { order_date: today(), status: 'pending' })
-  const [lines, setLines] = useState<LineRow[]>(record?.__items ?? [])
+function PRForm({ record, suppliers, warehouses, products, clientId, notify, onClose, onDone }: {
+  record: PRView | null; suppliers: SupplierLite[]; warehouses: WarehouseLite[]; products: ProductLite[]
+  clientId: string; notify: Notify; onClose: () => void; onDone: () => void
+}) {
+  const [h, setH] = useState<Partial<PR>>(record ?? { order_date: today(), status: 'pending' })
+  const [lines, setLines] = useState<LineRow[]>((record?.__items ?? []).map(it => ({
+    product_id: it.product_id ?? '', qty: it.qty, unit_price: it.unit_price
+  })))
   const [saving, setSaving] = useState(false)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const set = (patch: Partial<PR>) => setH(x => ({ ...x, ...patch }))
 
   const save = async () => {
     setSaving(true)
@@ -176,6 +192,7 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
         if (error) throw error
         prId = data.id
       }
+      if (!prId) throw new Error('Requisition id missing after save')
       await supabase.from('purchase_requisition_items').delete().eq('pr_id', prId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
         client_id: clientId, pr_id: prId, product_id: r.product_id,
@@ -202,13 +219,13 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
           <Field label="Source">
             <SelectBox value={h.supplier_id ?? ''} onChange={e => set({ supplier_id: e.target.value })}>
               <option value="">Select…</option>
-              {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.supplier_code} — {s.name}</option>)}
+              {suppliers.map(s => <option key={s.id} value={s.id}>{s.supplier_code} — {s.name}</option>)}
             </SelectBox>
           </Field>
           <Field label="Warehouse">
             <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
               <option value="">Select…</option>
-              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
+              {warehouses.map(w => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
             </SelectBox>
           </Field>
           <Field label="Date" required><Input type="date" value={h.order_date ?? ''} onChange={e => set({ order_date: e.target.value })} /></Field>
@@ -234,9 +251,9 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
 
 // Read-only 360° view of a PR: header details + line items, with Print / Edit.
 function PROverview({ pr, supplierName, warehouseName, productLabel, canEdit, onEdit, onPrint, onClose }:
-  { pr: any; supplierName: string; warehouseName: string; productLabel: (id: string) => string; canEdit: boolean; onEdit: () => void; onPrint: () => void; onClose: () => void }) {
-  const items: any[] = pr.__items ?? []
-  const Stat = ({ label, value }: any) => (
+  { pr: PRView; supplierName: string; warehouseName: string; productLabel: (id: string | null) => string; canEdit: boolean; onEdit: () => void; onPrint: () => void; onClose: () => void }) {
+  const items: PRItem[] = pr.__items ?? []
+  const Stat = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="min-w-0"><p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</p><div className="mt-0.5 text-sm font-medium text-ink break-words">{value}</div></div>
   )
   return (
@@ -255,7 +272,7 @@ function PROverview({ pr, supplierName, warehouseName, productLabel, canEdit, on
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Items expected</p>
           <div className="overflow-hidden rounded-xl border border-surface-line">
             {items.length === 0 ? <p className="p-3 text-sm text-ink-faint">No items</p> :
-              items.map((it: any, i: number) => (
+              items.map((it, i) => (
                 <div key={it.id ?? i} className={'flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')}>
                   <span className="min-w-0 truncate text-ink">{productLabel(it.product_id)}</span>
                   <span className="shrink-0 font-semibold text-ink">{formatNumber(it.qty)} pcs</span>

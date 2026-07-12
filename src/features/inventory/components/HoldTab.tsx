@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
+
+type HeldStock = Tables<'inventory_stock'> & {
+  products: Pick<Tables<'products'>, 'name' | 'material_code'> | null
+  warehouses: Pick<Tables<'warehouses'>, 'code'> | null
+  locations: Pick<Tables<'locations'>, 'location_code'> | null
+}
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -18,11 +25,11 @@ import { STOCK_STATUS } from '@/lib/constants'
 export function HoldTab() {
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<HeldStock[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [onlyHeld, setOnlyHeld] = useState(false)
-  const [action, setAction] = useState<{ row: any; hold: boolean } | null>(null)
+  const [action, setAction] = useState<{ row: HeldStock; hold: boolean } | null>(null)
   const canEdit = can('inventory.adjust')
 
   const load = () => {
@@ -48,18 +55,18 @@ export function HoldTab() {
     return r
   }, [rows, q, onlyHeld])
 
-  const columns = [
-    { key: 'code', header: 'Material Code', accessor: (r: any) => r.products?.material_code, sortable: true, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name },
-    { key: 'wh', header: 'WH', accessor: (r: any) => r.warehouses?.code },
-    { key: 'loc', header: 'Location', accessor: (r: any) => r.locations?.location_code ?? '—' },
-    { key: 'status', header: 'Condition', render: (r: any) => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.label ?? r.stock_status}</Badge> },
-    { key: 'qty', header: 'On Hand', accessor: (r: any) => r.quantity, className: 'text-right' },
-    { key: 'held', header: 'Held', className: 'text-right', render: (r: any) => Number(r.reserved_qty) > 0 ? <span className="font-semibold text-horizon-critical">{formatNumber(r.reserved_qty)}</span> : '—' },
-    { key: 'avail', header: 'Available', className: 'text-right font-medium', render: (r: any) => formatNumber(Number(r.quantity) - Number(r.reserved_qty ?? 0)) },
+  const columns: Column<HeldStock>[] = [
+    { key: 'code', header: 'Material Code', accessor: r => r.products?.material_code, sortable: true, className: 'font-medium' },
+    { key: 'name', header: 'Product', accessor: r => r.products?.name },
+    { key: 'wh', header: 'WH', accessor: r => r.warehouses?.code },
+    { key: 'loc', header: 'Location', accessor: r => r.locations?.location_code ?? '—' },
+    { key: 'status', header: 'Condition', render: r => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.label ?? r.stock_status}</Badge> },
+    { key: 'qty', header: 'On Hand', accessor: r => r.quantity, className: 'text-right' },
+    { key: 'held', header: 'Held', className: 'text-right', render: r => Number(r.reserved_qty) > 0 ? <span className="font-semibold text-horizon-critical">{formatNumber(r.reserved_qty)}</span> : '—' },
+    { key: 'avail', header: 'Available', className: 'text-right font-medium', render: r => formatNumber(Number(r.quantity) - Number(r.reserved_qty ?? 0)) },
     ...(canEdit ? [{
       key: '__actions', header: '', className: 'w-px whitespace-nowrap',
-      render: (r: any) => (
+      render: (r: HeldStock) => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'lock', label: 'Hold', onClick: () => setAction({ row: r, hold: true }) },
@@ -80,14 +87,14 @@ export function HoldTab() {
         <span className="text-sm text-ink-soft">{filtered.length} records</span>
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={columns} rows={filtered} rowKey={(r: any) => r.id} emptyTitle="No stock records" />
+        <DataTable fill loading={loading} columns={columns} rows={filtered} rowKey={r => r.id} emptyTitle="No stock records" />
       </Card>
       {action && <HoldModal action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); load() }} />}
     </div>
   )
 }
 
-function HoldModal({ action, onClose, onDone }: { action: { row: any; hold: boolean }; onClose: () => void; onDone: () => void }) {
+function HoldModal({ action, onClose, onDone }: { action: { row: HeldStock; hold: boolean }; onClose: () => void; onDone: () => void }) {
   const notify = useUI(s => s.notify)
   const { row, hold } = action
   const available = Number(row.quantity) - Number(row.reserved_qty ?? 0)
@@ -101,7 +108,7 @@ function HoldModal({ action, onClose, onDone }: { action: { row: any; hold: bool
     if (n > maxQty) { notify('error', `Cannot ${hold ? 'hold' : 'release'} more than ${formatNumber(maxQty)}`); return }
     setSaving(true)
     try {
-      const { error } = await (supabase as any).rpc('adjust_stock_hold', { p_stock_id: row.id, p_qty: n, p_hold: hold })
+      const { error } = await supabase.rpc('adjust_stock_hold', { p_stock_id: row.id, p_qty: n, p_hold: hold })
       if (error) throw error
       notify('success', `${formatNumber(n)} ${hold ? 'placed on hold' : 'released'}`)
       onDone()

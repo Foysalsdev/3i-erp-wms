@@ -8,14 +8,19 @@ import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
-const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
+import type { Tables } from '@/types/database.types'
+
+type ProdInfo = Pick<Tables<'products'>, 'id' | 'material_code' | 'name'>
+type MoveRow = { id: number; date: string; product: string; type: string; ref: string; qty_in: number | ''; qty_out: number | ''; balance: number; status: string } & Record<string, string | number>
+
+const n = (v: number | string | null | undefined) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
 
 // Inventory ledger — every in/out movement with reference and running balance.
 export function StockMovementReport() {
   const { currentClientId } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [ledger, setLedger] = useState<any[]>([])
-  const [products, setProducts] = useState<Record<string, any>>({})
+  const [ledger, setLedger] = useState<Tables<'inventory_ledger'>[]>([])
+  const [products, setProducts] = useState<Record<string, ProdInfo>>({})
   const [q, setQ] = useState('')
 
   useEffect(() => {
@@ -26,21 +31,21 @@ export function StockMovementReport() {
       supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId)
     ]).then(([l, p]) => {
       setLedger(l.data ?? [])
-      const pm: Record<string, any> = {}; (p.data ?? []).forEach((r: any) => { pm[r.id] = r })
+      const pm: Record<string, ProdInfo> = {}; (p.data ?? []).forEach(r => { pm[r.id] = r })
       setProducts(pm); setLoading(false)
     })
   }, [currentClientId])
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return ledger.map((r: any) => {
-      const p = products[r.product_id] || {}
+    return ledger.map((r): MoveRow => {
+      const p: Partial<ProdInfo> = products[r.product_id ?? ''] ?? {}
       return {
         id: r.id, date: formatDateTime(r.created_at), product: p.material_code ? `${p.material_code} — ${p.name}` : (r.product_id ?? '—'),
         type: r.movement_type ?? '—', ref: [r.reference_type, r.reference_no].filter(Boolean).join(' '),
         qty_in: n(r.qty_in) || '', qty_out: n(r.qty_out) || '', balance: n(r.balance_after), status: r.stock_status ?? ''
       }
-    }).filter((r: any) => !t || r.product.toLowerCase().includes(t) || String(r.ref).toLowerCase().includes(t) || r.type.toLowerCase().includes(t))
+    }).filter(r => !t || r.product.toLowerCase().includes(t) || String(r.ref).toLowerCase().includes(t) || r.type.toLowerCase().includes(t))
   }, [ledger, products, q])
 
   const cols: RepCol[] = [
@@ -55,7 +60,7 @@ export function StockMovementReport() {
   ]
   const tableCols = cols.map(c => ({
     key: c.key, header: c.header, className: c.align === 'right' ? 'text-right' : '',
-    accessor: (r: any) => ['qty_in', 'qty_out', 'balance'].includes(c.key) ? (r[c.key] === '' ? '' : formatNumber(r[c.key])) : r[c.key]
+    accessor: (r: MoveRow) => ['qty_in', 'qty_out', 'balance'].includes(c.key) ? (r[c.key] === '' ? '' : formatNumber(Number(r[c.key]))) : r[c.key]
   }))
 
   if (loading) return <Spinner label="Loading…" />
@@ -65,7 +70,7 @@ export function StockMovementReport() {
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search product / reference / type…" /></div>
       </ReportToolbar>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={tableCols} rows={rows} rowKey={(r: any) => r.id} emptyTitle="No stock movements yet" />
+        <DataTable fill columns={tableCols} rows={rows} rowKey={r => String(r.id)} emptyTitle="No stock movements yet" />
       </Card>
     </div>
   )

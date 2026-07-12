@@ -65,7 +65,12 @@ export interface OpDef {
   pdf?: 'gatepass' | 'document'
 }
 
-const statusTone = (statuses: StatusDef[]) => (row: any) => {
+// Operation rows flow through one engine across many tables (same pattern
+// as DocRecord/MasterRecord); __rel carries resolved relation labels.
+export type OpRecord = { id: string; status?: string | null; created_at?: string; __rel?: Record<string, string> } & Record<string, unknown>
+const cellStr = (v: unknown) => (v == null ? '' : String(v))
+
+const statusTone = (statuses: StatusDef[]) => (row: OpRecord) => {
   const s = statuses.find(x => x.value === row.status)
   return createElement(Badge, { tone: s?.tone ?? 'neutral' }, s?.label ?? row.status)
 }
@@ -410,19 +415,19 @@ export const OPERATIONS: Record<string, OpDef> = {
 }
 
 // Build the standard list columns (doc no + relevant fields + status) for a def.
-export function opColumns(def: OpDef): Column<any>[] {
-  const cols: Column<any>[] = [
-    { key: def.numberField, header: 'Document No', accessor: (r: any) => r[def.numberField], sortable: true, className: 'font-medium' }
+export function opColumns(def: OpDef): Column<OpRecord>[] {
+  const cols: Column<OpRecord>[] = [
+    { key: def.numberField, header: 'Document No', accessor: r => cellStr(r[def.numberField]), sortable: true, className: 'font-medium' }
   ]
   // Show up to three meaningful non-status fields as plain columns.
   def.fields.filter(f => !['textarea', 'image'].includes(f.type) && f.name !== 'status').slice(0, 3).forEach(f => {
     if (f.type === 'relation') {
-      cols.push({ key: f.name, header: f.label, accessor: (r: any) => r.__rel?.[f.name] ?? '—', render: (r: any) => r.__rel?.[f.name] ?? '—', sortable: true })
+      cols.push({ key: f.name, header: f.label, accessor: r => r.__rel?.[f.name] ?? '—', render: r => r.__rel?.[f.name] ?? '—', sortable: true })
     } else {
-      cols.push({ key: f.name, header: f.label, accessor: (r: any) => r[f.name] ?? '—', sortable: true })
+      cols.push({ key: f.name, header: f.label, accessor: r => cellStr(r[f.name]) || '—', sortable: true })
     }
   })
-  cols.push({ key: 'status', header: 'Status', accessor: (r: any) => r.status ?? '—', render: statusTone(def.statuses), sortable: true })
+  cols.push({ key: 'status', header: 'Status', accessor: r => r.status ?? '—', render: statusTone(def.statuses), sortable: true })
   return cols
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUI } from '@/store/ui'
+import type { Tables, Json } from '@/types/database.types'
 
 // ---------------------------------------------------------------------------
 // Entity Trail (docs/TRACKING-ARCHITECTURE.md §3.2, Phase 1: frontend-derived,
@@ -18,7 +19,7 @@ export interface TrailEvent {
   kind: 'audit' | 'ledger'
   // audit
   action?: 'INSERT' | 'UPDATE' | 'DELETE'
-  changes?: { field: string; from: any; to: any }[]
+  changes?: { field: string; from: Json; to: Json }[]
   status?: string | null
   // ledger
   movementType?: string
@@ -31,15 +32,20 @@ export interface TrailEvent {
 
 const SKIP = new Set(['updated_at', 'created_at', 'id', 'client_id', 'created_by', 'posted_at'])
 
-function diff(oldData: any, newData: any): { field: string; from: any; to: any }[] {
+function diff(oldData: Record<string, Json> | null, newData: Record<string, Json> | null): { field: string; from: Json; to: Json }[] {
   if (!oldData || !newData) return []
-  const out: { field: string; from: any; to: any }[] = []
+  const out: { field: string; from: Json; to: Json }[] = []
   for (const k of Object.keys(newData)) {
     if (SKIP.has(k)) continue
     const a = oldData[k], b = newData[k]
     if (JSON.stringify(a) !== JSON.stringify(b)) out.push({ field: k, from: a, to: b })
   }
   return out
+}
+
+type LedgerJoinRow = Tables<'inventory_ledger'> & {
+  products: Pick<Tables<'products'>, 'name' | 'material_code'> | null
+  warehouses: Pick<Tables<'warehouses'>, 'code'> | null
 }
 
 // `referenceNo` matches inventory_ledger.reference_no (the document number
@@ -60,27 +66,27 @@ export function useEntityTrail(table: string, recordId?: string, referenceNo?: s
       referenceNo
         ? supabase.from('inventory_ledger').select('*, products(name,material_code), warehouses(code)')
             .eq('reference_no', referenceNo).order('created_at', { ascending: false }).limit(50)
-        : Promise.resolve({ data: [], error: null })
+        : Promise.resolve({ data: [] as LedgerJoinRow[], error: null })
     ]).then(async ([auditRes, ledgerRes]) => {
       if (!active) return
       if (auditRes.error) notify('error', `Could not load activity: ${auditRes.error.message}`)
       if (ledgerRes.error) notify('error', `Could not load stock movements: ${ledgerRes.error.message}`)
 
       const userIds = new Set<string>()
-      ;(auditRes.data ?? []).forEach((r: any) => { if (r.changed_by) userIds.add(r.changed_by) })
-      ;(ledgerRes.data ?? []).forEach((r: any) => { if (r.created_by) userIds.add(r.created_by) })
+      ;(auditRes.data ?? []).forEach(r => { if (r.changed_by) userIds.add(r.changed_by) })
+      ;(ledgerRes.data ?? []).forEach(r => { if (r.created_by) userIds.add(r.created_by) })
       const { data: profiles } = userIds.size
         ? await supabase.from('profiles').select('id,full_name').in('id', [...userIds])
-        : { data: [] as any[] }
-      const nameOf = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p.full_name]))
+        : { data: [] as Pick<Tables<'profiles'>, 'id' | 'full_name'>[] }
+      const nameOf = Object.fromEntries((profiles ?? []).map(p => [p.id, p.full_name]))
 
-      const auditEvents: TrailEvent[] = (auditRes.data ?? []).map((e: any) => ({
-        id: `a-${e.id}`, at: e.changed_at, by: nameOf[e.changed_by] ?? null, kind: 'audit',
-        action: e.action, status: e.new_data?.status ?? null,
-        changes: e.action === 'UPDATE' ? diff(e.old_data, e.new_data) : []
+      const auditEvents: TrailEvent[] = (auditRes.data ?? []).map(e => ({
+        id: `a-${e.id}`, at: e.changed_at, by: nameOf[e.changed_by ?? ''] ?? null, kind: 'audit',
+        action: e.action as 'INSERT' | 'UPDATE' | 'DELETE', status: (e.new_data as Record<string, Json> | null)?.status as string ?? null,
+        changes: e.action === 'UPDATE' ? diff(e.old_data as Record<string, Json> | null, e.new_data as Record<string, Json> | null) : []
       }))
-      const ledgerEvents: TrailEvent[] = (ledgerRes.data ?? []).map((r: any) => ({
-        id: `l-${r.id}`, at: r.created_at, by: nameOf[r.created_by] ?? null, kind: 'ledger',
+      const ledgerEvents: TrailEvent[] = (ledgerRes.data as unknown as LedgerJoinRow[] ?? []).map(r => ({
+        id: `l-${r.id}`, at: r.created_at, by: nameOf[r.created_by ?? ''] ?? null, kind: 'ledger',
         movementType: r.movement_type, qtyIn: Number(r.qty_in) || 0, qtyOut: Number(r.qty_out) || 0,
         balanceAfter: Number(r.balance_after), warehouseCode: r.warehouses?.code,
         productLabel: r.products ? `${r.products.material_code} — ${r.products.name}` : undefined

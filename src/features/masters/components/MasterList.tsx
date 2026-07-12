@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
-import type { MasterDef } from '../registry'
+import type { MasterDef, MasterRecord } from '../registry'
+
+const str = (v: unknown) => (v == null ? '' : String(v))
 import { useRelationLabels, fieldDisplay } from '../masterUtils'
 import { useCollection } from '@/hooks/useCollection'
 import { supabase } from '@/lib/supabase'
@@ -23,7 +25,7 @@ import { MasterProfile } from './MasterProfile'
 import { CustomerAddresses } from './CustomerAddresses'
 
 export function MasterList({ def }: { def: MasterDef }) {
-  const { data, loading, refresh } = useCollection(def.table, { order: 'created_at' })
+  const { data, loading, refresh } = useCollection<typeof def.table, MasterRecord>(def.table, { order: 'created_at' })
   const can = useAuth(s => s.can)
   const { clients, currentClientId } = useAuth()
   const isAdmin = useAuth(s => s.isPlatformAdmin)
@@ -34,7 +36,7 @@ export function MasterList({ def }: { def: MasterDef }) {
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
-  const [selected, setSelected] = useState<{ row: any; tab: string } | null>(null)
+  const [selected, setSelected] = useState<{ row: MasterRecord; tab: string } | null>(null)
   const [deleting, setDeleting] = useState<any>(null)
   const [addressesFor, setAddressesFor] = useState<any>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -45,12 +47,12 @@ export function MasterList({ def }: { def: MasterDef }) {
   const filtered = useMemo(() => {
     if (!q.trim()) return data
     const t = q.toLowerCase()
-    return data.filter((r: any) => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+    return data.filter(r => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
   }, [data, q, def])
 
   // Only ids still present in the current filter count toward the bulk bar —
   // a stale checked id from a deleted/filtered-out row is simply dropped.
-  const selectedRows = filtered.filter((r: any) => checked.has(r.id))
+  const selectedRows = filtered.filter(r => checked.has(r.id))
 
   const toggleOne = (id: string) => setChecked(prev => {
     const next = new Set(prev)
@@ -66,24 +68,24 @@ export function MasterList({ def }: { def: MasterDef }) {
 
   const exportSelected = () => {
     const cols = def.listColumns.map(c => ({ key: c.key, header: c.header }))
-    const csvRows = selectedRows.map((r: any) => Object.fromEntries(def.listColumns.map(c => [c.key, c.accessor?.(r) ?? r[c.key] ?? ''])))
+    const csvRows = selectedRows.map(r => Object.fromEntries(def.listColumns.map(c => [c.key, c.accessor?.(r) ?? (r[c.key] as string | number | null | undefined) ?? ''])))
     downloadCSV(`${def.title} (selected)`, cols, csvRows)
   }
 
   const bulkDelete = async () => {
-    const ids = selectedRows.map((r: any) => r.id)
+    const ids = selectedRows.map(r => r.id)
     const res = await supabase.from(def.table as any).delete().in('id', ids)
     if (!res.error) { setChecked(new Set()); refresh() }
     return res
   }
 
-  const printRecord = async (row: any) => {
+  const printRecord = async (row: MasterRecord) => {
     try {
       const fields = def.fields.filter(f => f.type !== 'image').map(f => ({ label: f.label, value: fieldDisplay(def, row, f.name, rel) }))
       const { downloadRecordPDF } = await import('@/pdf/RecordPDF')
       await downloadRecordPDF({
-        client: clientName, title: row[def.nameField], code: `${def.singular} · ${row[def.codeField]}`,
-        photo: def.imageField ? row[def.imageField] : undefined, fields
+        client: clientName, title: str(row[def.nameField]), code: `${def.singular} · ${str(row[def.codeField])}`,
+        photo: def.imageField ? str(row[def.imageField]) || undefined : undefined, fields
       })
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not generate PDF')
@@ -100,7 +102,7 @@ export function MasterList({ def }: { def: MasterDef }) {
   )
 
   if (selected) {
-    const fresh = data.find((r: any) => r.id === selected.row.id) ?? selected.row
+    const fresh = data.find(r => r.id === selected.row.id) ?? selected.row
     return (
       <>
         <MasterProfile def={def} record={fresh} canEdit={canEdit} initialTab={selected.tab}
@@ -111,7 +113,7 @@ export function MasterList({ def }: { def: MasterDef }) {
     )
   }
 
-  const rowActions = (row: any): MenuItem[] => [
+  const rowActions = (row: MasterRecord): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => setSelected({ row, tab: 'details' }) },
     ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(row); setModal(true) } }] : []),
     ...(def.key === 'customers' ? [{ icon: 'location_on', label: 'Addresses', onClick: () => setAddressesFor(row) }] : []),
@@ -123,7 +125,7 @@ export function MasterList({ def }: { def: MasterDef }) {
 
   const actionCol: Column<any> = {
     key: '__actions', header: 'Action', className: 'w-px whitespace-nowrap',
-    render: (row: any) => (
+    render: (row: MasterRecord) => (
       <div className="flex items-center justify-end" onClick={e => e.stopPropagation()}>
         <ActionMenu items={rowActions(row)} />
       </div>
@@ -132,10 +134,10 @@ export function MasterList({ def }: { def: MasterDef }) {
 
   const thumbCol: Column<any> | null = def.imageField ? {
     key: '__thumb', header: '', className: 'w-px',
-    render: (row: any) => {
-      const img = row[def.imageField!]
+    render: (row: MasterRecord) => {
+      const img = str(row[def.imageField!])
       return <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-surface-sunken text-[11px] font-semibold text-ink-faint ring-1 ring-surface-line">
-        {img ? <img src={img} className="h-full w-full object-cover" /> : initials(row[def.nameField])}
+        {img ? <img src={img} className="h-full w-full object-cover" /> : initials(str(row[def.nameField]))}
       </div>
     }
   } : null
@@ -167,24 +169,24 @@ export function MasterList({ def }: { def: MasterDef }) {
       {view === 'list' ? (
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <DataTable columns={columns} rows={filtered} loading={loading} fill
-            rowKey={(r: any) => r.id} onRowClick={r => setSelected({ row: r, tab: 'details' })} emptyTitle={`No ${def.title.toLowerCase()} yet`}
+            rowKey={r => r.id} onRowClick={r => setSelected({ row: r, tab: 'details' })} emptyTitle={`No ${def.title.toLowerCase()} yet`}
             selection={{ selected: checked, onToggle: toggleOne, onToggleAll: toggleAll }} />
         </Card>
       ) : (
         <div className="grid min-h-0 flex-1 gap-3 overflow-auto sm:grid-cols-2 lg:grid-cols-3 content-start">
-          {filtered.map((r: any) => {
-            const img = def.imageField ? r[def.imageField] : null
+          {filtered.map(r => {
+            const img = def.imageField ? str(r[def.imageField]) : ''
             return (
               <Card key={r.id} className="p-4 transition hover:shadow-card">
                 <div className="flex items-start gap-3">
                   <button className="flex flex-1 items-start gap-3 text-left" onClick={() => setSelected({ row: r, tab: 'details' })}>
                     <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-surface-sunken font-bold text-ink-soft ring-1 ring-surface-line">
-                      {img ? <img src={img} className="h-full w-full object-cover" /> : initials(r[def.nameField])}
+                      {img ? <img src={img} className="h-full w-full object-cover" /> : initials(str(r[def.nameField]))}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">{r[def.nameField]}</p>
-                      <p className="truncate text-xs text-ink-soft">{r[def.codeField]}</p>
-                      <div className="mt-2"><Badge tone={['active', 'in_use'].includes(r.status) ? 'positive' : 'neutral'}>{r.status}</Badge></div>
+                      <p className="truncate font-semibold text-ink">{str(r[def.nameField])}</p>
+                      <p className="truncate text-xs text-ink-soft">{str(r[def.codeField])}</p>
+                      <div className="mt-2"><Badge tone={['active', 'in_use'].includes(r.status ?? '') ? 'positive' : 'neutral'}>{r.status}</Badge></div>
                     </div>
                   </button>
                 </div>

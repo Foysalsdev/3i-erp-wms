@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
-import { RELATIONS, type MasterDef } from '../registry'
+import { RELATIONS, type MasterDef, type MasterRecord } from '../registry'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Button } from '@/components/ui/Button'
@@ -11,7 +11,7 @@ import { ImageUpload } from './ImageUpload'
 import { formatVehicleNo } from '@/lib/utils'
 
 export function MasterForm({ def, record, onDone, onCancel }:
-  { def: MasterDef; record?: any; onDone: () => void; onCancel: () => void }) {
+  { def: MasterDef; record?: MasterRecord | null; onDone: () => void; onCancel: () => void }) {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
   const [saving, setSaving] = useState(false)
@@ -28,7 +28,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
       const { data } = await supabase.from(rel.table as any).select(`id, ${rel.code}, ${rel.name}`).eq('client_id', clientId)
       setRelOptions(o => ({
         ...o,
-        [f.name]: (data ?? []).map((r: any) => ({ id: r.id, label: `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` }))
+        [f.name]: ((data ?? []) as unknown as Record<string, string>[]).map(r => ({ id: r.id, label: `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` }))
       }))
       // Re-apply the record's value once options exist — at mount the matching
       // <option> isn't rendered yet, so the native select can't show it.
@@ -36,7 +36,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
     })
   }, [def, clientId, record, setValue])
 
-  const submit = async (values: any) => {
+  const submit = async (values: Record<string, unknown>) => {
     if (!clientId) { notify('error', 'No client selected. Pick a client first.'); return }
     setSaving(true)
     try {
@@ -72,7 +72,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {def.fields.map(f => {
           if (f.type === 'image')
-            return <div key={f.name} className="sm:col-span-2"><ImageUpload label={f.label} value={watch(f.name)} onChange={v => setValue(f.name, v)} /></div>
+            return <div key={f.name} className="sm:col-span-2"><ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} /></div>
           if (f.type === 'checkbox')
             return (
               <label key={f.name} className="flex items-center gap-2 rounded-lg border border-surface-line px-3 py-2.5 text-sm">
@@ -97,7 +97,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
                 const reg = register(f.name, { required: f.required })
                 return <Input type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'} step="any"
                   {...reg} placeholder={f.placeholder}
-                  onChange={f.format === 'vehicleNo' ? (e: any) => { e.target.value = formatVehicleNo(e.target.value); reg.onChange(e) } : reg.onChange} />
+                  onChange={f.format === 'vehicleNo' ? (e: React.ChangeEvent<HTMLInputElement>) => { e.target.value = formatVehicleNo(e.target.value); reg.onChange(e) } : reg.onChange} />
               })()}
               {f.help && <p className="mt-1 text-[11px] text-ink-faint">{f.help}</p>}
             </Field>

@@ -176,6 +176,14 @@ export function OutboundSalesOrders() {
   const customerName = (id: string | null) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }
   const userName = (id?: string | null) => users.find(u => u.id === id)?.full_name ?? null
 
+  // The filter dropdown should only offer statuses that actually occur in the
+  // data — not the full hardcoded workflow list (SO_STATUS), which shows dead
+  // options (e.g. 'rejected') when nothing is currently in that state.
+  const presentStatuses = useMemo(() => {
+    const present = new Set(data.map(r => r.status).filter((s): s is string => !!s))
+    return SO_STATUS.filter(s => present.has(s))
+  }, [data])
+
   const rows = useMemo(() => {
     let out = statusFilter === 'all' ? data : data.filter(r => r.status === statusFilter)
     if (mineOnly) out = out.filter(r => r.assigned_to === session?.user.id)
@@ -331,7 +339,7 @@ export function OutboundSalesOrders() {
         <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search SO…" /></div>
         <SelectBox value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-auto py-2">
           <option value="all">All statuses</option>
-          {SO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+          {presentStatuses.map(s => <option key={s} value={s}>{s}</option>)}
         </SelectBox>
         <button type="button" onClick={() => setMineOnly(v => !v)}
           className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-semibold',

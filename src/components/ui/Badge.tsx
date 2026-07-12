@@ -5,7 +5,7 @@ const tones: Record<Tone, string> = {
   negative: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-400 dark:ring-red-500/30',
   critical: 'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:ring-orange-500/30',
   info: 'bg-accent-50 text-accent-700 ring-accent-200 dark:bg-accent-500/15 dark:text-accent-400 dark:ring-accent-500/30',
-  neutral: 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-400/15 dark:text-slate-300 dark:ring-slate-400/30',
+  neutral: 'bg-surface-sunken text-ink ring-surface-line',
   brand: 'bg-brand-50 text-brand-700 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-400 dark:ring-brand-500/30'
 }
 export function Badge({ tone = 'neutral', children }: { tone?: Tone; children?: React.ReactNode }) {

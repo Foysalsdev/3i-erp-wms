@@ -120,10 +120,8 @@ export const PENDING_RULES: PendingRule[] = [
   },
   {
     key: 'count-draft', icon: 'fact_check', label: 'Counts to post', owner: 'Inventory Officer', perms: ['inventory.adjust'], slaDays: 2,
-    // stock_counts isn't in the generated schema types yet, so this leg keeps
-    // an untyped client call; the row itself is still typed as PendingRow.
-    fetch: c => (supabase as any).from('stock_counts').select('doc_no,count_date,count_type').eq('client_id', c)
-      .eq('status', 'draft').order('count_date').limit(50).then(({ data }: { data: PendingRow[] | null }) => data ?? []),
+    fetch: c => supabase.from('stock_counts').select('doc_no,count_date,count_type').eq('client_id', c)
+      .eq('status', 'draft').order('count_date').limit(50).then(({ data }) => (data ?? []) as PendingRow[]),
     docNo: r => r.doc_no as string, matter: () => 'Complete & post the stock count',
     route: r => r.count_type === 'physical' ? '/inventory/physical-verification' : '/inventory/cycle-count',
     ageFrom: r => r.count_date as string | null

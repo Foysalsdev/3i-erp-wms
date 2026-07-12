@@ -7,21 +7,25 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Textarea, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
+import type { Tables } from '@/types/database.types'
 
 // Multiple addresses per customer (head office to bill, branch stores to
 // ship). Used by the Delivery Challan's Bill-To / Ship-To pickers. Kept as a
 // focused modal rather than wired into the generic master form, since that
 // form only handles flat fields.
+type CustomerAddress = Tables<'customer_addresses'>
+type EditingAddress = Partial<CustomerAddress> & { address_type: string | null; is_default: boolean }
+
 const TYPES = ['Billing', 'Shipping', 'Both']
-const blank = () => ({ label: '', address_type: 'Shipping', address: '', is_default: false })
+const blank = (): EditingAddress => ({ label: '', address_type: 'Shipping', address: '', is_default: false })
 
 export function CustomerAddresses({ customer, onClose }: { customer: { id: string; name?: string | null }; onClose: () => void }) {
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   const canEdit = can('masters.create') || can('masters.edit')
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<CustomerAddress[]>([])
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState<any>(null) // the row being added/edited
+  const [editing, setEditing] = useState<EditingAddress | null>(null) // the row being added/edited
   const [saving, setSaving] = useState(false)
 
   const load = () => {
@@ -32,7 +36,7 @@ export function CustomerAddresses({ customer, onClose }: { customer: { id: strin
   useEffect(load, [customer.id])
 
   const save = async () => {
-    if (!editing.address?.trim()) { notify('error', 'Enter the address'); return }
+    if (!editing?.address?.trim()) { notify('error', 'Enter the address'); return }
     setSaving(true)
     const payload = {
       client_id: currentClientId!, customer_id: customer.id,

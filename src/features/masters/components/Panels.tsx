@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
 import { EmptyState } from '@/components/ui/States'
 import { formatDateTime } from '@/lib/utils'
+import type { Tables } from '@/types/database.types'
 
 export function NotesPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<Tables<'notes'>[]>([])
   const [body, setBody] = useState('')
   const load = () => supabase.from('notes').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
     .order('created_at', { ascending: false }).then(({ data, error }) => {
@@ -48,7 +49,7 @@ export function NotesPanel({ entityType, entityId }: { entityType: string; entit
 export function AttachmentsPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<Tables<'attachments'>[]>([])
   const [busy, setBusy] = useState(false)
   const load = () => supabase.from('attachments').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
     .order('created_at', { ascending: false }).then(({ data, error }) => {
@@ -78,7 +79,7 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
       {rows.length === 0 ? <EmptyState icon="attach_file" title="No attachments" /> :
         <div className="divide-y divide-horizon-line">
           {rows.map(a => (
-            <a key={a.id} href={a.drive_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2 text-sm hover:text-brand-600">
+            <a key={a.id} href={a.drive_url ?? undefined} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2 text-sm hover:text-brand-600">
               <Icon name={a.source === 'google_drive' ? 'add_to_drive' : 'description'} className="text-brand-500" />
               <span className="flex-1 truncate">{a.file_name}</span>
               <Icon name="open_in_new" className="text-[16px] text-ink-faint" />

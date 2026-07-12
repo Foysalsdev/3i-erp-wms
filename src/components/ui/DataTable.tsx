@@ -18,7 +18,7 @@ const VIRTUALIZE_THRESHOLD = 150
 export interface Column<T> {
   key: string; header: string; className?: string
   render?: (row: T) => React.ReactNode
-  accessor?: (row: T) => string | number | null | undefined
+  accessor?: (row: T) => string | number | boolean | null | undefined
   // Any column with an accessor sorts by default — set sortable: false to
   // opt a specific one out (e.g. a computed column that shouldn't be sorted).
   sortable?: boolean

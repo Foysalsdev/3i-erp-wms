@@ -71,7 +71,7 @@ const dib = StyleSheet.create({
   v: { flex: 1, fontSize: 8.5, fontWeight: 'bold', textAlign: 'right' }
 })
 
-export interface DocField { label: string; value?: string }
+export interface DocField { label: string; value?: string | null }
 
 // Full letterhead: company name + address block on the left, logo on the
 // right. Name and each address line print on their own line (not crammed

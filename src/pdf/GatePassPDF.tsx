@@ -10,7 +10,7 @@ const s = StyleSheet.create({
   banner: { backgroundColor: '#1c1c1c', color: '#ffffff', textAlign: 'center', paddingVertical: 7, borderRadius: 4, marginBottom: 4 },
   bannerT: { fontSize: 16, fontWeight: 'bold', letterSpacing: 2 },
   docNo: { fontSize: 11, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
-  notice: { backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#eeb111', borderRadius: 4, padding: 8, marginBottom: 12, fontSize: 8.5, color: '#7c5300' },
+  notice: { backgroundColor: '#fefaf1', borderWidth: 1, borderColor: '#eeb111', borderRadius: 4, padding: 8, marginBottom: 12, fontSize: 8.5, color: '#816009' },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 },
   metaItem: { width: '50%', paddingVertical: 3, fontSize: 9 },
   metaLabel: { color: '#63666c' },

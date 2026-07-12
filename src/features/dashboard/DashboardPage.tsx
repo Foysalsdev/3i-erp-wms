@@ -15,7 +15,7 @@ import {
 } from 'recharts'
 
 const COLORS = ['#16a34a', '#dc2626', '#ea7a0c']
-const AGING_COLORS = ['#16a34a', '#f2a900', '#ea7a0c', '#dc2626', '#8c8f94']
+const AGING_COLORS = ['#16a34a', '#eeb111', '#ea7a0c', '#dc2626', '#8c8f94']
 const BUCKETS = ['0–30', '31–60', '61–90', '90+', 'Unknown']
 
 const keyOf = (p: string, w: string, l: string | null) => `${p}|${w}|${l ?? ''}`

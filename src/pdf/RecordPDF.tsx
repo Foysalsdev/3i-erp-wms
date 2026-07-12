@@ -4,7 +4,7 @@ import { downloadBlob } from '@/lib/utils'
 
 const s = StyleSheet.create({
   page: { padding: 32, fontSize: 10, fontFamily: 'Helvetica', color: '#212326' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 2, borderBottomColor: '#f2a900', paddingBottom: 10, marginBottom: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 2, borderBottomColor: '#eeb111', paddingBottom: 10, marginBottom: 16 },
   brand: { fontSize: 15, fontWeight: 'bold' },
   sub: { fontSize: 8, color: '#63666c' },
   metaR: { fontSize: 8, color: '#63666c', textAlign: 'right' },

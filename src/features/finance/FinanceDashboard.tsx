@@ -15,7 +15,7 @@ import { cashOut, totalDue, type Expense } from './financeCash'
 const thisMonth = () => new Date().toISOString().slice(0, 7)
 const monthOf = (d: string) => (d ?? '').slice(0, 7)
 const sum = <T,>(rows: T[], f: (r: T) => number) => rows.reduce((s, r) => s + f(r), 0)
-const DEPT_COLORS = ['#16a34a', '#f2a900', '#ea7a0c', '#dc2626', '#8c8f94', '#64748b']
+const DEPT_COLORS = ['#16a34a', '#eeb111', '#ea7a0c', '#dc2626', '#8c8f94', '#64748b']
 const TREND_MONTHS = 6
 const lastNMonths = (n: number) => {
   const out: string[] = []

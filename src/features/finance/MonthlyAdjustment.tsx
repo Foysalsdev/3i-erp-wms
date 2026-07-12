@@ -18,7 +18,7 @@ import { cashOut, isCredit } from './financeCash'
 
 // Same fixed categorical order used on the main Dashboard (green/gold/orange/red/gray) —
 // kept identical here so color meaning stays consistent across the app.
-const CAT_COLORS = ['#16a34a', '#f2a900', '#ea7a0c', '#dc2626', '#8c8f94']
+const CAT_COLORS = ['#16a34a', '#eeb111', '#ea7a0c', '#dc2626', '#8c8f94']
 const OTHER_COLOR = '#64748b' // distinct from all 5 above — "Other" must never repeat a top category's color
 const MAX_SERIES = 5 // top categories get their own color; the rest fold into "Other"
 const TREND_MONTHS = 6
@@ -384,7 +384,7 @@ export function MonthlyAdjustment() {
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
                 <YAxis tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
                 <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
-                <Line type="monotone" dataKey="balance" name="Balance" stroke="#f2a900" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="balance" name="Balance" stroke="#eeb111" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>

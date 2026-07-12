@@ -9,7 +9,13 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
 const INVOICED = ['invoiced', 'dispatched', 'delivered', 'closed']
-const n = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
+import type { Tables } from '@/types/database.types'
+
+type OrderSlice = Pick<Tables<'sales_orders'>, 'id' | 'customer_id' | 'created_by' | 'total_qty' | 'total_amount' | 'status'>
+interface SalesGroup { group: string; division: string; orders: number; order_qty: number; order_value: number; invoiced_qty: number; delivered_qty: number }
+type SalesRow = SalesGroup & { pending_qty: number } & Record<string, string | number>
+
+const n = (v: number | string | null | undefined) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
 
 // Sales performance grouped by Customer or by Salesman (order creator).
 // Order -> Invoiced -> Delivered -> Pending, per group.
@@ -17,7 +23,7 @@ export function SalesReport() {
   const { currentClientId } = useAuth()
   const [by, setBy] = useState<'customer' | 'salesman'>('customer')
   const [loading, setLoading] = useState(true)
-  const [orders, setOrders] = useState<any[]>([])
+  const [orders, setOrders] = useState<OrderSlice[]>([])
   const [delivered, setDelivered] = useState<Record<string, number>>({})
   const [customers, setCustomers] = useState<Record<string, string>>({})
   const [people, setPeople] = useState<Record<string, string>>({})
@@ -34,30 +40,30 @@ export function SalesReport() {
     ]).then(([o, it, c, p]) => {
       setOrders(o.data ?? [])
       const d: Record<string, number> = {}
-      ;(it.data ?? []).forEach((r: any) => { d[r.so_id] = (d[r.so_id] ?? 0) + n(r.delivered_qty) })
+      ;(it.data ?? []).forEach(r => { d[r.so_id] = (d[r.so_id] ?? 0) + n(r.delivered_qty) })
       setDelivered(d)
-      const cm: Record<string, string> = {}; (c.data ?? []).forEach((r: any) => { cm[r.id] = `${r.customer_code} — ${r.name}` })
+      const cm: Record<string, string> = {}; (c.data ?? []).forEach(r => { cm[r.id] = `${r.customer_code} — ${r.name}` })
       setCustomers(cm)
-      const pm: Record<string, string> = {}; const pd: Record<string, string> = {}; (p.data ?? []).forEach((r: any) => { pm[r.id] = r.full_name || '—'; pd[r.id] = r.division || '' })
+      const pm: Record<string, string> = {}; const pd: Record<string, string> = {}; (p.data ?? []).forEach(r => { pm[r.id] = r.full_name || '—'; pd[r.id] = r.division || '' })
       setPeople(pm); setPeopleDiv(pd)
       setLoading(false)
     })
   }, [currentClientId])
 
   const rows = useMemo(() => {
-    const agg: Record<string, any> = {}
+    const agg: Record<string, SalesGroup> = {}
     for (const o of orders) {
       const key = by === 'customer' ? (o.customer_id || 'none') : (o.created_by || 'none')
-      const name = by === 'customer' ? (customers[o.customer_id] ?? '— (no customer)') : (people[o.created_by] ?? '— (unknown)')
-      const division = by === 'salesman' ? (peopleDiv[o.created_by] || '—') : ''
+      const name = by === 'customer' ? (customers[o.customer_id ?? ''] ?? '— (no customer)') : (people[o.created_by ?? ''] ?? '— (unknown)')
+      const division = by === 'salesman' ? (peopleDiv[o.created_by ?? ''] || '—') : ''
       const g = agg[key] ?? (agg[key] = { group: name, division, orders: 0, order_qty: 0, order_value: 0, invoiced_qty: 0, delivered_qty: 0 })
       g.orders += 1
       g.order_qty += n(o.total_qty)
       g.order_value += n(o.total_amount)
-      if (INVOICED.includes(o.status)) g.invoiced_qty += n(o.total_qty)
+      if (INVOICED.includes(o.status ?? '')) g.invoiced_qty += n(o.total_qty)
       g.delivered_qty += n(delivered[o.id])
     }
-    return Object.values(agg).map((g: any) => ({ ...g, pending_qty: Math.max(0, g.order_qty - g.delivered_qty) }))
+    return Object.values(agg).map((g): SalesRow => ({ ...g, pending_qty: Math.max(0, g.order_qty - g.delivered_qty) }))
       .sort((a, b) => b.order_qty - a.order_qty)
   }, [orders, delivered, customers, people, peopleDiv, by])
 
@@ -73,12 +79,12 @@ export function SalesReport() {
   ]
   const tableCols = cols.map(c => ({
     key: c.key, header: c.header, className: c.align === 'right' ? 'text-right' : '', sortable: true,
-    accessor: (r: any) => r[c.key],
-    render: (r: any) => c.key === 'group' ? r.group : formatNumber(r[c.key], c.key === 'order_value' ? 2 : 0)
+    accessor: (r: SalesRow) => r[c.key],
+    render: (r: SalesRow) => c.key === 'group' ? r.group : formatNumber(Number(r[c.key]), c.key === 'order_value' ? 2 : 0)
   }))
   const exportRows = rows.map(r => ({ ...r, order_value: r.order_value.toFixed(2) }))
   const title = by === 'customer' ? 'Sales by Customer' : 'Sales by Salesman'
-  const chartData = rows.slice(0, 8).map((r: any) => ({ name: r.group.split(' — ')[0].slice(0, 12), Order: r.order_qty, Delivered: r.delivered_qty, Pending: r.pending_qty }))
+  const chartData = rows.slice(0, 8).map(r => ({ name: r.group.split(' — ')[0].slice(0, 12), Order: r.order_qty, Delivered: r.delivered_qty, Pending: r.pending_qty }))
 
   if (loading) return <Spinner label="Loading…" />
   return (
@@ -103,7 +109,7 @@ export function SalesReport() {
       )}
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={tableCols} rows={rows} rowKey={(r: any) => r.group} emptyTitle="No sales orders yet" />
+        <DataTable fill columns={tableCols} rows={rows} rowKey={r => r.group} emptyTitle="No sales orders yet" />
       </Card>
     </div>
   )

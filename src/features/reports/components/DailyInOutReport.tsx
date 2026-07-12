@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
@@ -22,7 +23,8 @@ type Flow = 'summary' | 'inbound' | 'outbound' | 'replacement'
 const ymNow = () => new Date().toISOString().slice(0, 7)
 const daysInMonth = (ym: string) => new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate()
 
-interface LedgerRow { product_id: string; movement_type: string; qty_in: number; qty_out: number; created_at: string }
+interface LedgerRow { product_id: string | null; movement_type: string; qty_in: number; qty_out: number; created_at: string }
+type ProdInfo = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'category'>
 
 // Supabase caps a select at 1000 rows — page through the full ledger history
 // up to the end of the selected month.
@@ -34,7 +36,7 @@ async function fetchLedger(clientId: string, beforeIso: string): Promise<LedgerR
       .eq('client_id', clientId).lt('created_at', beforeIso)
       .order('created_at', { ascending: true }).range(from, from + 999)
     if (error) throw error
-    out.push(...((data ?? []) as any))
+    out.push(...(data ?? []))
     if (!data || data.length < 1000) break
   }
   return out
@@ -58,14 +60,14 @@ const FLOWS: { key: Flow; label: string; icon?: string }[] = [
 
 export function DailyInOutReport() {
   const { currentClientId, clients } = useAuth()
-  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
   const notify = useUI(s => s.notify)
   const [ym, setYm] = useState(ymNow())
   const [flow, setFlow] = useState<Flow>('summary')
   const [q, setQ] = useState('')
   const [showAll, setShowAll] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<ProdInfo[]>([])
   const [ledger, setLedger] = useState<LedgerRow[]>([])
 
   const days = daysInMonth(ym)
@@ -90,15 +92,16 @@ export function DailyInOutReport() {
 
   const rows: DailyRow[] = useMemo(() => {
     const agg = new Map<string, DailyRow>()
-    const blank = (p: any): DailyRow => ({
+    const blank = (p: ProdInfo): DailyRow => ({
       code: p.material_code ?? '', name: p.name ?? '', category: p.category || 'Uncategorized',
       opening: 0, inbound: 0, outbound: 0, replIn: 0, replOut: 0, otherNet: 0, closing: 0,
       inByDay: Array.from({ length: days }, () => 0),
       outByDay: Array.from({ length: days }, () => 0),
       replByDay: Array.from({ length: days }, () => 0)
     })
-    const byId = new Map(products.map((p: any) => [p.id, p]))
+    const byId = new Map(products.map(p => [p.id, p]))
     for (const m of ledger) {
+      if (!m.product_id) continue
       const p = byId.get(m.product_id)
       if (!p) continue
       let r = agg.get(m.product_id)
@@ -117,7 +120,7 @@ export function DailyInOutReport() {
       // Also list products with no history at all, so the sheet mirrors the
       // full SKU list the team is used to seeing.
       const have = new Set([...agg.keys()].map(id => byId.get(id)?.material_code))
-      products.filter((p: any) => !have.has(p.material_code)).forEach((p: any) => list.push(blank(p)))
+      products.filter(p => !have.has(p.material_code)).forEach(p => list.push(blank(p)))
     }
     list.forEach(r => { r.closing = r.opening + r.inbound - r.outbound + r.replIn - r.replOut + r.otherNet })
     list.sort((a, b) => a.category.localeCompare(b.category) || a.code.localeCompare(b.code))

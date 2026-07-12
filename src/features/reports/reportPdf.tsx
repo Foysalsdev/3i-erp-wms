@@ -4,7 +4,7 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { getCompanyInfo } from '@/lib/settings'
 import { downloadBlob } from '@/lib/utils'
-import type { RepCol } from './export'
+import type { RepCol, RepRow } from './export'
 
 const s = StyleSheet.create({
   page: { padding: 26, fontSize: 8, fontFamily: 'Helvetica', color: '#212326' },
@@ -19,7 +19,7 @@ const s = StyleSheet.create({
   footer: { position: 'absolute', bottom: 16, left: 26, right: 26, fontSize: 7, color: '#888', textAlign: 'center' }
 })
 
-function ReportDoc({ title, subtitle, cols, rows }: { title: string; subtitle?: string; cols: RepCol[]; rows: any[] }) {
+function ReportDoc({ title, subtitle, cols, rows }: { title: string; subtitle?: string; cols: RepCol[]; rows: RepRow[] }) {
   const w = (c: RepCol) => c.width ?? `${(100 / cols.length).toFixed(2)}%`
   const company = getCompanyInfo()
   return (
@@ -50,7 +50,7 @@ function ReportDoc({ title, subtitle, cols, rows }: { title: string; subtitle?: 
   )
 }
 
-export async function downloadReportPDF(title: string, subtitle: string, cols: RepCol[], rows: any[]) {
+export async function downloadReportPDF(title: string, subtitle: string, cols: RepCol[], rows: RepRow[]) {
   const blob = await pdf(<ReportDoc title={title} subtitle={subtitle} cols={cols} rows={rows} />).toBlob()
   downloadBlob(blob, `${title.replace(/[^\w]+/g, '_')}.pdf`)
 }

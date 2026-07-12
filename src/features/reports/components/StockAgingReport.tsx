@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
+
+type AgedStock = Tables<'inventory_stock'> & {
+  products: Pick<Tables<'products'>, 'name' | 'material_code'> | null
+  warehouses: Pick<Tables<'warehouses'>, 'code'> | null
+}
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/States'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -20,7 +26,7 @@ const BUCKETS = ['0–30', '31–60', '61–90', '90+', 'Unknown']
 export function StockAgingReport() {
   const { currentClientId } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [stock, setStock] = useState<any[]>([])
+  const [stock, setStock] = useState<AgedStock[]>([])
   const [firstIn, setFirstIn] = useState<Record<string, string>>({})
   const [q, setQ] = useState('')
   const [bucketFilter, setBucketFilter] = useState('all')
@@ -34,7 +40,7 @@ export function StockAgingReport() {
     ]).then(([s, l]) => {
       setStock(s.data ?? [])
       const earliest: Record<string, string> = {}
-      ;(l.data ?? []).forEach((m: any) => { const k = keyOf(m.product_id, m.warehouse_id, m.location_id); if (!earliest[k]) earliest[k] = m.created_at })
+      ;(l.data ?? []).forEach(m => { const k = keyOf(m.product_id, m.warehouse_id, m.location_id); if (!earliest[k]) earliest[k] = m.created_at })
       setFirstIn(earliest); setLoading(false)
     })
   }, [currentClientId])
@@ -72,15 +78,15 @@ export function StockAgingReport() {
     { key: 'age', header: 'Age (d)', align: 'right', width: '7%' },
     { key: 'bucket', header: 'Bucket', width: '6%' }
   ]
-  const tableCols = [
-    { key: 'code', header: 'Material Code', accessor: (r: any) => r.code, className: 'font-medium', sortable: true },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.name, sortable: true },
-    { key: 'warehouse', header: 'WH', accessor: (r: any) => r.warehouse, sortable: true },
-    { key: 'condition', header: 'Condition', accessor: (r: any) => r.condition, sortable: true },
-    { key: 'qty', header: 'Qty', className: 'text-right', accessor: (r: any) => r.qty, render: (r: any) => formatNumber(r.qty), sortable: true },
-    { key: 'received', header: 'In Since', accessor: (r: any) => r.received, sortable: true },
-    { key: 'age', header: 'Age (d)', className: 'text-right', accessor: (r: any) => r.age, sortable: true },
-    { key: 'bucket', header: 'Bucket', accessor: (r: any) => r.bucket, render: (r: any) => <Badge tone={bucketTone(r.bucket) as any}>{r.bucket}</Badge>, sortable: true }
+  const tableCols: Column<(typeof rows)[number]>[] = [
+    { key: 'code', header: 'Material Code', accessor: r => r.code, className: 'font-medium', sortable: true },
+    { key: 'name', header: 'Product', accessor: r => r.name, sortable: true },
+    { key: 'warehouse', header: 'WH', accessor: r => r.warehouse, sortable: true },
+    { key: 'condition', header: 'Condition', accessor: r => r.condition, sortable: true },
+    { key: 'qty', header: 'Qty', className: 'text-right', accessor: r => r.qty, render: r => formatNumber(r.qty), sortable: true },
+    { key: 'received', header: 'In Since', accessor: r => r.received, sortable: true },
+    { key: 'age', header: 'Age (d)', className: 'text-right', accessor: r => r.age, sortable: true },
+    { key: 'bucket', header: 'Bucket', accessor: r => r.bucket, render: r => <Badge tone={bucketTone(r.bucket)}>{r.bucket}</Badge>, sortable: true }
   ]
 
   if (loading) return <Spinner label="Computing aging…" />
@@ -104,7 +110,7 @@ export function StockAgingReport() {
         ))}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={tableCols} rows={filteredRows} rowKey={(r: any) => `${r.code}|${r.warehouse}|${r.condition}|${r.age}`} emptyTitle="No stock to age" />
+        <DataTable fill columns={tableCols} rows={filteredRows} rowKey={r => `${r.code}|${r.warehouse}|${r.condition}|${r.age}`} emptyTitle="No stock to age" />
       </Card>
     </div>
   )

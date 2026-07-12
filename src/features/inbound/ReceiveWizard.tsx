@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables, TablesInsert } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
@@ -36,6 +37,14 @@ interface WLine {
   scanInput?: string
 }
 
+type Grn = Tables<'goods_receipts'>
+type PR = Tables<'purchase_requisitions'>
+type SupplierLite = Pick<Tables<'suppliers'>, 'id' | 'supplier_code' | 'name'>
+type WarehouseLite = Pick<Tables<'warehouses'>, 'id' | 'code' | 'name'>
+type LocationLite = Pick<Tables<'locations'>, 'id' | 'location_code' | 'warehouse_id'>
+type ProductLite = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'uom' | 'china_code' | 'barcode'>
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
+
 // SAP trail chip: filled = done, hollow = pending.
 function SapChip({ done, label }: { done: boolean; label: string }) {
   return (
@@ -48,17 +57,17 @@ function SapChip({ done, label }: { done: boolean; label: string }) {
 
 export function ReceiveTab() {
   const clientId = useAuth(s => s.currentClientId)
-  const [suppliers, setSuppliers] = useState<any[]>([])
-  const [warehouses, setWarehouses] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierLite[]>([])
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([])
+  const [locations, setLocations] = useState<LocationLite[]>([])
+  const [products, setProducts] = useState<ProductLite[]>([])
   useEffect(() => {
     if (!clientId) return
     supabase.from('suppliers').select('id,supplier_code,name').eq('client_id', clientId).eq('status', 'active').then(({ data }) => setSuppliers(data ?? []))
     supabase.from('warehouses').select('id,code,name').eq('client_id', clientId).eq('status', 'active').then(({ data }) => setWarehouses(data ?? []))
     supabase.from('locations').select('id,location_code,warehouse_id').eq('client_id', clientId).then(({ data }) => setLocations(data ?? []))
-    ;(supabase as any).from('products').select('id,material_code,name,uom,china_code,barcode').eq('client_id', clientId).eq('status', 'active')
-      .then(({ data }: any) => setProducts(data ?? []))
+    supabase.from('products').select('id,material_code,name,uom,china_code,barcode').eq('client_id', clientId).eq('status', 'active')
+      .then(({ data }) => setProducts(data ?? []))
   }, [clientId])
 
   const { can, isPlatformAdmin } = useAuth()
@@ -67,9 +76,9 @@ export function ReceiveTab() {
   const notify = useUI(s => s.notify)
 
   const [queueLoading, setQueueLoading] = useState(true)
-  const [pendingGrns, setPendingGrns] = useState<any[]>([])
-  const [expectedPrs, setExpectedPrs] = useState<any[]>([])
-  const [wizard, setWizard] = useState<{ grn?: any; pr?: any } | null>(null)
+  const [pendingGrns, setPendingGrns] = useState<Grn[]>([])
+  const [expectedPrs, setExpectedPrs] = useState<PR[]>([])
+  const [wizard, setWizard] = useState<{ grn?: Grn; pr?: PR } | null>(null)
 
   const loadQueue = () => {
     if (!clientId) return
@@ -85,7 +94,7 @@ export function ReceiveTab() {
   }
   useEffect(loadQueue, [clientId])
 
-  const supName = (id: string) => { const s = suppliers.find((x: any) => x.id === id); return s ? s.name : '—' }
+  const supName = (id: string | null) => { const s = suppliers.find(x => x.id === id); return s ? s.name : '—' }
 
   if (wizard) {
     return <Wizard clientId={clientId!} grn={wizard.grn} pr={wizard.pr}
@@ -107,7 +116,7 @@ export function ReceiveTab() {
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">In progress — tap to continue</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {pendingGrns.map((g: any) => (
+            {pendingGrns.map(g => (
               <button key={g.id} type="button" onClick={() => canEdit && setWizard({ grn: g })}
                 className="rounded-xl border border-surface-line bg-surface p-4 text-left transition hover:border-brand-400 hover:shadow-card">
                 <div className="flex items-center justify-between gap-2">
@@ -130,7 +139,7 @@ export function ReceiveTab() {
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Expected — from inward requisitions</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {expectedPrs.map((p: any) => (
+            {expectedPrs.map(p => (
               <button key={p.id} type="button" onClick={() => canEdit && setWizard({ pr: p })}
                 className="rounded-xl border border-dashed border-surface-line bg-surface p-4 text-left transition hover:border-brand-400 hover:shadow-card">
                 <div className="flex items-center justify-between gap-2">
@@ -158,20 +167,24 @@ export function ReceiveTab() {
 // ---------------------------------------------------------------------------
 const STEPS = ['Arrival', 'Items & Scan', 'SAP Refs', 'Review & Post']
 
-function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products, canPost, notify, onExit }: any) {
+function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products, canPost, notify, onExit }: {
+  clientId: string; grn?: Grn; pr?: PR
+  suppliers: SupplierLite[]; warehouses: WarehouseLite[]; locations: LocationLite[]; products: ProductLite[]
+  canPost: boolean; notify: Notify; onExit: () => void
+}) {
   const profile = useAuth(s => s.profile)
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(!!grn)
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState<SerialHistoryItem[] | null>(null)
   const [seeded, setSeeded] = useState<Record<string, { id: string; serial: string; status: string }[]>>({})
-  const [h, setH] = useState<any>({
+  const [h, setH] = useState({
     supplier_id: pr?.supplier_id ?? '', warehouse_id: pr?.warehouse_id ?? '', receipt_date: today(),
     reference_no: pr?.pr_no ?? '', sap_grn_ref: '', sap_miro_ref: '', remarks: '',
     gate_vehicle_no: '', gate_driver: '', gate_transporter: '', gate_in_at: ''
   })
   const [lines, setLines] = useState<WLine[]>([])
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const set = (patch: Partial<typeof h>) => setH(x => ({ ...x, ...patch }))
   const setLine = (i: number, patch: Partial<WLine>) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l))
 
   // Resume an existing GRN or prefill from a PR.
@@ -182,7 +195,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
           supabase.from('goods_receipt_items').select('*').eq('grn_id', grn.id),
           supabase.from('serial_numbers').select('id,serial_no,product_id,status').eq('client_id', clientId).eq('reference_no', grn.grn_no)
         ])
-        setH((x: any) => ({
+        setH(x => ({
           ...x, supplier_id: grn.supplier_id ?? '', warehouse_id: grn.warehouse_id ?? '',
           receipt_date: grn.receipt_date ?? today(), reference_no: grn.reference_no ?? '',
           sap_grn_ref: grn.sap_grn_ref ?? '', sap_miro_ref: grn.sap_miro_ref ?? '', remarks: grn.remarks ?? '',
@@ -190,19 +203,19 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
           gate_transporter: grn.gate_transporter ?? '', gate_in_at: grn.gate_in_at ?? ''
         }))
         const sMap: Record<string, { id: string; serial: string; status: string }[]> = {}
-        ;(serials ?? []).forEach((s: any) => { (sMap[s.product_id] ??= []).push({ id: s.id, serial: s.serial_no, status: s.status }) })
+        ;(serials ?? []).forEach(s => { if (s.product_id) (sMap[s.product_id] ??= []).push({ id: s.id, serial: s.serial_no, status: s.status }) })
         setSeeded(sMap)
-        setLines((items ?? []).map((it: any) => ({
-          product_id: it.product_id, expected: Number(it.expected_qty) || 0,
+        setLines((items ?? []).map(it => ({
+          product_id: it.product_id ?? '', expected: Number(it.expected_qty) || 0,
           qty: String(Number(it.received_qty) > 0 ? it.received_qty : it.qty),
           stock_status: (it.stock_status || 'good') as WLine['stock_status'], location_id: it.location_id ?? '',
-          serials: (sMap[it.product_id] ?? []).map(s => ({ serial: s.serial, existingId: s.id, status: s.status }))
+          serials: (sMap[it.product_id ?? ''] ?? []).map(s => ({ serial: s.serial, existingId: s.id, status: s.status }))
         })))
         setLoading(false)
       } else if (pr) {
         const { data: items } = await supabase.from('purchase_requisition_items').select('*').eq('pr_id', pr.id)
-        setLines((items ?? []).map((it: any) => ({
-          product_id: it.product_id, expected: Number(it.qty) || 0, qty: String(it.qty ?? ''),
+        setLines((items ?? []).map(it => ({
+          product_id: it.product_id ?? '', expected: Number(it.qty) || 0, qty: String(it.qty ?? ''),
           stock_status: 'good', location_id: '', serials: []
         })))
       }
@@ -210,9 +223,9 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
     // eslint-disable-next-line
   }, [])
 
-  const prodById = useMemo(() => Object.fromEntries(products.map((p: any) => [p.id, p])), [products])
+  const prodById = useMemo(() => Object.fromEntries(products.map(p => [p.id, p])) as Record<string, ProductLite>, [products])
   const prodLabel = (id: string) => { const p = prodById[id]; return p ? `${p.material_code} — ${p.name}` : '' }
-  const whLocs = locations.filter((l: any) => l.warehouse_id === h.warehouse_id)
+  const whLocs = locations.filter(l => l.warehouse_id === h.warehouse_id)
   const totalQty = lines.reduce((s, l) => s + (Number(l.qty) || 0), 0)
 
   // ---- serial capture (per line, inline) ----------------------------------
@@ -223,7 +236,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
   }, [lines])
 
   const addSerials = (i: number, raws: string[]) => {
-    const p = prodById[lines[i].product_id] ?? {}
+    const p: Partial<ProductLite> = prodById[lines[i].product_id] ?? {}
     let dupes = 0
     const fresh: SRow[] = []
     for (const raw of raws) {
@@ -263,7 +276,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       const migo = String(h.sap_grn_ref).trim()
       const valid = lines.filter(l => l.product_id && Number(l.qty) > 0)
       const status = postStock ? 'approved' : (h.sap_miro_ref?.trim() ? 'completed' : 'draft')
-      const header: any = {
+      const header: Omit<TablesInsert<'goods_receipts'>, 'grn_no'> = {
         client_id: clientId, supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
         reference_no: h.reference_no || null, receipt_date: h.receipt_date || today(),
         sap_grn_ref: migo, sap_miro_ref: h.sap_miro_ref?.trim() || null,
@@ -280,8 +293,9 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       } else {
         const { data, error } = await supabase.from('goods_receipts').insert({ ...header, grn_no: migo }).select('id,grn_no').single()
         if (error) throw error
-        grnId = data.id; grnNo = (data as any).grn_no
+        grnId = data.id; grnNo = data.grn_no
       }
+      if (!grnId) throw new Error('GRN id missing after save')
       await supabase.from('goods_receipt_items').delete().eq('grn_id', grnId)
       const payload = valid.map(l => ({
         client_id: clientId, grn_id: grnId, product_id: l.product_id, qty: Number(l.qty) || 0,
@@ -294,7 +308,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       }
 
       // -- serials: diff against seeded; prior-history serials are re-registered
-      const toInsert: any[] = []
+      const toInsert: TablesInsert<'serial_numbers'>[] = []
       const keptIds = new Set<string>()
       for (const l of valid) {
         l.serials.forEach(r => { if (r.existingId) keptIds.add(r.existingId); else toInsert.push({
@@ -303,11 +317,11 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
         }) })
       }
       const toDelete = Object.values(seeded).flat().filter(s => !keptIds.has(s.id)).map(s => s.id)
-      let reused: any[] = []
+      let reused: Pick<Tables<'serial_numbers'>, 'id' | 'serial_no' | 'reference_no' | 'status'>[] = []
       if (toInsert.length) {
         const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
           .eq('client_id', clientId).in('serial_no', toInsert.map(r => r.serial_no))
-        reused = (clash ?? []).filter((c: any) => c.reference_no !== grnNo)
+        reused = (clash ?? []).filter(c => c.reference_no !== grnNo)
       }
       if (toDelete.length) {
         const { error } = await supabase.from('serial_numbers').delete().in('id', toDelete)
@@ -317,26 +331,26 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       if (reused.length) {
         hist = await describeSerialHistory(clientId, reused)
         const { error } = await supabase.from('serial_numbers')
-          .update({ reference_no: grnNo, warehouse_id: h.warehouse_id || null, status: 'in_stock', so_item_id: null } as any)
-          .in('id', reused.map((r: any) => r.id))
+          .update({ reference_no: grnNo, warehouse_id: h.warehouse_id || null, status: 'in_stock', so_item_id: null })
+          .in('id', reused.map(r => r.id))
         if (error) throw error
       }
-      const reusedSet = new Set(reused.map((r: any) => r.serial_no))
+      const reusedSet = new Set(reused.map(r => r.serial_no))
       const inserts = toInsert.filter(r => !reusedSet.has(r.serial_no))
       if (inserts.length) {
-        const { error } = await supabase.from('serial_numbers').insert(inserts as any)
+        const { error } = await supabase.from('serial_numbers').insert(inserts)
         if (error) throw error
       }
 
       // -- post to stock (same movement engine as the GRN register)
       if (postStock) {
         for (const l of valid) {
-          const { error } = await (supabase as any).rpc('post_stock_movement', {
-            p_client: clientId, p_product: l.product_id, p_warehouse: h.warehouse_id,
-            p_location: l.location_id || null, p_stock_status: l.stock_status,
+          const { error } = await supabase.rpc('post_stock_movement', {
+            p_client: clientId, p_product: l.product_id, p_warehouse: h.warehouse_id!,
+            p_location: l.location_id || undefined, p_stock_status: l.stock_status,
             p_qty_in: Number(l.qty), p_qty_out: 0, p_movement_type: 'GRN',
             p_reference_type: 'goods_receipt', p_reference_id: grnId, p_reference_no: grnNo,
-            p_serial_no: null, p_remarks: `GRN ${grnNo}${migo ? ' · SAP ' + migo : ''} · received by ${profile?.full_name ?? ''}`
+            p_serial_no: undefined, p_remarks: `GRN ${grnNo}${migo ? ' · SAP ' + migo : ''} · received by ${profile?.full_name ?? ''}`
           })
           if (error) throw error
         }
@@ -356,10 +370,10 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
 
   if (loading) return <Spinner label="Loading receipt…" />
 
-  const supItems = suppliers.map((s: any) => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))
-  const whItems = warehouses.map((w: any) => ({ id: w.id, label: w.code, sublabel: w.name }))
-  const prodItems = products.map((p: any) => ({ id: p.id, label: p.material_code, sublabel: p.name }))
-  const locItems = whLocs.map((l: any) => ({ id: l.id, label: l.location_code }))
+  const supItems = suppliers.map(s => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))
+  const whItems = warehouses.map(w => ({ id: w.id, label: w.code, sublabel: w.name }))
+  const prodItems = products.map(p => ({ id: p.id, label: p.material_code, sublabel: p.name }))
+  const locItems = whLocs.map(l => ({ id: l.id, label: l.location_code }))
 
   return (
     <div className="space-y-4">
@@ -543,8 +557,8 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
         {step === 3 && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 text-sm sm:grid-cols-4">
-              <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Supplier</p><p className="font-medium text-ink">{suppliers.find((s: any) => s.id === h.supplier_id)?.name ?? '—'}</p></div>
-              <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Warehouse</p><p className="font-medium text-ink">{warehouses.find((w: any) => w.id === h.warehouse_id)?.code ?? '—'}</p></div>
+              <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Supplier</p><p className="font-medium text-ink">{suppliers.find(s => s.id === h.supplier_id)?.name ?? '—'}</p></div>
+              <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">Warehouse</p><p className="font-medium text-ink">{warehouses.find(w => w.id === h.warehouse_id)?.code ?? '—'}</p></div>
               <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">MIGO</p><p className="font-mono font-medium text-ink">{h.sap_grn_ref || '—'}</p></div>
               <div><p className="text-[11px] uppercase tracking-wide text-ink-faint">MIRO</p><p className="font-mono font-medium text-ink">{h.sap_miro_ref || <span className="text-ink-faint">pending</span>}</p></div>
             </div>

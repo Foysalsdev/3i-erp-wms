@@ -180,7 +180,7 @@ export function InboundGRN() {
       )}
 
       {scanning && (
-        <GrnSerialScan grn={scanning} products={products} clientId={currentClientId!} notify={notify}
+        <GrnSerialScan grn={scanning} clientId={currentClientId!} notify={notify}
           onClose={() => setScanning(null)} />
       )}
 

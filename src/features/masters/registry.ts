@@ -42,8 +42,12 @@ export interface MasterDef {
   searchFields: string[]
 }
 
-const statusBadge = (row: any) =>
-  createElement(Badge, { tone: ['active', 'in_use'].includes(row.status) ? 'positive' : 'neutral' }, row.status)
+// Master rows flow through one engine across many tables: known columns
+// typed, the rest via the index signature (same pattern as DocRecord).
+export type MasterRecord = { id: string; status?: string | null } & Record<string, unknown>
+
+const statusBadge = (row: MasterRecord) =>
+  createElement(Badge, { tone: ['active', 'in_use'].includes(row.status ?? '') ? 'positive' : 'neutral' }, row.status)
 
 const UOM = ['PCS', 'BOX', 'CTN', 'SET', 'KG', 'LTR']
 const STATUS = ['active', 'inactive']

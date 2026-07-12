@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Spinner } from '@/components/ui/States'
 import { formatNumber } from '@/lib/utils'
 import { fetchStockAvailability, type StockAvailability } from '@/lib/stockAvailability'
+
+type AvailRow = StockAvailability & { productId: string; code: string; name: string }
 
 // Available-to-promise, one row per product: what Sales can safely quote
 // (Saleable) next to every reason the rest of the on-hand quantity isn't
@@ -15,7 +17,7 @@ import { fetchStockAvailability, type StockAvailability } from '@/lib/stockAvail
 // always equals the sum of the other columns.
 export function AvailabilityTab() {
   const { currentClientId } = useAuth()
-  const [rows, setRows] = useState<(StockAvailability & { productId: string; code: string; name: string })[]>([])
+  const [rows, setRows] = useState<AvailRow[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [shortOnly, setShortOnly] = useState(false)
@@ -29,7 +31,7 @@ export function AvailabilityTab() {
         supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId)
       ])
       setRows((products ?? [])
-        .map((p: any) => ({ productId: p.id, code: p.material_code, name: p.name, ...(avail[p.id] ?? { total: 0, good: 0, nonSaleable: 0, held: 0, pendingInvoice: 0, pendingDelivery: 0, saleable: 0 }) }))
+        .map(p => ({ productId: p.id, code: p.material_code, name: p.name, ...(avail[p.id] ?? { total: 0, good: 0, nonSaleable: 0, held: 0, pendingInvoice: 0, pendingDelivery: 0, saleable: 0 }) }))
         .filter(r => r.total > 0))
       setLoading(false)
     })()
@@ -43,16 +45,16 @@ export function AvailabilityTab() {
     return list.filter(r => r.code.toLowerCase().includes(t) || r.name.toLowerCase().includes(t))
   }, [rows, q, shortOnly])
 
-  const columns = [
-    { key: 'code', header: 'Material Code', accessor: (r: any) => r.code, sortable: true, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.name, sortable: true },
-    { key: 'total', header: 'Total On Hand', accessor: (r: any) => r.total, className: 'text-right', render: (r: any) => formatNumber(r.total), sortable: true },
-    { key: 'saleable', header: 'Saleable', accessor: (r: any) => r.saleable, className: 'text-right', sortable: true,
-      render: (r: any) => <span className={r.saleable <= 0 ? 'font-semibold text-bad' : 'font-semibold text-ok'}>{formatNumber(r.saleable)}</span> },
-    { key: 'held', header: 'Held', className: 'text-right', render: (r: any) => r.held > 0 ? formatNumber(r.held) : '—' },
-    { key: 'pendingInvoice', header: 'Pending Invoice', className: 'text-right', render: (r: any) => r.pendingInvoice > 0 ? formatNumber(r.pendingInvoice) : '—' },
-    { key: 'pendingDelivery', header: 'Pending Delivery', className: 'text-right', render: (r: any) => r.pendingDelivery > 0 ? formatNumber(r.pendingDelivery) : '—' },
-    { key: 'nonSaleable', header: 'Non-Saleable', className: 'text-right', render: (r: any) => r.nonSaleable > 0 ? formatNumber(r.nonSaleable) : '—' }
+  const columns: Column<AvailRow>[] = [
+    { key: 'code', header: 'Material Code', accessor: r => r.code, sortable: true, className: 'font-medium' },
+    { key: 'name', header: 'Product', accessor: r => r.name, sortable: true },
+    { key: 'total', header: 'Total On Hand', accessor: r => r.total, className: 'text-right', render: r => formatNumber(r.total), sortable: true },
+    { key: 'saleable', header: 'Saleable', accessor: r => r.saleable, className: 'text-right', sortable: true,
+      render: r => <span className={r.saleable <= 0 ? 'font-semibold text-bad' : 'font-semibold text-ok'}>{formatNumber(r.saleable)}</span> },
+    { key: 'held', header: 'Held', className: 'text-right', render: r => r.held > 0 ? formatNumber(r.held) : '—' },
+    { key: 'pendingInvoice', header: 'Pending Invoice', className: 'text-right', render: r => r.pendingInvoice > 0 ? formatNumber(r.pendingInvoice) : '—' },
+    { key: 'pendingDelivery', header: 'Pending Delivery', className: 'text-right', render: r => r.pendingDelivery > 0 ? formatNumber(r.pendingDelivery) : '—' },
+    { key: 'nonSaleable', header: 'Non-Saleable', className: 'text-right', render: r => r.nonSaleable > 0 ? formatNumber(r.nonSaleable) : '—' }
   ]
 
   return (
@@ -74,7 +76,7 @@ export function AvailabilityTab() {
       </p>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {loading ? <Spinner label="Loading availability…" /> : (
-          <DataTable fill columns={columns} rows={filtered} rowKey={(r: any) => r.productId} emptyTitle="No stock on hand" />
+          <DataTable fill columns={columns} rows={filtered} rowKey={r => r.productId} emptyTitle="No stock on hand" />
         )}
       </Card>
     </div>

@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
+
+type Role = Pick<Tables<'roles'>, 'id' | 'key' | 'name' | 'description' | 'is_system'>
+type RoleDraft = Partial<Role> & { __new?: boolean }
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -21,12 +25,12 @@ export function RoleManagement() {
   const canManage = useAuth(s => s.isPlatformAdmin || s.permissions.has('hr.role.manage'))
   const notify = useUI(s => s.notify)
   const [loading, setLoading] = useState(true)
-  const [roles, setRoles] = useState<any[]>([])
-  const [perms, setPerms] = useState<any[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
+  const [perms, setPerms] = useState<Pick<Tables<'permissions'>, 'id' | 'key' | 'module' | 'action' | 'description'>[]>([])
   const [rolePerms, setRolePerms] = useState<Record<string, Set<string>>>({})
-  const [editing, setEditing] = useState<any>(null)
+  const [editing, setEditing] = useState<RoleDraft | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
-  const [deleting, setDeleting] = useState<any>(null)
+  const [deleting, setDeleting] = useState<Role | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = async () => {
@@ -38,7 +42,7 @@ export function RoleManagement() {
     ])
     setRoles(rs ?? []); setPerms(ps ?? [])
     const m: Record<string, Set<string>> = {}
-    ;(rp ?? []).forEach((r: any) => { (m[r.role_id] ??= new Set()).add(r.permission_id) })
+    ;(rp ?? []).forEach(r => { (m[r.role_id] ??= new Set()).add(r.permission_id) })
     setRolePerms(m); setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -46,20 +50,20 @@ export function RoleManagement() {
   const modules = useMemo(() => Array.from(new Set(perms.map(p => p.module))).sort(), [perms])
   const permAt = (mod: string, act: string) => perms.find(p => p.module === mod && p.action === act)
 
-  const openEdit = (r: any) => { setEditing(r); setSel(new Set(rolePerms[r.id] ?? [])) }
+  const openEdit = (r: Role) => { setEditing(r); setSel(new Set(rolePerms[r.id] ?? [])) }
   const toggle = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleModule = (mod: string) => {
     const ids = perms.filter(p => p.module === mod).map(p => p.id)
     setSel(s => { const n = new Set(s); const all = ids.every(i => n.has(i)); ids.forEach(i => all ? n.delete(i) : n.add(i)); return n })
   }
 
-  const columns = [
-    { key: 'name', header: 'Role', accessor: (r: any) => r.name, sortable: true, className: 'font-medium' },
-    { key: 'description', header: 'Description', accessor: (r: any) => r.description || '—' },
-    { key: 'type', header: 'Type', render: (r: any) => <Badge tone={r.is_system ? 'neutral' : 'info'}>{r.is_system ? 'System' : 'Custom'}</Badge> },
-    { key: 'perms', header: 'Permissions', className: 'text-right', accessor: (r: any) => String((rolePerms[r.id]?.size ?? 0)) },
+  const columns: Column<Role>[] = [
+    { key: 'name', header: 'Role', accessor: r => r.name, sortable: true, className: 'font-medium' },
+    { key: 'description', header: 'Description', accessor: r => r.description || '—' },
+    { key: 'type', header: 'Type', render: r => <Badge tone={r.is_system ? 'neutral' : 'info'}>{r.is_system ? 'System' : 'Custom'}</Badge> },
+    { key: 'perms', header: 'Permissions', className: 'text-right', accessor: r => String((rolePerms[r.id]?.size ?? 0)) },
     ...(canManage ? [{
-      key: '__actions', header: '', className: 'w-px whitespace-nowrap', render: (r: any) => (
+      key: '__actions', header: '', className: 'w-px whitespace-nowrap', render: (r: Role) => (
         <div className="flex justify-end" onClick={e => e.stopPropagation()}>
           <ActionMenu items={[
             { icon: 'tune', label: 'Edit access', onClick: () => openEdit(r) },
@@ -71,6 +75,7 @@ export function RoleManagement() {
   ]
 
   const saveRole = async () => {
+    if (!editing) return
     if (!editing.name?.trim()) { notify('error', 'Role name required'); return }
     setBusy(true)
     try {
@@ -80,13 +85,14 @@ export function RoleManagement() {
         if (error) throw error
         roleId = data.id
       } else if (!editing.is_system) {
-        const { error } = await supabase.from('roles').update({ name: editing.name.trim(), description: editing.description || null }).eq('id', roleId)
+        const { error } = await supabase.from('roles').update({ name: editing.name.trim(), description: editing.description || null }).eq('id', roleId!)
         if (error) throw error
       }
       // Sync permissions atomically server-side. The old client-side delete+insert
       // was two round trips: a failed/blocked delete left the old rows in place and
       // the re-insert collided on role_permissions_pkey ("duplicate key"). One
       // race-safe RPC (which also enforces hr.role.manage) replaces the whole set.
+      if (!roleId) throw new Error('Role id missing after save')
       const { error: permErr } = await (supabase as any).rpc('set_role_permissions', {
         p_role_id: roleId, p_permission_ids: Array.from(sel)
       })
@@ -103,15 +109,15 @@ export function RoleManagement() {
         {canManage && <Button className="ml-auto" icon="add" onClick={() => { setEditing({ __new: true, name: '', description: '' }); setSel(new Set()) }}>Add Role</Button>}
       </div>
       <Card className="overflow-hidden">
-        <DataTable columns={columns} rows={roles} rowKey={(r: any) => r.id} onRowClick={canManage ? openEdit : undefined} emptyTitle="No roles" />
+        <DataTable columns={columns} rows={roles} rowKey={r => r.id} onRowClick={canManage ? openEdit : undefined} emptyTitle="No roles" />
       </Card>
 
       {editing && (
         <Modal open onClose={() => setEditing(null)} title={editing.__new ? 'Add Role' : `Edit Role — ${editing.name}`} size="xl">
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Role Name" required><Input value={editing.name ?? ''} disabled={editing.is_system} onChange={e => setEditing((x: any) => ({ ...x, name: e.target.value }))} placeholder="e.g. Dispatch Officer" /></Field>
-              <Field label="Description"><Input value={editing.description ?? ''} disabled={editing.is_system} onChange={e => setEditing((x: any) => ({ ...x, description: e.target.value }))} /></Field>
+              <Field label="Role Name" required><Input value={editing.name ?? ''} disabled={editing.is_system} onChange={e => setEditing(x => x &&  ({ ...x, name: e.target.value }))} placeholder="e.g. Dispatch Officer" /></Field>
+              <Field label="Description"><Input value={editing.description ?? ''} disabled={editing.is_system} onChange={e => setEditing(x => x &&  ({ ...x, description: e.target.value }))} /></Field>
             </div>
 
             <div>
@@ -156,8 +162,8 @@ export function RoleManagement() {
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)} name={deleting ? `Role · ${deleting.name}` : undefined}
         onConfirm={async () => {
-          await supabase.from('role_permissions').delete().eq('role_id', deleting.id)
-          const res = await supabase.from('roles').delete().eq('id', deleting.id)
+          await supabase.from('role_permissions').delete().eq('role_id', deleting!.id)
+          const res = await supabase.from('roles').delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); load() }
           return res
         }} />

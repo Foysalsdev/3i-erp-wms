@@ -39,20 +39,26 @@ function catalog(): Exportable[] {
   return out
 }
 
-// Page through a table (PostgREST caps a response at 1000 rows).
-async function fetchAll(table: string, clientId: string): Promise<any[]> {
-  const out: any[] = []
+// Page through a table (PostgREST caps a response at 1000 rows). `table` is
+// a runtime-dynamic name spanning every masters/operations/core registry
+// entry — a union-typed `.from()` here breaks the client's chained-method
+// overload resolution, so the boundary stays dynamic; rows are a plain
+// scalar bag since the shape genuinely varies per table.
+type ExportRow = Record<string, unknown>
+
+async function fetchAll(table: string, clientId: string): Promise<ExportRow[]> {
+  const out: ExportRow[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from(table as any).select('*')
       .eq('client_id', clientId).order('created_at', { ascending: true }).range(from, from + 999)
     if (error) throw error
-    out.push(...(data ?? []))
+    out.push(...((data ?? []) as unknown as ExportRow[]))
     if (!data || data.length < 1000) break
   }
   return out
 }
 
-const csvCols = (rows: any[]) => Object.keys(rows[0] ?? {}).map(k => ({ key: k, header: k }))
+const csvCols = (rows: ExportRow[]) => Object.keys(rows[0] ?? {}).map(k => ({ key: k, header: k }))
 
 export function DataTab() {
   const { currentClientId, clients } = useAuth()
@@ -81,7 +87,9 @@ export function DataTab() {
     try {
       const rows = await fetchAll(item.table, currentClientId)
       if (!rows.length) { notify('info', `${item.title}: no rows to export`); return }
-      downloadCSV(item.title, csvCols(rows), rows)
+      // downloadCSV stringifies every cell, so any scalar/jsonb Postgres value
+      // is safe here even though the exported table's shape isn't statically known.
+      downloadCSV(item.title, csvCols(rows), rows as Record<string, string | number | boolean | null>[])
       notify('success', `${item.title}: ${rows.length} row(s) exported`)
     } catch (e: any) {
       notify('error', `${item.title}: ${e?.message ?? 'export failed'}`)

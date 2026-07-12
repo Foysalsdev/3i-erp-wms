@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
-import { RELATIONS, type MasterDef } from './registry'
+import { RELATIONS, type MasterDef, type MasterRecord } from './registry'
 import { formatDate } from '@/lib/utils'
 
 export type RelLabels = Record<string, Record<string, string>> // fieldName -> (id -> label)
@@ -16,7 +16,7 @@ export function useRelationLabels(def: MasterDef): RelLabels {
       const rel = RELATIONS[f.relation!]
       const { data } = await supabase.from(rel.table as any).select(`id, ${rel.code}, ${rel.name}`).eq('client_id', clientId)
       const m: Record<string, string> = {}
-      ;(data ?? []).forEach((r: any) => { m[r.id] = `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` })
+      ;((data ?? []) as unknown as Record<string, string>[]).forEach(r => { m[r.id] = `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` })
       setMaps(prev => ({ ...prev, [f.name]: m }))
     })
   }, [def, clientId])
@@ -24,12 +24,12 @@ export function useRelationLabels(def: MasterDef): RelLabels {
 }
 
 // Formats a single field value for display (relations, dates, booleans).
-export function fieldDisplay(def: MasterDef, record: any, fieldName: string, rel: RelLabels): string {
+export function fieldDisplay(def: MasterDef, record: MasterRecord, fieldName: string, rel: RelLabels): string {
   const f = def.fields.find(x => x.name === fieldName)
-  if (!f) return record[fieldName] ?? '—'
   const v = record[fieldName]
+  if (!f) return v == null ? '—' : String(v)
   if (f.type === 'checkbox') return v ? 'Yes' : 'No'
-  if (f.type === 'date') return v ? formatDate(v) : '—'
-  if (f.relation) return (v && rel[fieldName]?.[v]) || '—'
+  if (f.type === 'date') return v ? formatDate(String(v)) : '—'
+  if (f.relation) return v ? (rel[fieldName]?.[String(v)] ?? '—') : '—'
   return (v ?? '') === '' ? '—' : String(v)
 }

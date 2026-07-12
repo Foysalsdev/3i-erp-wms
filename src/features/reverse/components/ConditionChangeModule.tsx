@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { DocRecord } from '@/features/inbound/components/DocModule'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
-import { useInboundData } from '@/features/inbound/hooks'
+import { useInboundData , type Opt } from '@/features/inbound/hooks'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -50,6 +51,9 @@ interface Line {
   qty?: number | string; repair_cost?: number | string; reason?: string
 }
 
+type CCView = DocRecord & { __items?: DocRecord[]; __readOnly?: boolean }
+const str = (v: unknown) => (v == null ? '' : String(v))
+
 const tone = (s: string) => s === 'posted' ? 'positive' : s === 'cancelled' ? 'negative' : 'neutral'
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -60,11 +64,11 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
   const canEdit = can('reverse.create') || can('reverse.edit')
   const canPost = can('reverse.post')
 
-  const [docs, setDocs] = useState<any[]>([])
+  const [docs, setDocs] = useState<DocRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [editing, setEditing] = useState<CCView | null>(null)
+  const [deleting, setDeleting] = useState<DocRecord | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   const prodMap = useMemo(() => Object.fromEntries(products.map(p => [p.id, p.sub ? `${p.label} — ${p.sub}` : p.label])), [products])
@@ -74,17 +78,17 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
     if (!clientId) return
     setLoading(true)
     supabase.from(config.table as any).select('*').eq('client_id', clientId).order('created_at', { ascending: false })
-      .then(({ data }) => { setDocs(data ?? []); setLoading(false) })
+      .then(({ data }) => { setDocs((data ?? []) as unknown as DocRecord[]); setLoading(false) })
   }
   useEffect(load, [clientId, config.table])
 
-  const openEdit = async (doc: any, readOnly: boolean) => {
-    const { data } = await supabase.from(config.itemTable as any).select('*').eq(config.itemFK, doc.id)
+  const openEdit = async (doc: DocRecord, readOnly: boolean) => {
+    const { data } = await supabase.from(config.itemTable as any).select('*').eq(config.itemFK, doc.id) as { data: DocRecord[] | null }
     setEditing({ ...doc, __items: data ?? [], __readOnly: readOnly || doc.status !== 'draft' })
     setModal(true)
   }
 
-  const post = async (doc: any) => {
+  const post = async (doc: DocRecord) => {
     if (doc.status !== 'draft') { notify('info', 'Already posted'); return }
     if (!doc.warehouse_id) { notify('error', 'Set a warehouse before posting'); return }
     setBusy(doc.id)
@@ -98,26 +102,26 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
     } finally { setBusy(null) }
   }
 
-  const del = async (doc: any) => {
+  const del = async (doc: DocRecord) => {
     const res = await supabase.from(config.table as any).delete().eq('id', doc.id)
     if (!res.error) { setDeleting(null); load() }
     return res
   }
 
-  const rowActions = (r: any): MenuItem[] => [
+  const rowActions = (r: DocRecord): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => openEdit(r, true) },
     ...(canEdit && r.status === 'draft' ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r, false) }] : []),
     ...(canPost && r.status === 'draft' ? [{ icon: 'task_alt', label: busy === r.id ? 'Posting…' : 'Post', tone: '!text-ok hover:!text-ok hover:!bg-ok/10', onClick: () => post(r) }] : []),
     ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
   ]
 
-  const columns = [
-    { key: 'doc_no', header: 'Document No', accessor: (r: any) => r.doc_no, sortable: true, className: 'font-medium' },
-    { key: 'date', header: 'Date', render: (r: any) => formatDate(r[config.dateField]) },
-    { key: 'wh', header: 'Warehouse', render: (r: any) => whMap[r.warehouse_id]?.split(' — ')[0] ?? '—' },
-    { key: 'status', header: 'Status', render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+  const columns: Column<DocRecord>[] = [
+    { key: 'doc_no', header: 'Document No', accessor: r => r.doc_no, sortable: true, className: 'font-medium' },
+    { key: 'date', header: 'Date', render: r => formatDate(str(r[config.dateField])) },
+    { key: 'wh', header: 'Warehouse', render: r => whMap[r.warehouse_id ?? '']?.split(' — ')[0] ?? '—' },
+    { key: 'status', header: 'Status', render: r => <Badge tone={tone(r.status)}>{r.status}</Badge> },
     { key: '__actions', header: '', className: 'w-px whitespace-nowrap text-right',
-      render: (r: any) => <div className="flex justify-end" onClick={e => e.stopPropagation()}><ActionMenu items={rowActions(r)} /></div> }
+      render: r => <div className="flex justify-end" onClick={e => e.stopPropagation()}><ActionMenu items={rowActions(r)} /></div> }
   ]
 
   return (
@@ -127,8 +131,8 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
         {canEdit && <Button icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {config.singular}</Button>}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={columns} rows={docs} rowKey={(r: any) => r.id}
-          onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />
+        <DataTable fill loading={loading} columns={columns} rows={docs} rowKey={r => r.id}
+          onRowClick={r => openEdit(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />
       </Card>
 
       {modal && (
@@ -139,30 +143,35 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${config.singular} · ${deleting.doc_no}` : undefined}
-        onConfirm={() => del(deleting)} />
+        onConfirm={async () => deleting ? del(deleting) : { error: null }} />
     </div>
   )
 }
 
-function CCForm({ config, record, clientId, products, warehouses, locations, prodMap, onClose, onDone }: any) {
+function CCForm({ config, record, clientId, products, warehouses, locations, prodMap, onClose, onDone }: {
+  config: CCConfig; record: CCView | null; clientId: string
+  products: Opt[]; warehouses: Opt[]; locations: Opt[]; prodMap: Record<string, string>
+  onClose: () => void; onDone: () => void
+}) {
   const notify = useUI(s => s.notify)
   const readOnly = !!record?.__readOnly
-  const [h, setH] = useState<any>(record ?? { [config.dateField]: today() })
+  const [h, setH] = useState<Partial<DocRecord>>(record ?? { [config.dateField]: today() })
   const [lines, setLines] = useState<Line[]>(
-    (record?.__items ?? []).map((r: any) => ({
-      product_id: r.product_id, location_id: r.location_id, from_status: r.from_status, to_status: r.to_status,
-      qty: r.qty, repair_cost: r.repair_cost, reason: r.reason
+    (record?.__items ?? []).map((r): Line => ({
+      product_id: str(r.product_id) || undefined, location_id: str(r.location_id) || undefined,
+      from_status: str(r.from_status), to_status: str(r.to_status),
+      qty: r.qty as number, repair_cost: (r.repair_cost as number | undefined) ?? undefined, reason: str(r.reason) || undefined
     })))
   const [saving, setSaving] = useState(false)
-  const [salesReturns, setSalesReturns] = useState<any[]>([])
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
+  const [salesReturns, setSalesReturns] = useState<{ id: string; doc_no: string | null; warehouse_id: string | null }[]>([])
+  const set = (patch: Partial<DocRecord>) => setH(x => ({ ...x, ...patch }))
   const toOptions = config.allowScrap ? TO_CONDITIONS_WITH_SCRAP : CONDITIONS
-  const locForWh = locations.filter((l: any) => !h.warehouse_id || l.extra === h.warehouse_id)
+  const locForWh = locations.filter(l => !h.warehouse_id || l.extra === h.warehouse_id)
 
   useEffect(() => {
     if (!config.linkSalesReturn || !clientId) return
-    supabase.from('sales_returns' as any).select('id,doc_no,warehouse_id').eq('client_id', clientId).eq('status', 'posted')
-      .order('created_at', { ascending: false }).then(({ data }: any) => setSalesReturns(data ?? []))
+    supabase.from('sales_returns').select('id,doc_no,warehouse_id').eq('client_id', clientId).eq('status', 'posted')
+      .order('created_at', { ascending: false }).then(({ data }) => setSalesReturns(data ?? []))
   }, [clientId])
 
   const updateLine = (i: number, patch: Partial<Line>) => setLines(ls => ls.map((r, idx) => idx === i ? { ...r, ...patch } : r))
@@ -172,11 +181,11 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
   // Pull the lines of a posted sales return as a starting point for inspection.
   const loadFromSrn = async (srnId: string) => {
     const srn = salesReturns.find(s => s.id === srnId)
-    const { data } = await supabase.from('sales_return_items' as any).select('*').eq('srn_id', srnId)
+    const { data } = await supabase.from('sales_return_items').select('*').eq('srn_id', srnId)
     set({ srn_id: srnId, warehouse_id: h.warehouse_id || srn?.warehouse_id || '' })
-    setLines((data ?? []).map((r: any) => ({
-      product_id: r.product_id, location_id: r.location_id,
-      from_status: r.stock_status || config.fromDefault, to_status: config.toDefault, qty: r.qty, reason: r.reason
+    setLines((data ?? []).map((r): Line => ({
+      product_id: r.product_id ?? undefined, location_id: r.location_id ?? undefined,
+      from_status: r.stock_status || config.fromDefault, to_status: config.toDefault, qty: r.qty, reason: r.reason ?? undefined
     })))
   }
 
@@ -188,25 +197,25 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
     if (noop) { notify('error', 'From and To condition must differ on every line'); return }
     setSaving(true)
     try {
-      const hdr: any = {
+      const hdr: Record<string, unknown> = {
         client_id: clientId, warehouse_id: h.warehouse_id,
         [config.dateField]: h[config.dateField] || today(), remarks: h.remarks || null, status: 'draft'
       }
       if (config.linkSalesReturn) hdr.srn_id = h.srn_id || null
       let docId = record?.id
       if (record) {
-        const { error } = await (supabase as any).from(config.table).update(hdr).eq('id', record.id)
+        const { error } = await supabase.from(config.table as any).update(hdr).eq('id', record.id)
         if (error) throw error
-        await (supabase as any).from(config.itemTable).delete().eq(config.itemFK, record.id)
+        await supabase.from(config.itemTable as any).delete().eq(config.itemFK, record.id)
       } else {
         hdr.doc_no = await nextDocNumber(clientId, config.docType)
         if (!hdr.doc_no) throw new Error(`Could not generate the ${config.singular} number`)
         const { data, error } = await supabase.from(config.table as any).insert(hdr).select('id').single()
         if (error) throw error
-        docId = (data as any).id
+        docId = (data as unknown as { id: string }).id
       }
       const rows = valid.map(l => {
-        const row: any = {
+        const row: Record<string, unknown> = {
           client_id: clientId, [config.itemFK]: docId, product_id: l.product_id,
           location_id: l.location_id || null, from_status: l.from_status, to_status: l.to_status,
           qty: Number(l.qty) || 0, reason: l.reason || null
@@ -231,13 +240,13 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Warehouse" required>
             <Combobox value={h.warehouse_id ?? ''} disabled={readOnly}
-              options={warehouses.map((w: any) => ({ id: w.id, label: w.label, sub: w.sub }))}
+              options={warehouses.map(w => ({ id: w.id, label: w.label, sub: w.sub }))}
               placeholder="Search warehouse…" onChange={(v: string) => set({ warehouse_id: v })} />
           </Field>
-          <Field label="Date"><Input type="date" disabled={readOnly} value={(h[config.dateField] ?? '').slice(0, 10)} onChange={e => set({ [config.dateField]: e.target.value })} /></Field>
+          <Field label="Date"><Input type="date" disabled={readOnly} value={str(h[config.dateField]).slice(0, 10)} onChange={e => set({ [config.dateField]: e.target.value })} /></Field>
           {config.linkSalesReturn && !readOnly && (
             <Field label="Load from Sales Return">
-              <Combobox value={h.srn_id ?? ''} options={salesReturns.map(s => ({ id: s.id, label: s.doc_no }))}
+              <Combobox value={str(h.srn_id)} options={salesReturns.map(s => ({ id: s.id, label: s.doc_no ?? '' }))}
                 placeholder="Optional — pull returned lines" onChange={(v: string) => loadFromSrn(v)} />
             </Field>
           )}
@@ -267,7 +276,7 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
                   <tr key={i} className="border-b border-surface-line last:border-0">
                     <td className="px-2 py-1.5">
                       <Combobox value={l.product_id ?? ''} disabled={readOnly}
-                        options={products.map((p: any) => ({ id: p.id, label: p.label, sub: p.sub }))}
+                        options={products.map(p => ({ id: p.id, label: p.label, sub: p.sub }))}
                         placeholder="Search product…" onChange={(v: string) => updateLine(i, { product_id: v })} />
                     </td>
                     <td className="px-2 py-1.5">
@@ -298,7 +307,7 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
           <p className="mt-1 text-right text-xs text-ink-soft">Total qty: {formatNumber(lines.reduce((s, l) => s + (Number(l.qty) || 0), 0))}</p>
         </div>
 
-        <Field label="Remarks"><Textarea disabled={readOnly} value={h.remarks ?? ''} onChange={e => set({ remarks: e.target.value })} /></Field>
+        <Field label="Remarks"><Textarea disabled={readOnly} value={str(h.remarks)} onChange={e => set({ remarks: e.target.value })} /></Field>
 
         {!readOnly && (
           <div className="flex justify-end gap-2 border-t border-surface-line pt-4">

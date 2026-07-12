@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables, TablesInsert } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
-import { useInboundData } from '@/features/inbound/hooks'
+import { useInboundData, type Opt } from '@/features/inbound/hooks'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -24,6 +25,9 @@ const today = () => new Date().toISOString().slice(0, 10)
 
 interface CountLine { product_id?: string; location_id?: string; stock_status: string; system_qty: number; counted_qty?: number | string }
 
+type StockCount = Tables<'stock_counts'>
+type CountView = StockCount & { __items?: Tables<'stock_count_items'>[] }
+
 // Cycle Count (partial, periodic) and Physical Verification (full stock take)
 // share one document + posting routine, distinguished by countType. Posting
 // drives on-hand to the counted quantity via COUNT_ADJUST ledger movements.
@@ -34,11 +38,11 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
   const canEdit = can('inventory.create') || can('inventory.adjust') || can('inventory.edit')
   const canPost = can('inventory.adjust') || can('inventory.post')
 
-  const [docs, setDocs] = useState<any[]>([])
+  const [docs, setDocs] = useState<StockCount[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [editing, setEditing] = useState<(CountView & { __readOnly?: boolean }) | null>(null)
+  const [deleting, setDeleting] = useState<StockCount | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [q, setQ] = useState('')
 
@@ -46,29 +50,29 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
   const filteredDocs = useMemo(() => {
     if (!q.trim()) return docs
     const t = q.toLowerCase()
-    return docs.filter(r => [r.doc_no, whMap[r.warehouse_id], r.status].some(v => String(v ?? '').toLowerCase().includes(t)))
+    return docs.filter(r => [r.doc_no, whMap[r.warehouse_id ?? ''], r.status].some(v => String(v ?? '').toLowerCase().includes(t)))
   }, [docs, whMap, q])
 
   const load = () => {
     if (!clientId) return
     setLoading(true)
-    supabase.from('stock_counts' as any).select('*').eq('client_id', clientId).eq('count_type', countType)
+    supabase.from('stock_counts').select('*').eq('client_id', clientId).eq('count_type', countType)
       .order('created_at', { ascending: false })
-      .then(({ data }: any) => { setDocs(data ?? []); setLoading(false) })
+      .then(({ data }) => { setDocs(data ?? []); setLoading(false) })
   }
   useEffect(load, [clientId, countType])
 
-  const openEdit = async (doc: any, readOnly: boolean) => {
-    const { data } = await supabase.from('stock_count_items' as any).select('*').eq('count_id', doc.id)
+  const openEdit = async (doc: StockCount, readOnly: boolean) => {
+    const { data } = await supabase.from('stock_count_items').select('*').eq('count_id', doc.id)
     setEditing({ ...doc, __items: data ?? [], __readOnly: readOnly || doc.status !== 'draft' })
     setModal(true)
   }
 
-  const post = async (doc: any) => {
+  const post = async (doc: StockCount) => {
     if (doc.status !== 'draft') { notify('info', 'Already posted'); return }
     setBusy(doc.id)
     try {
-      const { error } = await (supabase as any).rpc('post_stock_count', { p_count: doc.id })
+      const { error } = await supabase.rpc('post_stock_count', { p_count: doc.id })
       if (error) throw error
       notify('success', `${doc.doc_no ?? singular} posted — variances adjusted into stock`)
       load()
@@ -77,20 +81,20 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
     } finally { setBusy(null) }
   }
 
-  const rowActions = (r: any): MenuItem[] => [
+  const rowActions = (r: StockCount): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => openEdit(r, true) },
     ...(canEdit && r.status === 'draft' ? [{ icon: 'edit', label: 'Edit', onClick: () => openEdit(r, false) }] : []),
     ...(canPost && r.status === 'draft' ? [{ icon: 'task_alt', label: busy === r.id ? 'Posting…' : 'Post', tone: '!text-ok hover:!text-ok hover:!bg-ok/10', onClick: () => post(r) }] : []),
     ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(r) }] : [])
   ]
 
-  const columns = [
-    { key: 'doc_no', header: 'Document No', accessor: (r: any) => r.doc_no, sortable: true, className: 'font-medium' },
-    { key: 'date', header: 'Date', accessor: (r: any) => r.count_date, render: (r: any) => formatDate(r.count_date), sortable: true },
-    { key: 'wh', header: 'Warehouse', accessor: (r: any) => whMap[r.warehouse_id] ?? '', render: (r: any) => whMap[r.warehouse_id]?.split(' — ')[0] ?? '—', sortable: true },
-    { key: 'status', header: 'Status', accessor: (r: any) => r.status, render: (r: any) => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
+  const columns: Column<StockCount>[] = [
+    { key: 'doc_no', header: 'Document No', accessor: r => r.doc_no, sortable: true, className: 'font-medium' },
+    { key: 'date', header: 'Date', accessor: r => r.count_date, render: r => formatDate(r.count_date), sortable: true },
+    { key: 'wh', header: 'Warehouse', accessor: r => whMap[r.warehouse_id ?? ''] ?? '', render: r => whMap[r.warehouse_id ?? '']?.split(' — ')[0] ?? '—', sortable: true },
+    { key: 'status', header: 'Status', accessor: r => r.status, render: r => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
     { key: '__actions', header: '', className: 'w-px whitespace-nowrap text-right',
-      render: (r: any) => <div className="flex justify-end" onClick={e => e.stopPropagation()}><ActionMenu items={rowActions(r)} /></div> }
+      render: r => <div className="flex justify-end" onClick={e => e.stopPropagation()}><ActionMenu items={rowActions(r)} /></div> }
   ]
 
   return (
@@ -101,8 +105,8 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
         {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New {singular}</Button>}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={columns} rows={filteredDocs} rowKey={(r: any) => r.id}
-          onRowClick={(r: any) => openEdit(r, true)} emptyTitle={`No ${title.toLowerCase()} yet`} />
+        <DataTable fill loading={loading} columns={columns} rows={filteredDocs} rowKey={r => r.id}
+          onRowClick={r => openEdit(r, true)} emptyTitle={`No ${title.toLowerCase()} yet`} />
       </Card>
 
       {modal && (
@@ -114,7 +118,8 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${singular} · ${deleting.doc_no}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from('stock_counts' as any).delete().eq('id', deleting.id)
+          if (!deleting) return { error: null }
+          const res = await supabase.from('stock_counts').delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); load() }
           return res
         }} />
@@ -122,20 +127,25 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
   )
 }
 
-function CountForm({ countType, title, singular, record, clientId, products, warehouses, locations, onClose, onDone }: any) {
+function CountForm({ countType, title, singular, record, clientId, products, warehouses, locations, onClose, onDone }: {
+  countType: 'cycle' | 'physical'; title: string; singular: string
+  record: (CountView & { __readOnly?: boolean }) | null; clientId: string
+  products: Opt[]; warehouses: Opt[]; locations: Opt[]
+  onClose: () => void; onDone: () => void
+}) {
   const notify = useUI(s => s.notify)
   const readOnly = !!record?.__readOnly
-  const [h, setH] = useState<any>(record ?? { count_date: today() })
+  const [h, setH] = useState<Partial<StockCount>>(record ?? { count_date: today() })
   const [lines, setLines] = useState<CountLine[]>(
-    (record?.__items ?? []).map((r: any) => ({
-      product_id: r.product_id, location_id: r.location_id, stock_status: r.stock_status,
+    (record?.__items ?? []).map(r => ({
+      product_id: r.product_id ?? undefined, location_id: r.location_id ?? undefined, stock_status: r.stock_status,
       system_qty: Number(r.system_qty), counted_qty: r.counted_qty
     })))
   const [saving, setSaving] = useState(false)
   const [loadingStock, setLoadingStock] = useState(false)
-  const set = (patch: any) => setH((x: any) => ({ ...x, ...patch }))
-  const prodMap = useMemo(() => Object.fromEntries(products.map((p: any) => [p.id, p])), [products])
-  const locForWh = locations.filter((l: any) => !h.warehouse_id || l.extra === h.warehouse_id)
+  const set = (patch: Partial<StockCount>) => setH(x => ({ ...x, ...patch }))
+  const prodMap = useMemo(() => Object.fromEntries(products.map(p => [p.id, p])) as Record<string, Opt>, [products])
+  const locForWh = locations.filter(l => !h.warehouse_id || l.extra === h.warehouse_id)
 
   const updateLine = (i: number, patch: Partial<CountLine>) => setLines(ls => ls.map((r, idx) => idx === i ? { ...r, ...patch } : r))
   const addLine = () => setLines(ls => [...ls, { stock_status: 'good', system_qty: 0, counted_qty: '' }])
@@ -148,8 +158,8 @@ function CountForm({ countType, title, singular, record, clientId, products, war
     const { data } = await supabase.from('inventory_stock')
       .select('product_id, location_id, stock_status, quantity')
       .eq('client_id', clientId).eq('warehouse_id', h.warehouse_id)
-    setLines((data ?? []).map((r: any) => ({
-      product_id: r.product_id, location_id: r.location_id, stock_status: r.stock_status,
+    setLines((data ?? []).map(r => ({
+      product_id: r.product_id ?? undefined, location_id: r.location_id ?? undefined, stock_status: r.stock_status,
       system_qty: Number(r.quantity), counted_qty: Number(r.quantity)
     })))
     setLoadingStock(false)
@@ -166,27 +176,28 @@ function CountForm({ countType, title, singular, record, clientId, products, war
     }
     setSaving(true)
     try {
-      const hdr: any = {
+      const hdr: Omit<TablesInsert<'stock_counts'>, 'doc_no'> & { doc_no?: string } = {
         client_id: clientId, warehouse_id: h.warehouse_id, count_type: countType,
         count_date: h.count_date || today(), remarks: h.remarks || null, status: 'draft'
       }
       let docId = record?.id
       if (record) {
-        const { error } = await (supabase as any).from('stock_counts').update(hdr).eq('id', record.id)
+        const { error } = await supabase.from('stock_counts').update(hdr).eq('id', record.id)
         if (error) throw error
-        await (supabase as any).from('stock_count_items').delete().eq('count_id', record.id)
+        await supabase.from('stock_count_items').delete().eq('count_id', record.id)
       } else {
-        hdr.doc_no = await nextDocNumber(clientId, 'CNT')
+        hdr.doc_no = (await nextDocNumber(clientId, 'CNT')) ?? undefined
         if (!hdr.doc_no) throw new Error('Could not generate the count number')
-        const { data, error } = await supabase.from('stock_counts' as any).insert(hdr).select('id').single()
+        const { data, error } = await supabase.from('stock_counts').insert(hdr as TablesInsert<'stock_counts'>).select('id').single()
         if (error) throw error
-        docId = (data as any).id
+        docId = data.id
       }
+      if (!docId) throw new Error('Count id missing after save')
       const rows = valid.map(l => ({
-        client_id: clientId, count_id: docId, product_id: l.product_id, location_id: l.location_id || null,
+        client_id: clientId, count_id: docId, product_id: l.product_id!, location_id: l.location_id || null,
         stock_status: l.stock_status, system_qty: Number(l.system_qty) || 0, counted_qty: Number(l.counted_qty) || 0
       }))
-      const { error: ie } = await supabase.from('stock_count_items' as any).insert(rows)
+      const { error: ie } = await supabase.from('stock_count_items').insert(rows)
       if (ie) throw ie
       notify('success', `${singular} saved as draft`)
       onDone()
@@ -205,7 +216,7 @@ function CountForm({ countType, title, singular, record, clientId, products, war
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Warehouse" required>
             <Combobox value={h.warehouse_id ?? ''} disabled={readOnly}
-              options={warehouses.map((w: any) => ({ id: w.id, label: w.label, sub: w.sub }))}
+              options={warehouses.map(w => ({ id: w.id, label: w.label, sub: w.sub }))}
               placeholder="Search warehouse…" onChange={(v: string) => set({ warehouse_id: v })} />
           </Field>
           <Field label="Count Date"><Input type="date" disabled={readOnly} value={(h.count_date ?? '').slice(0, 10)} onChange={e => set({ count_date: e.target.value })} /></Field>
@@ -237,12 +248,12 @@ function CountForm({ countType, title, singular, record, clientId, products, war
                     <tr key={i} className="border-b border-surface-line last:border-0">
                       <td className="px-2 py-1.5">
                         <Combobox value={l.product_id ?? ''} disabled={readOnly}
-                          options={products.map((p: any) => ({ id: p.id, label: p.label, sub: p.sub }))}
+                          options={products.map(p => ({ id: p.id, label: p.label, sub: p.sub }))}
                           placeholder="Search product…" onChange={(val: string) => updateLine(i, { product_id: val })} />
                       </td>
                       <td className="px-2 py-1.5">
                         <Combobox value={l.location_id ?? ''} disabled={readOnly}
-                          options={locForWh.map((loc: any) => ({ id: loc.id, label: loc.label }))}
+                          options={locForWh.map(loc => ({ id: loc.id, label: loc.label }))}
                           placeholder="—" onChange={(val: string) => updateLine(i, { location_id: val })} />
                       </td>
                       <td className="px-2 py-1.5">

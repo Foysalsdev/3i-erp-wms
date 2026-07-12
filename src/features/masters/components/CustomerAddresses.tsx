@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/Badge'
 const TYPES = ['Billing', 'Shipping', 'Both']
 const blank = () => ({ label: '', address_type: 'Shipping', address: '', is_default: false })
 
-export function CustomerAddresses({ customer, onClose }: { customer: any; onClose: () => void }) {
+export function CustomerAddresses({ customer, onClose }: { customer: { id: string; name?: string | null }; onClose: () => void }) {
   const { currentClientId, can } = useAuth()
   const notify = useUI(s => s.notify)
   const canEdit = can('masters.create') || can('masters.edit')

@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useCollection } from '@/hooks/useCollection'
-import { OP_RELATIONS, opColumns, type OpDef, type OpFieldDef } from './registry'
+import { OP_RELATIONS, opColumns, type OpDef, type OpFieldDef, type OpRecord } from './registry'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -24,18 +24,18 @@ import { OperationForm } from './OperationForm'
 
 // Display a field's value for the read-only view / PDF: relations show their
 // resolved label, dates are formatted, everything else prints as-is.
-const displayValue = (f: OpFieldDef, row: any): string => {
+const displayValue = (f: OpFieldDef, row: OpRecord): string => {
   if (f.type === 'relation') return row.__rel?.[f.name] ?? '—'
   const v = row[f.name]
   if (v == null || v === '') return '—'
-  if (f.type === 'date') return formatDate(v)
+  if (f.type === 'date') return formatDate(String(v))
   return String(v)
 }
 
 export function OperationList({ def }: { def: OpDef }) {
   const { data, loading, refresh } = useCollection(def.table, { order: 'created_at' })
   const { can, isPlatformAdmin, currentClientId, clients } = useAuth()
-  const clientName = clients.find((c: any) => c.id === currentClientId)?.name ?? ''
+  const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
   const notify = useUI(s => s.notify)
   const canEdit = can(`${def.permission}.create`) || can(`${def.permission}.edit`)
   const [q, setQ] = useUrlSearch()
@@ -43,16 +43,16 @@ export function OperationList({ def }: { def: OpDef }) {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  const [viewing, setViewing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [editing, setEditing] = useState<OpRecord | null>(null)
+  const [viewing, setViewing] = useState<OpRecord | null>(null)
+  const [deleting, setDeleting] = useState<OpRecord | null>(null)
   const [rel, setRel] = useState<Record<string, Record<string, string>>>({})
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   useAutoOpen(() => { setEditing(null); setModal(true) })
 
   // Print the document header via the matching PDF template (gate pass / generic).
-  const printRow = async (row: any) => {
+  const printRow = async (row: OpRecord) => {
     try {
       const meta = [
         { label: `${def.singular} No`, value: String(row[def.numberField] ?? '') },
@@ -79,36 +79,36 @@ export function OperationList({ def }: { def: OpDef }) {
     def.fields.filter(f => f.relation).forEach(async f => {
       const r = OP_RELATIONS[f.relation!]
       const cols = ['id', r.code, r.name].filter(Boolean).join(', ')
-      const { data } = await supabase.from(r.table as any).select(cols).eq('client_id', currentClientId)
+      const { data } = await supabase.from(r.table as any).select(cols).eq('client_id', currentClientId) as { data: Record<string, string>[] | null }
       const m: Record<string, string> = {}
-      ;(data ?? []).forEach((row: any) => { m[row.id] = r.name ? `${row[r.code]}${row[r.name] ? ' — ' + row[r.name] : ''}` : row[r.code] })
+      ;(data ?? []).forEach(row => { m[row.id] = r.name ? `${row[r.code]}${row[r.name] ? ' — ' + row[r.name] : ''}` : row[r.code] })
       setRel(prev => ({ ...prev, [f.name]: m }))
     })
   }, [def, currentClientId])
 
   const rows = useMemo(() => {
-    const withRel = (data as any[]).map(row => ({
+    const withRel: OpRecord[] = (data as unknown as OpRecord[]).map(row => ({
       ...row,
-      __rel: Object.fromEntries(def.fields.filter(f => f.relation).map(f => [f.name, rel[f.name]?.[row[f.name]] ?? '—']))
+      __rel: Object.fromEntries(def.fields.filter(f => f.relation).map(f => [f.name, rel[f.name]?.[String(row[f.name])] ?? '—']))
     }))
-    let out = statusFilter.length ? withRel.filter(r => statusFilter.includes(r.status)) : withRel
-    if (dateFrom) { const from = new Date(dateFrom); out = out.filter(r => new Date(r.created_at) >= from) }
-    if (dateTo) { const to = new Date(dateTo); to.setHours(23, 59, 59, 999); out = out.filter(r => new Date(r.created_at) <= to) }
+    let out = statusFilter.length ? withRel.filter(r => statusFilter.includes(r.status ?? '')) : withRel
+    if (dateFrom) { const from = new Date(dateFrom); out = out.filter(r => new Date(r.created_at ?? 0) >= from) }
+    if (dateTo) { const to = new Date(dateTo); to.setHours(23, 59, 59, 999); out = out.filter(r => new Date(r.created_at ?? 0) <= to) }
     if (!q.trim()) return out
     const t = q.toLowerCase()
     return out.filter(r => def.searchFields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
   }, [data, rel, q, statusFilter, dateFrom, dateTo, def])
 
-  const rowActions = (row: any): MenuItem[] => [
+  const rowActions = (row: OpRecord): MenuItem[] => [
     { icon: 'visibility', label: 'View', onClick: () => setViewing(row) },
     ...(def.pdf ? [{ icon: 'print', label: 'Print', onClick: () => printRow(row) }] : []),
     ...(canEdit ? [{ icon: 'edit', label: 'Edit', onClick: () => { setEditing(row); setModal(true) } }] : []),
     ...(isPlatformAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(row) }] : [])
   ]
 
-  const actionCol: Column<any> = {
+  const actionCol: Column<OpRecord> = {
     key: '__actions', header: '', className: 'w-px whitespace-nowrap',
-    render: (row: any) => (
+    render: (row: OpRecord) => (
       <div className="flex justify-end" onClick={e => e.stopPropagation()}>
         <ActionMenu items={rowActions(row)} />
       </div>
@@ -119,7 +119,7 @@ export function OperationList({ def }: { def: OpDef }) {
 
   // Only ids still present in the current filter count toward the bulk bar —
   // a stale checked id from a deleted/filtered-out row is simply dropped.
-  const selectedRows = rows.filter((r: any) => checked.has(r.id))
+  const selectedRows = rows.filter(r => checked.has(r.id))
 
   const toggleOne = (id: string) => setChecked(prev => {
     const next = new Set(prev)
@@ -135,12 +135,12 @@ export function OperationList({ def }: { def: OpDef }) {
 
   const exportSelected = () => {
     const cols = baseColumns.map(c => ({ key: c.key, header: c.header }))
-    const csvRows = selectedRows.map((r: any) => Object.fromEntries(baseColumns.map(c => [c.key, c.accessor?.(r) ?? r[c.key] ?? ''])))
+    const csvRows = selectedRows.map(r => Object.fromEntries(baseColumns.map(c => [c.key, c.accessor?.(r) ?? (r[c.key] as string | number | null | undefined) ?? ''])))
     downloadCSV(`${def.title} (selected)`, cols, csvRows)
   }
 
   const bulkDelete = async () => {
-    const ids = selectedRows.map((r: any) => r.id)
+    const ids = selectedRows.map(r => r.id)
     const res = await supabase.from(def.table as any).delete().in('id', ids)
     if (!res.error) { setChecked(new Set()); refresh() }
     return res
@@ -191,7 +191,7 @@ export function OperationList({ def }: { def: OpDef }) {
       ]} />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={(r: any) => r.id}
+        <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           onRowClick={canEdit ? (r => { setEditing(r); setModal(true) }) : (r => setViewing(r))}
           emptyTitle={`No ${def.singular.toLowerCase()} records yet`}
           selection={{ selected: checked, onToggle: toggleOne, onToggleAll: toggleAll }} />
@@ -208,7 +208,7 @@ export function OperationList({ def }: { def: OpDef }) {
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-surface-line bg-surface-sunken/40 p-4 sm:grid-cols-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{def.singular} No</p>
-                <p className="mt-0.5 text-sm font-medium text-ink break-words">{viewing[def.numberField] ?? '—'}</p>
+                <p className="mt-0.5 text-sm font-medium text-ink break-words">{viewing[def.numberField] != null ? String(viewing[def.numberField]) : '—'}</p>
               </div>
               {def.fields.filter(f => f.type !== 'image').map(f => (
                 <div key={f.name} className={'min-w-0' + (f.type === 'textarea' ? ' col-span-2 sm:col-span-3' : '')}>
@@ -223,13 +223,13 @@ export function OperationList({ def }: { def: OpDef }) {
             {def.fields.filter(f => f.type === 'image' && viewing[f.name]).map(f => (
               <div key={f.name}>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">{f.label}</p>
-                <img src={viewing[f.name]} alt={f.label} className="max-h-72 rounded-lg border border-surface-line object-contain" />
+                <img src={viewing[f.name] as string} alt={f.label} className="max-h-72 rounded-lg border border-surface-line object-contain" />
               </div>
             ))}
 
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Activity & stock movement</p>
-              <TrailPanel table={def.table} recordId={viewing.id} referenceNo={viewing[def.numberField]} />
+              <TrailPanel table={def.table} recordId={viewing.id} referenceNo={viewing[def.numberField] as string | null | undefined} />
             </div>
 
             <div className="flex justify-end gap-2 border-t border-surface-line pt-4">
@@ -244,7 +244,7 @@ export function OperationList({ def }: { def: OpDef }) {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${def.singular} · ${deleting[def.numberField]}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from(def.table as any).delete().eq('id', deleting.id)
+          const res = await supabase.from(def.table as any).delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }}
@@ -259,7 +259,7 @@ export function OperationList({ def }: { def: OpDef }) {
         name={`${selectedRows.length} ${def.singular.toLowerCase()}`}
         onConfirm={bulkDelete}
         onUndo={selectedRows.length ? async () => {
-          const clean = selectedRows.map(({ __rel, ...r }: any) => r)
+          const clean = selectedRows.map(({ __rel, ...r }) => r)
           const { error } = await supabase.from(def.table as any).insert(clean)
           if (error) notify('error', `Could not undo: ${error.message}`)
           else { notify('success', `${selectedRows.length} ${def.singular.toLowerCase()} restored`); refresh() }

@@ -26,7 +26,7 @@ export function MyProfileModal({ onClose }: { onClose: () => void }) {
     try {
       const { error } = await supabase.from('profiles').update({
         full_name: fullName || null, phone: phone || null, avatar_url: avatarUrl || null
-      } as any).eq('id', profile!.id)
+      }).eq('id', profile!.id)
       if (error) throw error
       if (newPassword) {
         const { error: pwErr } = await supabase.auth.updateUser({ password: newPassword })

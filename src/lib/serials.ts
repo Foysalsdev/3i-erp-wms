@@ -41,17 +41,17 @@ export async function describeSerialHistory(clientId: string,
     supabase.from('delivery_challans').select('challan_no,challan_date,customer_id').eq('client_id', clientId).in('challan_no', refs),
     supabase.from('goods_receipts').select('grn_no,receipt_date,supplier_id').eq('client_id', clientId).in('grn_no', refs)
   ])
-  const custIds = [...new Set([...(so.data ?? []).map((x: any) => x.customer_id), ...(dc.data ?? []).map((x: any) => x.customer_id)].filter(Boolean))]
-  const suppIds = [...new Set((grn.data ?? []).map((x: any) => x.supplier_id).filter(Boolean))]
+  const custIds = [...new Set([...(so.data ?? []).map(x => x.customer_id), ...(dc.data ?? []).map(x => x.customer_id)].filter(Boolean))] as string[]
+  const suppIds = [...new Set((grn.data ?? []).map(x => x.supplier_id).filter(Boolean))] as string[]
   const [cust, supp] = await Promise.all([
-    custIds.length ? supabase.from('customers').select('id,name').in('id', custIds) : Promise.resolve({ data: [] as any[] }),
-    suppIds.length ? supabase.from('suppliers').select('id,name').in('id', suppIds) : Promise.resolve({ data: [] as any[] })
+    custIds.length ? supabase.from('customers').select('id,name').in('id', custIds) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    suppIds.length ? supabase.from('suppliers').select('id,name').in('id', suppIds) : Promise.resolve({ data: [] as { id: string; name: string }[] })
   ])
-  const cmap = Object.fromEntries((cust.data ?? []).map((c: any) => [c.id, c.name]))
-  const smap = Object.fromEntries((supp.data ?? []).map((s: any) => [s.id, s.name]))
+  const cmap = Object.fromEntries((cust.data ?? []).map(c => [c.id, c.name]))
+  const smap = Object.fromEntries((supp.data ?? []).map(s => [s.id, s.name]))
   const refMap: Record<string, { date?: string; party?: string }> = {}
-  ;(so.data ?? []).forEach((x: any) => { refMap[x.so_no] = { date: x.order_date, party: cmap[x.customer_id] } })
-  ;(dc.data ?? []).forEach((x: any) => { refMap[x.challan_no] = { date: x.challan_date, party: cmap[x.customer_id] } })
-  ;(grn.data ?? []).forEach((x: any) => { refMap[x.grn_no] = { date: x.receipt_date, party: smap[x.supplier_id] } })
+  ;(so.data ?? []).forEach(x => { refMap[x.so_no] = { date: x.order_date, party: cmap[x.customer_id ?? ''] } })
+  ;(dc.data ?? []).forEach(x => { refMap[x.challan_no] = { date: x.challan_date, party: cmap[x.customer_id ?? ''] } })
+  ;(grn.data ?? []).forEach(x => { refMap[x.grn_no] = { date: x.receipt_date, party: smap[x.supplier_id ?? ''] } })
   return base.map(r => ({ ...r, ...(r.reference_no ? refMap[r.reference_no] : {}) }))
 }

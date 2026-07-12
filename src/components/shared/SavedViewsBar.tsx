@@ -6,7 +6,7 @@ import { loadViews, saveView, removeView, type SavedView } from '@/lib/savedView
 // a list: click one to re-apply that exact combination of filters, or save
 // the current filters under a new name. Persisted per browser, scoped by key
 // so each list keeps its own set.
-export function SavedViewsBar<S extends Record<string, any>>({ scope, current, onApply }: {
+export function SavedViewsBar<S extends Record<string, unknown>>({ scope, current, onApply }: {
   scope: string
   current: S
   onApply: (state: S) => void

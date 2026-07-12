@@ -13,6 +13,9 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid
 } from 'recharts'
+import type { Tables } from '@/types/database.types'
+
+type LedgerEntry = Pick<Tables<'inventory_ledger'>, 'movement_type' | 'qty_in' | 'qty_out' | 'created_at' | 'reference_no'>
 
 const COLORS = ['#16a34a', '#dc2626', '#ea7a0c']
 const AGING_COLORS = ['#16a34a', '#eeb111', '#ea7a0c', '#dc2626', '#8c8f94']
@@ -90,7 +93,7 @@ function AdminDashboard() {
   const [byStatus, setByStatus] = useState<{ name: string; value: number }[]>([])
   const [trend, setTrend] = useState<{ label: string; in: number; out: number }[]>([])
   const [aging, setAging] = useState<{ bucket: string; qty: number }[]>([])
-  const [recent, setRecent] = useState<any[]>([])
+  const [recent, setRecent] = useState<LedgerEntry[]>([])
   const [ops, setOps] = useState<Record<string, number>>({})
   const [util, setUtil] = useState<{ used: number; capacity: number } | null>(null)
   const client = clients.find(c => c.id === currentClientId)
@@ -141,7 +144,7 @@ function AdminDashboard() {
         days.push({ date: d.toISOString().slice(0, 10), label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), in: 0, out: 0 })
       }
       const byDate = Object.fromEntries(days.map(d => [d.date, d]))
-      ;(trendLedger ?? []).forEach((r: any) => {
+      ;(trendLedger ?? []).forEach(r => {
         const row = byDate[String(r.created_at).slice(0, 10)]
         if (row) { row.in += Number(r.qty_in || 0); row.out += Number(r.qty_out || 0) }
       })
@@ -149,12 +152,12 @@ function AdminDashboard() {
 
       // Stock aging: bucket on-hand qty by days since its earliest recorded inbound.
       const earliest: Record<string, string> = {}
-      ;(firstIn ?? []).forEach((m: any) => {
+      ;(firstIn ?? []).forEach(m => {
         const k = keyOf(m.product_id, m.warehouse_id, m.location_id)
         if (!earliest[k]) earliest[k] = m.created_at
       })
       const bucketTotals: Record<string, number> = {}
-      ;(stock ?? []).forEach((s: any) => {
+      ;(stock ?? []).forEach(s => {
         if (Number(s.quantity) <= 0) return
         const age = daysSince(earliest[keyOf(s.product_id, s.warehouse_id, s.location_id)] ?? null)
         const b = bucketOf(age)
@@ -170,6 +173,9 @@ function AdminDashboard() {
     if (!currentClientId) return
     ;(async () => {
       const entries = await Promise.all(Object.values(OPERATIONS).map(async def => {
+        // def.table is a runtime-dynamic table name across ~30 operation defs;
+        // a union-typed `.from()` here breaks the client's chained-method
+        // overload resolution (same tradeoff as DocModule/RegisterReports).
         const { count } = await supabase.from(def.table as any)
           .select('id', { count: 'exact', head: true })
           .eq('client_id', currentClientId)
@@ -181,8 +187,8 @@ function AdminDashboard() {
         supabase.from('locations').select('capacity').eq('client_id', currentClientId),
         supabase.from('inventory_stock').select('quantity').eq('client_id', currentClientId)
       ])
-      const capacity = (locs ?? []).reduce((s, l: any) => s + Number(l.capacity ?? 0), 0)
-      const used = (stock ?? []).reduce((s, r: any) => s + Number(r.quantity ?? 0), 0)
+      const capacity = (locs ?? []).reduce((s, l) => s + Number(l.capacity ?? 0), 0)
+      const used = (stock ?? []).reduce((s, r) => s + Number(r.quantity ?? 0), 0)
       setUtil({ used, capacity })
     })()
   }, [currentClientId])

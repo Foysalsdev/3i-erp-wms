@@ -74,7 +74,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     } else if (roleIds.length) {
       const { data: rp } = await supabase.from('role_permissions')
         .select('permissions(key)').in('role_id', roleIds)
-      perms = new Set((rp ?? []).flatMap((r: any) => r.permissions ? [r.permissions.key] : []))
+      perms = new Set((rp ?? []).flatMap(r => r.permissions ? [r.permissions.key] : []))
     }
 
     const saved = localStorage.getItem(CLIENT_KEY)

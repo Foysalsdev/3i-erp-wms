@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Button } from '@/components/ui/Button'
@@ -14,20 +15,21 @@ import { formatDate, formatVehicleNo } from '@/lib/utils'
 export function VehiclesPanel({ vendorId }: { vendorId: string }) {
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<Tables<'vehicles'>[]>([])
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState<any>({ status: 'active' })
+  const [form, setForm] = useState<Partial<Tables<'vehicles'>>>({ status: 'active' })
   const load = () => supabase.from('vehicles').select('*').eq('vendor_id', vendorId).then(({ data }) => setRows(data ?? []))
   useEffect(() => { load() }, [vendorId])
 
   const save = async () => {
     if (!form.vehicle_number) { notify('error', 'Vehicle number required'); return }
-    const { error } = await supabase.from('vehicles').insert({ ...form, vendor_id: vendorId, client_id: clientId })
+    const { error } = await supabase.from('vehicles').insert({ ...form, vehicle_number: form.vehicle_number, vendor_id: vendorId, client_id: clientId! })
     if (error) { notify('error', error.message); return }
     setOpen(false); setForm({ status: 'active' }); load(); notify('success', 'Vehicle added')
   }
-  const F = (k: string, label: string, type = 'text') =>
-    <Field label={label}><Input type={type} value={form[k] ?? ''} onChange={e => setForm((f: any) => ({ ...f, [k]: e.target.value }))} /></Field>
+  type VehicleKey = keyof Tables<'vehicles'>
+  const F = (k: VehicleKey, label: string, type = 'text') =>
+    <Field label={label}><Input type={type} value={String(form[k] ?? '')} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} /></Field>
 
   return (
     <div className="space-y-3">
@@ -47,14 +49,14 @@ export function VehiclesPanel({ vendorId }: { vendorId: string }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {F('vehicle_type', 'Vehicle Type')}
           {F('capacity', 'Vehicle Size / Capacity')}
-          <Field label="Vehicle Number"><Input value={form.vehicle_number ?? ''} placeholder="DM TA 00-0000" onChange={e => setForm((f: any) => ({ ...f, vehicle_number: formatVehicleNo(e.target.value) }))} /></Field>
+          <Field label="Vehicle Number"><Input value={form.vehicle_number ?? ''} placeholder="DM TA 00-0000" onChange={e => setForm(f => ({ ...f, vehicle_number: formatVehicleNo(e.target.value) }))} /></Field>
           {F('driver_name', 'Assigned Driver Name')}
           {F('driver_phone', 'Driver Phone')}
           {F('license_number', 'Driving License Number')}
           {F('license_expiry', 'License Expiry', 'date')}
           {F('fitness_expiry', 'Fitness Expiry', 'date')}
           {F('insurance_expiry', 'Insurance Expiry', 'date')}
-          <Field label="Status"><SelectBox value={form.status} onChange={e => setForm((f: any) => ({ ...f, status: e.target.value }))}><option value="active">active</option><option value="inactive">inactive</option></SelectBox></Field>
+          <Field label="Status"><SelectBox value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}><option value="active">active</option><option value="inactive">inactive</option></SelectBox></Field>
         </div>
         <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button icon="save" onClick={save}>Save</Button></div>
       </Modal>

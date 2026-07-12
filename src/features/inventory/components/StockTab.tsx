@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { Tables } from '@/types/database.types'
+
+type StockJoined = Tables<'inventory_stock'> & {
+  products: Pick<Tables<'products'>, 'name' | 'material_code' | 'restock_level'> | null
+  warehouses: Pick<Tables<'warehouses'>, 'name' | 'code'> | null
+  locations: Pick<Tables<'locations'>, 'location_code'> | null
+}
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -24,14 +31,14 @@ import type { StockRow } from '@/pdf/StockReportPDF'
 export function StockTab({ statusFilter, title }: { statusFilter?: string; title: string }) {
   const { currentClientId, clients, can } = useAuth()
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<StockJoined[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [cond, setCond] = useState<string | null>(null)   // chip filter within the view
   const [warehouseFilter, setWarehouseFilter] = useState('')
-  const [warehouses, setWarehouses] = useState<any[]>([])
+  const [warehouses, setWarehouses] = useState<Pick<Tables<'warehouses'>, 'id' | 'code' | 'name'>[]>([])
   const [adjust, setAdjust] = useState(false)
-  const [trail, setTrail] = useState<any | null>(null)    // row whose movement history is open
+  const [trail, setTrail] = useState<StockJoined | null>(null)    // row whose movement history is open
   const client = clients.find(c => c.id === currentClientId)
   const nonSaleableMode = statusFilter === 'nonsaleable'
 
@@ -71,15 +78,15 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
     return list.filter(r => (r.products?.name ?? '').toLowerCase().includes(t) || (r.products?.material_code ?? '').toLowerCase().includes(t))
   }, [rows, q, cond, warehouseFilter])
 
-  const columns = [
-    { key: 'code', header: 'Material Code', accessor: (r: any) => r.products?.material_code, sortable: true, className: 'font-medium' },
-    { key: 'name', header: 'Product', accessor: (r: any) => r.products?.name, sortable: true },
-    { key: 'wh', header: 'Warehouse', accessor: (r: any) => r.warehouses?.code },
-    { key: 'loc', header: 'Location', accessor: (r: any) => r.locations?.location_code ?? '—' },
-    { key: 'status', header: 'Condition', render: (r: any) => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.label ?? r.stock_status}</Badge> },
-    { key: 'qty', header: 'On Hand', accessor: (r: any) => r.quantity, sortable: true, className: 'text-right font-medium',
-      render: (r: any) => <span className={Number(r.quantity) <= Number(r.products?.restock_level ?? 0) ? 'text-horizon-critical font-semibold' : ''}>{formatNumber(r.quantity)}</span> },
-    { key: 'reserved', header: 'Reserved', accessor: (r: any) => r.reserved_qty, className: 'text-right' }
+  const columns: Column<StockJoined>[] = [
+    { key: 'code', header: 'Material Code', accessor: r => r.products?.material_code, sortable: true, className: 'font-medium' },
+    { key: 'name', header: 'Product', accessor: r => r.products?.name, sortable: true },
+    { key: 'wh', header: 'Warehouse', accessor: r => r.warehouses?.code },
+    { key: 'loc', header: 'Location', accessor: r => r.locations?.location_code ?? '—' },
+    { key: 'status', header: 'Condition', render: r => <Badge tone={STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.tone}>{STOCK_STATUS[r.stock_status as keyof typeof STOCK_STATUS]?.label ?? r.stock_status}</Badge> },
+    { key: 'qty', header: 'On Hand', accessor: r => r.quantity, sortable: true, className: 'text-right font-medium',
+      render: r => <span className={Number(r.quantity) <= Number(r.products?.restock_level ?? 0) ? 'text-horizon-critical font-semibold' : ''}>{formatNumber(r.quantity)}</span> },
+    { key: 'reserved', header: 'Reserved', accessor: r => r.reserved_qty, className: 'text-right' }
   ]
 
   // No raw stock-row deletes (even for admins): removing a row silently
@@ -105,7 +112,7 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
         <FilterPanel activeCount={warehouseFilter ? 1 : 0} onClear={() => setWarehouseFilter('')}>
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-soft">Warehouse</label>
-            <Combobox items={warehouses.map((w: any) => ({ id: w.id, label: `${w.code} — ${w.name}` }))}
+            <Combobox items={warehouses.map(w => ({ id: w.id, label: `${w.code} — ${w.name}` }))}
               value={warehouseFilter} onChange={setWarehouseFilter} placeholder="All warehouses" />
           </div>
         </FilterPanel>
@@ -135,7 +142,7 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
         </div>
       )}
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={columns} rows={filtered} rowKey={(r: any) => r.id}
+        <DataTable fill loading={loading} columns={columns} rows={filtered} rowKey={r => r.id}
           onRowClick={r => setTrail(r)} emptyTitle="No stock records" />
       </Card>
       <StockAdjustModal open={adjust} onClose={() => setAdjust(false)} onDone={() => { setAdjust(false); load() }} />
@@ -147,8 +154,9 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
 // Answers "where did this pool come from, why, on what document" for one
 // product+warehouse+condition: its slice of inventory_ledger, newest first —
 // every entry carries the movement kind, the document reference and the reason.
-function StockTrailModal({ row, clientId, onClose }: { row: any; clientId: string; onClose: () => void }) {
-  const [entries, setEntries] = useState<any[] | null>(null)
+function StockTrailModal({ row, clientId, onClose }: { row: StockJoined; clientId: string; onClose: () => void }) {
+  type LedgerSlice = Pick<Tables<'inventory_ledger'>, 'id' | 'created_at' | 'movement_type' | 'qty_in' | 'qty_out' | 'balance_after' | 'reference_no' | 'remarks'>
+  const [entries, setEntries] = useState<LedgerSlice[] | null>(null)
   useEffect(() => {
     supabase.from('inventory_ledger')
       .select('id,created_at,movement_type,qty_in,qty_out,balance_after,reference_no,remarks')
@@ -169,7 +177,7 @@ function StockTrailModal({ row, clientId, onClose }: { row: any; clientId: strin
         {!entries ? <p className="py-6 text-center text-sm text-ink-faint">Loading history…</p> :
           entries.length === 0 ? <p className="py-6 text-center text-sm text-ink-faint">No recorded movements for this pool.</p> : (
             <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-surface-line">
-              {entries.map((e: any, i: number) => (
+              {entries.map((e, i) => (
                 <div key={e.id} className={'px-3.5 py-2.5 text-sm ' + (i ? 'border-t border-surface-line/70' : '')}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-2">

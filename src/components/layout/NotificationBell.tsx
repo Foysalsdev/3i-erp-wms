@@ -57,6 +57,9 @@ export function NotificationBell() {
       // Open/pending documents per accessible operational module.
       const opDefs = prefs.pendingDocs ? Object.values(OPERATIONS).filter(def => can(`${def.permission}.view`)) : []
       const counts = await Promise.all(opDefs.map(async def => {
+        // def.table is a runtime-dynamic table name across ~30 operation defs;
+        // a union-typed `.from()` here breaks the client's chained-method
+        // overload resolution (same tradeoff as DocModule/RegisterReports).
         const { count } = await supabase.from(def.table as any)
           .select('id', { count: 'exact', head: true })
           .eq('client_id', currentClientId)
@@ -83,7 +86,7 @@ export function NotificationBell() {
           .select('status, order_date, required_date')
           .eq('client_id', currentClientId)
           .not('status', 'in', '(delivered,closed,cancelled)')
-        const list = (orders ?? []) as any[]
+        const list = orders ?? []
         const overdue = list.filter(o => workflowState(o).overdue).length
         const awaitingApproval = list.filter(o => o.status === 'pending').length
         const awaitingPick = list.filter(o => o.status === 'approved').length
@@ -111,8 +114,8 @@ export function NotificationBell() {
           supabase.from('inventory_stock').select('product_id, quantity').eq('client_id', currentClientId)
         ])
         const perProduct: Record<string, number> = {}
-        ;(stock ?? []).forEach((s: any) => { perProduct[s.product_id] = (perProduct[s.product_id] ?? 0) + Number(s.quantity) })
-        const low = (products ?? []).filter((p: any) => (perProduct[p.id] ?? 0) <= Number(p.restock_level)).length
+        ;(stock ?? []).forEach(s => { perProduct[s.product_id] = (perProduct[s.product_id] ?? 0) + Number(s.quantity) })
+        const low = (products ?? []).filter(p => (perProduct[p.id] ?? 0) <= Number(p.restock_level)).length
         if (low > 0) items.push({
           id: 'lowstock',
           icon: 'warning',

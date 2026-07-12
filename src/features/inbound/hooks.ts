@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 
-export interface Opt { id: string; label: string; sub?: string; extra?: any }
+import type { Tone } from '@/components/ui/Badge'
+
+export interface Opt { id: string; label: string; sub?: string; extra?: string | null }
 
 // Lookups shared by inbound & outbound documents (client-scoped).
 export function useInboundData() {
@@ -32,13 +34,13 @@ export function useInboundData() {
       .then(({ data }) => setTransporters((data ?? []).map(v => ({ id: v.id, label: v.vendor_code, sub: v.name }))))
     supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', clientId)
       .then(({ data }) => setVehicles((data ?? []).map(v => ({ id: v.id, label: v.vehicle_number, sub: v.vehicle_type ?? undefined }))))
-    supabase.from('drivers' as any).select('id,driver_code,name').eq('client_id', clientId).eq('status', 'active')
-      .then(({ data }) => setDrivers(((data ?? []) as any[]).map(d => ({ id: d.id, label: d.driver_code, sub: d.name }))))
+    supabase.from('drivers').select('id,driver_code,name').eq('client_id', clientId).eq('status', 'active')
+      .then(({ data }) => setDrivers((data ?? []).map(d => ({ id: d.id, label: d.driver_code ?? d.name, sub: d.name }))))
   }, [clientId])
 
   return { clientId, suppliers, customers, warehouses, products, locations, transporters, vehicles, drivers }
 }
 
-export const STATUS_TONE: Record<string, any> = {
+export const STATUS_TONE: Record<string, Tone> = {
   draft: 'neutral', posted: 'info', received: 'positive', delivered: 'positive', cancelled: 'negative'
 }

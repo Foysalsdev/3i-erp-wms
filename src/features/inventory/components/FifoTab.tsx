@@ -38,10 +38,10 @@ export function FifoTab() {
     Promise.all([
       supabase.from('inventory_stock')
         .select('*, products(name,material_code), warehouses(code), locations(location_code)')
-        .eq('client_id', clientId).gt('quantity', 0),
+        .gt('quantity', 0),
       supabase.from('inventory_ledger')
         .select('product_id, warehouse_id, location_id, created_at')
-        .eq('client_id', clientId).gt('qty_in', 0).order('created_at', { ascending: true }).limit(5000)
+        .gt('qty_in', 0).order('created_at', { ascending: true }).limit(5000)
     ]).then(([s, l]) => {
       if (s.error) notify('error', `Could not load stock: ${s.error.message}`)
       setStock(s.data ?? [])

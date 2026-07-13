@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Icon } from '@/components/ui/Icon'
-import { SelectBox } from '@/components/ui/SelectBox'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { DensityToggle } from '@/components/ui/DensityToggle'
 import { initials } from '@/lib/utils'
@@ -18,12 +17,11 @@ function Avatar({ profile, className }: { profile: Pick<Tables<'profiles'>, 'ava
 }
 
 export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
-  const { profile, clients, currentClientId, setClient, signOut, isPlatformAdmin } = useAuth()
+  const { profile, signOut, isPlatformAdmin } = useAuth()
   const { toggleSidebar } = useUI()
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
-  const current = clients.find(c => c.id === currentClientId)
 
   return (
     <header className="sticky top-0 z-30 flex h-[var(--header-h)] items-center gap-2 border-b border-surface-line bg-surface px-3 sm:px-5">
@@ -37,12 +35,6 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
       </button>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-        <div className="hidden sm:block">
-          <SelectBox value={currentClientId ?? ''} onChange={e => setClient(e.target.value)} className="w-auto font-semibold">
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_internal ? ' (Internal)' : ''}</option>)}
-          </SelectBox>
-        </div>
-
         <NotificationBell />
 
         <div className="relative">
@@ -73,14 +65,6 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
                   <span className="text-[11px] font-semibold text-ink-soft">Row density</span>
                   <DensityToggle />
                 </div>
-                {/* Client switcher inside the menu — the only way to switch clients on mobile (the bar selector is hidden below sm). */}
-                <div className="px-4 py-2 sm:hidden">
-                  <label className="mb-1 block text-[11px] font-semibold text-ink-soft">Active client</label>
-                  <SelectBox value={currentClientId ?? ''} onChange={e => setClient(e.target.value)} className="w-full font-semibold">
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_internal ? ' (Internal)' : ''}</option>)}
-                  </SelectBox>
-                </div>
-                <p className="px-4 py-2 text-[11px] text-ink-soft sm:block hidden">Active client: <b className="text-ink">{current?.name}</b></p>
                 <button onClick={signOut} className="flex w-full items-center gap-2 border-t border-surface-line px-4 py-2.5 text-sm font-semibold text-bad hover:bg-surface-sunken">
                   <Icon name="logout" className="text-[18px]" /> Sign out
                 </button>

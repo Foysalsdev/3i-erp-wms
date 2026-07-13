@@ -50,7 +50,7 @@ async function fetchAll(table: string, clientId: string): Promise<ExportRow[]> {
   const out: ExportRow[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from(table as any).select('*')
-      .eq('client_id', clientId).order('created_at', { ascending: true }).range(from, from + 999)
+      .order('created_at', { ascending: true }).range(from, from + 999)
     if (error) throw error
     out.push(...((data ?? []) as unknown as ExportRow[]))
     if (!data || data.length < 1000) break

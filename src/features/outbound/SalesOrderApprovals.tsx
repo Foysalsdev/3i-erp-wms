@@ -44,8 +44,8 @@ export function SalesOrderApprovals() {
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
-    supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
+    supabase.from('customers').select('id,customer_code,name').then(({ data }) => setCustomers(data ?? []))
+    supabase.from('products').select('id,material_code,name').then(({ data }) => setProducts(data ?? []))
   }, [currentClientId])
 
   const customerName = (id: string | null) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} — ${c.name}` : '—' }

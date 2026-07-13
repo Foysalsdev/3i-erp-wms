@@ -63,10 +63,10 @@ export function ReceiveTab() {
   const [products, setProducts] = useState<ProductLite[]>([])
   useEffect(() => {
     if (!clientId) return
-    supabase.from('suppliers').select('id,supplier_code,name').eq('client_id', clientId).eq('status', 'active').then(({ data }) => setSuppliers(data ?? []))
-    supabase.from('warehouses').select('id,code,name').eq('client_id', clientId).eq('status', 'active').then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('locations').select('id,location_code,warehouse_id').eq('client_id', clientId).then(({ data }) => setLocations(data ?? []))
-    supabase.from('products').select('id,material_code,name,uom,china_code,barcode').eq('client_id', clientId).eq('status', 'active')
+    supabase.from('suppliers').select('id,supplier_code,name').eq('status', 'active').then(({ data }) => setSuppliers(data ?? []))
+    supabase.from('warehouses').select('id,code,name').eq('status', 'active').then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('locations').select('id,location_code,warehouse_id').then(({ data }) => setLocations(data ?? []))
+    supabase.from('products').select('id,material_code,name,uom,china_code,barcode').eq('status', 'active')
       .then(({ data }) => setProducts(data ?? []))
   }, [clientId])
 
@@ -84,9 +84,9 @@ export function ReceiveTab() {
     if (!clientId) return
     setQueueLoading(true)
     Promise.all([
-      supabase.from('goods_receipts').select('*').eq('client_id', clientId).is('posted_at', null)
+      supabase.from('goods_receipts').select('*').is('posted_at', null)
         .neq('status', 'cancelled').order('created_at', { ascending: false }).limit(50),
-      supabase.from('purchase_requisitions').select('*').eq('client_id', clientId)
+      supabase.from('purchase_requisitions').select('*')
         .in('status', ['pending', 'approved']).order('created_at', { ascending: false }).limit(50)
     ]).then(([g, p]) => {
       setPendingGrns(g.data ?? []); setExpectedPrs(p.data ?? []); setQueueLoading(false)
@@ -193,7 +193,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       if (grn) {
         const [{ data: items }, { data: serials }] = await Promise.all([
           supabase.from('goods_receipt_items').select('*').eq('grn_id', grn.id),
-          supabase.from('serial_numbers').select('id,serial_no,product_id,status').eq('client_id', clientId).eq('reference_no', grn.grn_no)
+          supabase.from('serial_numbers').select('id,serial_no,product_id,status').eq('reference_no', grn.grn_no)
         ])
         setH(x => ({
           ...x, supplier_id: grn.supplier_id ?? '', warehouse_id: grn.warehouse_id ?? '',
@@ -277,7 +277,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       const valid = lines.filter(l => l.product_id && Number(l.qty) > 0)
       const status = postStock ? 'approved' : (h.sap_miro_ref?.trim() ? 'completed' : 'draft')
       const header: Omit<TablesInsert<'goods_receipts'>, 'grn_no'> = {
-        client_id: clientId, supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
+         supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
         reference_no: h.reference_no || null, receipt_date: h.receipt_date || today(),
         sap_grn_ref: migo, sap_miro_ref: h.sap_miro_ref?.trim() || null,
         gate_vehicle_no: h.gate_vehicle_no || null, gate_driver: h.gate_driver || null,
@@ -298,7 +298,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       if (!grnId) throw new Error('GRN id missing after save')
       await supabase.from('goods_receipt_items').delete().eq('grn_id', grnId)
       const payload = valid.map(l => ({
-        client_id: clientId, grn_id: grnId, product_id: l.product_id, qty: Number(l.qty) || 0,
+         grn_id: grnId, product_id: l.product_id, qty: Number(l.qty) || 0,
         expected_qty: l.expected || 0, received_qty: Number(l.qty) || 0,
         unit_price: 0, stock_status: l.stock_status, location_id: l.location_id || null
       }))
@@ -312,7 +312,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       const keptIds = new Set<string>()
       for (const l of valid) {
         l.serials.forEach(r => { if (r.existingId) keptIds.add(r.existingId); else toInsert.push({
-          client_id: clientId, product_id: l.product_id, serial_no: r.serial,
+           product_id: l.product_id, serial_no: r.serial,
           reference_no: grnNo, warehouse_id: h.warehouse_id || null, status: 'in_stock'
         }) })
       }
@@ -320,7 +320,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       let reused: Pick<Tables<'serial_numbers'>, 'id' | 'serial_no' | 'reference_no' | 'status'>[] = []
       if (toInsert.length) {
         const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
-          .eq('client_id', clientId).in('serial_no', toInsert.map(r => r.serial_no))
+          .in('serial_no', toInsert.map(r => r.serial_no))
         reused = (clash ?? []).filter(c => c.reference_no !== grnNo)
       }
       if (toDelete.length) {
@@ -346,7 +346,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       if (postStock) {
         for (const l of valid) {
           const { error } = await supabase.rpc('post_stock_movement', {
-            p_client: clientId, p_product: l.product_id, p_warehouse: h.warehouse_id!,
+             p_product: l.product_id, p_warehouse: h.warehouse_id!,
             p_location: l.location_id || undefined, p_stock_status: l.stock_status,
             p_qty_in: Number(l.qty), p_qty_out: 0, p_movement_type: 'GRN',
             p_reference_type: 'goods_receipt', p_reference_id: grnId, p_reference_no: grnNo,

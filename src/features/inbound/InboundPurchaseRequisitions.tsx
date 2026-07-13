@@ -50,9 +50,9 @@ export function InboundPurchaseRequisitions() {
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('suppliers').select('id,supplier_code,name').eq('client_id', currentClientId).then(({ data }) => setSuppliers(data ?? []))
-    supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
+    supabase.from('suppliers').select('id,supplier_code,name').then(({ data }) => setSuppliers(data ?? []))
+    supabase.from('warehouses').select('id,code,name').then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('products').select('id,material_code,name').then(({ data }) => setProducts(data ?? []))
   }, [currentClientId])
 
   const supplierName = (id: string | null) => { const s = suppliers.find(x => x.id === id); return s ? `${s.supplier_code} — ${s.name}` : '—' }
@@ -177,7 +177,7 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       // Inward requisition = goods-expected note, no purchase pricing.
       const header = {
-        client_id: clientId, supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
+         supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
         order_date: h.order_date || today(), expected_date: h.expected_date || null,
         total_qty: totalQty, total_amount: 0, status: h.status || 'pending', remarks: h.remarks || null
       }
@@ -195,7 +195,7 @@ function PRForm({ record, suppliers, warehouses, products, clientId, notify, onC
       if (!prId) throw new Error('Requisition id missing after save')
       await supabase.from('purchase_requisition_items').delete().eq('pr_id', prId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
-        client_id: clientId, pr_id: prId, product_id: r.product_id,
+         pr_id: prId, product_id: r.product_id,
         qty: Number(r.qty) || 0, unit_price: 0, line_total: 0
       }))
       if (payloadLines.length) {

@@ -53,7 +53,7 @@ export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: {
       // Still-reserved units for this order (not yet loaded on an earlier
       // partial shipment) are what's left to verify for this vehicle.
       const { data: serials } = await supabase.from('serial_numbers')
-        .select('serial_no,product_id').eq('client_id', currentClientId).eq('reference_no', so.so_no).eq('status', 'reserved')
+        .select('serial_no,product_id').eq('reference_no', so.so_no).eq('status', 'reserved')
       const list = (serials ?? []).map(s => ({ serial_no: s.serial_no, product_id: s.product_id ?? '', matched: false }))
       setExpected(list)
       const pids = [...new Set(list.map(s => s.product_id))]
@@ -115,7 +115,7 @@ export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: {
       if (!gp) { notify('error', 'No gate pass found for this challan yet — issue the challan first'); return }
       const { error: e1 } = await supabase.from('serial_numbers')
         .update({ status: 'delivered', gate_pass_id: gp.id })
-        .eq('client_id', currentClientId!).in('serial_no', matchedSerials)
+        .in('serial_no', matchedSerials)
       if (e1) throw e1
       const { error: e2 } = await supabase.from('gate_passes').update({
         gate_in_time: gp.gate_in_time || startedAt || timeStamp(now()),

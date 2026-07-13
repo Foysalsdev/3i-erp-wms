@@ -119,7 +119,7 @@ function PaymentForm({ draft, clientId, notify, onClose, onDone }: {
     if (!(Number(p.amount) > 0)) { notify('error', 'Enter a payment amount'); return }
     setSaving(true)
     const { error } = await supabase.from('finance_vendor_payments').insert({
-      client_id: clientId, payee_name: p.payee_name.trim(), payment_date: p.payment_date || today(),
+       payee_name: p.payee_name.trim(), payment_date: p.payment_date || today(),
       amount: Number(p.amount), method: p.method || null, remarks: p.remarks?.trim() || null
     })
     setSaving(false)

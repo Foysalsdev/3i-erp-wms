@@ -23,7 +23,7 @@ export function VehiclesPanel({ vendorId }: { vendorId: string }) {
 
   const save = async () => {
     if (!form.vehicle_number) { notify('error', 'Vehicle number required'); return }
-    const { error } = await supabase.from('vehicles').insert({ ...form, vehicle_number: form.vehicle_number, vendor_id: vendorId, client_id: clientId! })
+    const { error } = await supabase.from('vehicles').insert({ ...form, vehicle_number: form.vehicle_number, vendor_id: vendorId, })
     if (error) { notify('error', error.message); return }
     setOpen(false); setForm({ status: 'active' }); load(); notify('success', 'Vehicle added')
   }

@@ -96,7 +96,7 @@ function TemplateForm({ channel, record, clientId, notify, onClose, onDone }: {
     setSaving(true)
     try {
       const payload = {
-        client_id: clientId, channel,
+         channel,
         code: f.code.trim(), name: f.name.trim(),
         subject: channel === 'email' ? (f.subject || null) : null,
         body: f.body || '', is_active: !!f.is_active

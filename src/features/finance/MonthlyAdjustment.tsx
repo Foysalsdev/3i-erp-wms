@@ -218,7 +218,7 @@ export function MonthlyAdjustment() {
     if (!window.confirm(question)) return
     setSubmitting(true)
     const payload = {
-      client_id: currentClientId!, year, month,
+       year, month,
       total_fund_received: totalReceivedMonth, total_expense: totalExpenseMonth, closing_balance: closingBalance,
       submitted_at: new Date().toISOString()
     }
@@ -436,7 +436,7 @@ function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel, kind = 'c
     if (!Number(amount) || (isTopup && Number(amount) <= 0)) { notify('error', isTopup ? 'Enter a top-up amount' : 'Enter an adjustment amount (positive to add, negative to subtract)'); return }
     setSaving(true)
     const { error } = await supabase.from('finance_balance_adjustments').insert({
-      client_id: clientId, adjustment_date: date, amount: Number(amount), remarks: remarks || null, kind
+       adjustment_date: date, amount: Number(amount), remarks: remarks || null, kind
     })
     setSaving(false)
     if (error) { notify('error', error.message); return }

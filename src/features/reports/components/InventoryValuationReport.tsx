@@ -29,9 +29,9 @@ export function InventoryValuationReport() {
     if (!currentClientId) return
     setLoading(true)
     Promise.all([
-      supabase.from('inventory_stock').select('product_id,quantity,stock_status').eq('client_id', currentClientId),
-      supabase.from('products').select('id,material_code,name,category').eq('client_id', currentClientId),
-      supabase.from('goods_receipt_items').select('product_id,unit_price').eq('client_id', currentClientId)
+      supabase.from('inventory_stock').select('product_id,quantity,stock_status'),
+      supabase.from('products').select('id,material_code,name,category'),
+      supabase.from('goods_receipt_items').select('product_id,unit_price')
     ]).then(([s, p, g]) => {
       setStock(s.data ?? [])
       const pm: Record<string, ProdInfo> = {}; (p.data ?? []).forEach(r => { pm[r.id] = r }); setProducts(pm)

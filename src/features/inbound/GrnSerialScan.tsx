@@ -45,8 +45,8 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: {
   useEffect(() => {
     Promise.all([
       supabase.from('goods_receipt_items').select('product_id,received_qty,qty').eq('grn_id', grn.id),
-      supabase.from('products').select('id,material_code,name,china_code,barcode').eq('client_id', clientId),
-      supabase.from('serial_numbers').select('id,serial_no,product_id,status').eq('client_id', clientId).eq('reference_no', grn.grn_no)
+      supabase.from('products').select('id,material_code,name,china_code,barcode'),
+      supabase.from('serial_numbers').select('id,serial_no,product_id,status').eq('reference_no', grn.grn_no)
     ]).then(([it, pr, sn]) => {
       const lines = (it.data ?? []).filter((l): l is GrnItemLite => !!l.product_id)
       setItems(lines)
@@ -116,7 +116,7 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: {
       for (const it of items) {
         const list = rows[it.product_id] ?? []
         list.filter(r => !r.existingId).forEach(r => toInsert.push({
-          client_id: clientId, product_id: it.product_id, serial_no: r.serial,
+           product_id: it.product_id, serial_no: r.serial,
           reference_no: grn.grn_no, warehouse_id: grn.warehouse_id || null, status: 'in_stock'
         }))
         // Previously saved serials no longer in the list -> delete (guarded in remove()).
@@ -130,7 +130,7 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: {
       let reused: Pick<Tables<'serial_numbers'>, 'id' | 'serial_no' | 'reference_no' | 'status'>[] = []
       if (toInsert.length) {
         const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
-          .eq('client_id', clientId).in('serial_no', toInsert.map(r => r.serial_no))
+          .in('serial_no', toInsert.map(r => r.serial_no))
         reused = (clash ?? []).filter(c => c.reference_no !== grn.grn_no)
       }
       if (toDelete.length) {

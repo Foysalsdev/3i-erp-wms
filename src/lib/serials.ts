@@ -37,9 +37,9 @@ export async function describeSerialHistory(clientId: string,
   if (!refs.length) return base
   // The reference may be a sales order, a delivery challan or a GRN number.
   const [so, dc, grn] = await Promise.all([
-    supabase.from('sales_orders').select('so_no,order_date,customer_id').eq('client_id', clientId).in('so_no', refs),
-    supabase.from('delivery_challans').select('challan_no,challan_date,customer_id').eq('client_id', clientId).in('challan_no', refs),
-    supabase.from('goods_receipts').select('grn_no,receipt_date,supplier_id').eq('client_id', clientId).in('grn_no', refs)
+    supabase.from('sales_orders').select('so_no,order_date,customer_id').in('so_no', refs),
+    supabase.from('delivery_challans').select('challan_no,challan_date,customer_id').in('challan_no', refs),
+    supabase.from('goods_receipts').select('grn_no,receipt_date,supplier_id').in('grn_no', refs)
   ])
   const custIds = [...new Set([...(so.data ?? []).map(x => x.customer_id), ...(dc.data ?? []).map(x => x.customer_id)].filter(Boolean))] as string[]
   const suppIds = [...new Set((grn.data ?? []).map(x => x.supplier_id).filter(Boolean))] as string[]

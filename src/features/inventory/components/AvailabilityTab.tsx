@@ -28,7 +28,7 @@ export function AvailabilityTab() {
     ;(async () => {
       const [avail, { data: products }] = await Promise.all([
         fetchStockAvailability(currentClientId),
-        supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId)
+        supabase.from('products').select('id,material_code,name')
       ])
       setRows((products ?? [])
         .map(p => ({ productId: p.id, code: p.material_code, name: p.name, ...(avail[p.id] ?? { total: 0, good: 0, nonSaleable: 0, held: 0, pendingInvoice: 0, pendingDelivery: 0, saleable: 0 }) }))

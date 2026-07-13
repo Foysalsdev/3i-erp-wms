@@ -14,7 +14,7 @@ export function useRelationLabels(def: MasterDef): RelLabels {
     if (!clientId) return
     def.fields.filter(f => f.relation).forEach(async f => {
       const rel = RELATIONS[f.relation!]
-      const { data } = await supabase.from(rel.table as any).select(`id, ${rel.code}, ${rel.name}`).eq('client_id', clientId)
+      const { data } = await supabase.from(rel.table as any).select(`id, ${rel.code}, ${rel.name}`)
       const m: Record<string, string> = {}
       ;((data ?? []) as unknown as Record<string, string>[]).forEach(r => { m[r.id] = `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` })
       setMaps(prev => ({ ...prev, [f.name]: m }))

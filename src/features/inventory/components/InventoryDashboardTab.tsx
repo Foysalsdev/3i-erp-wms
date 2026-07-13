@@ -18,8 +18,8 @@ export function InventoryDashboardTab() {
     setLoading(true)
     ;(async () => {
       const [{ data: stock }, { data: products }] = await Promise.all([
-        supabase.from('inventory_stock').select('product_id,quantity,stock_status').eq('client_id', clientId),
-        supabase.from('products').select('id,name,material_code,restock_level').eq('client_id', clientId)
+        supabase.from('inventory_stock').select('product_id,quantity,stock_status'),
+        supabase.from('products').select('id,name,material_code,restock_level')
       ])
       const a = { good: 0, damaged: 0, quarantine: 0 }
       const per: Record<string, number> = {}

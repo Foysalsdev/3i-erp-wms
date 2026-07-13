@@ -82,12 +82,12 @@ export function DeliveryChallan() {
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name,billing_address,shipping_address').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
-    supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('vehicles').select('id,vehicle_number,vehicle_type,vendor_id,driver_name,driver_phone').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
-    supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
-    supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
-    supabase.from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
+    supabase.from('customers').select('id,customer_code,name,billing_address,shipping_address').then(({ data }) => setCustomers(data ?? []))
+    supabase.from('warehouses').select('id,code,name').then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('vehicles').select('id,vehicle_number,vehicle_type,vendor_id,driver_name,driver_phone').then(({ data }) => setVehicles(data ?? []))
+    supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').then(({ data }) => setProducts(data ?? []))
+    supabase.from('transport_vendors').select('id,vendor_code,name').eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
+    supabase.from('couriers').select('id,courier_code,name,rate_per_unit').eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
   }, [currentClientId])
 
   const customerName = (id: string | null) => { const c = customers.find(x => x.id === id); return c ? `${c.customer_code} - ${c.name}` : '-' }
@@ -428,14 +428,14 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     })
   }
   const createDriver = async (name: string) => {
-    const { data, error } = await (supabase as any).from('drivers').insert({ client_id: clientId, name }).select('*').single()
+    const { data, error } = await (supabase as any).from('drivers').insert({  name }).select('*').single()
     if (error) { notify('error', error.message); return null }
     setDrivers(d => [...d, data])
     return { id: data.id, label: data.name, sublabel: data.phone || data.driver_code }
   }
   const createVendor = async (name: string) => {
     const { data, error } = await (supabase as any).from('transport_vendors')
-      .insert({ client_id: clientId, name, vendor_code: 'TV' + String(Date.now()).slice(-6), status: 'active' }).select('*').single()
+      .insert({  name, vendor_code: 'TV' + String(Date.now()).slice(-6), status: 'active' }).select('*').single()
     if (error) { notify('error', error.message); return null }
     setTVendors(v => [...v, data])
     return { id: data.id, label: data.vendor_code, sublabel: data.name }
@@ -446,7 +446,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
   const [courierRates, setCourierRates] = useState<Pick<Tables<'courier_rates'>, 'courier_id' | 'category' | 'rate'>[]>([])
   useEffect(() => {
     if (!clientId) return
-    supabase.from('courier_rates').select('courier_id,category,rate').eq('client_id', clientId)
+    supabase.from('courier_rates').select('courier_id,category,rate')
       .then(({ data }) => setCourierRates(data ?? []))
   }, [clientId])
   const courierBill = (courierId: string) => {
@@ -470,7 +470,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     return { total, formula: parts.join(' + ') }
   }
   const createVehicle = async (name: string) => {
-    const { data, error } = await supabase.from('vehicles').insert({ client_id: clientId, vehicle_number: name }).select('*').single()
+    const { data, error } = await supabase.from('vehicles').insert({  vehicle_number: name }).select('*').single()
     if (error) { notify('error', error.message); return null }
     setVehs(v => [...v, data]); return { id: data.id, label: data.vehicle_number, sublabel: data.vehicle_type ?? undefined }
   }
@@ -495,7 +495,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     // Delivered orders have nothing left to plan, and unapproved orders
     // (draft/pending/rejected) may not be delivered at all — the approval
     // step always comes first.
-    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').eq('client_id', clientId).not('status', 'in', '(draft,pending,rejected,delivered,closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
+    supabase.from('sales_orders').select('id,so_no,customer_id,warehouse_id,reference_no,billing_doc_no,invoice_no').not('status', 'in', '(draft,pending,rejected,delivered,closed,cancelled)').order('created_at', { ascending: false }).then(({ data }) => setSos(data ?? []))
   }, [clientId, locked])
   const selectSO = async (soId: string) => {
     const so = sos.find(x => x.id === soId)
@@ -546,7 +546,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
     try {
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       const header = {
-        client_id: clientId, sales_order_id: h.sales_order_id || null, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
+         sales_order_id: h.sales_order_id || null, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
         invoice_id: h.invoice_id || null,
         invoice_no: invoice, challan_date: h.challan_date || today(), total_qty: totalQty, po_no: h.po_no || null,
         delivery_method: mode, delivery_cost: h.delivery_cost === '' || h.delivery_cost == null ? null : Number(h.delivery_cost),
@@ -591,7 +591,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
       if (!posted) {
         await supabase.from('delivery_challan_items').delete().eq('challan_id', challanId)
         const payloadLines = lines.filter(r => r.product_id).map(r => ({
-          client_id: clientId, challan_id: challanId, product_id: r.product_id, qty: Number(r.qty) || 0,
+           challan_id: challanId, product_id: r.product_id, qty: Number(r.qty) || 0,
           unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null, so_item_id: r.so_item_id || null
         }))
         if (payloadLines.length) {

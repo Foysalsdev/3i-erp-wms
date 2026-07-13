@@ -23,11 +23,12 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const [search, setSearch] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
 
+  // Gold accent sits on the BOTTOM edge of the white header (border-b-2
+  // border-brand-500) — the way it runs under the nav on
+  // whirlpool-bangladesh.com — not as a strip on top.
   return (
-    <header className="sticky top-0 z-30 border-b border-surface-line bg-surface">
-      {/* Gold brand strip — matches the accent bar on whirlpool-bangladesh.com's header/hero. */}
-      <div className="h-[3px] w-full bg-brand-grad" />
-      <div className="flex h-[calc(var(--header-h)-3px)] items-center gap-2 px-3 sm:px-5">
+    <header className="sticky top-0 z-30 border-b-2 border-brand-500 bg-surface">
+      <div className="flex h-[var(--header-h)] items-center gap-2 px-3 sm:px-5">
       <button onClick={onOpenMobileNav} className="rounded-lg p-2 text-ink-soft hover:bg-surface-sunken lg:hidden"><Icon name="menu" /></button>
       <button onClick={toggleSidebar} className="hidden rounded-lg p-2 text-ink-soft hover:bg-surface-sunken lg:block"><Icon name="menu_open" /></button>
 

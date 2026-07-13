@@ -157,11 +157,11 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-surface-sunken text-[11px] uppercase tracking-wide text-ink-faint">
-                <th className="px-3 py-2 text-left font-semibold">Material</th>
-                <th className="px-3 py-2 text-right font-semibold">Ordered</th>
-                <th className="px-3 py-2 text-right font-semibold">Scanned</th>
-                <th className="px-3 py-2 text-right font-semibold" />
+              <tr className="border-b border-surface-line text-[11px] uppercase tracking-wide text-ink-faint">
+                <th className="px-3 py-2.5 text-left font-semibold">Material</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Ordered</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Scanned</th>
+                <th className="px-3 py-2.5 text-right font-semibold" />
               </tr>
             </thead>
             <tbody>
@@ -169,11 +169,11 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
                 const done = l.serials.length === l.ordered
                 return (
                   <tr key={l.item_id} onClick={() => canEdit && setActiveIdx(i)}
-                    className={'border-t border-surface-line ' + (canEdit ? 'cursor-pointer hover:bg-surface-sunken' : '')}>
-                    <td className="px-3 py-2.5"><div className="font-mono text-xs text-ink">{l.code}</div><div className="truncate text-xs text-ink-soft">{l.name}{l.uom ? ' · ' + l.uom : ''}</div></td>
-                    <td className="px-3 py-2.5 text-right">{formatNumber(l.ordered)}</td>
-                    <td className="px-3 py-2.5 text-right"><Badge tone={done ? 'positive' : 'neutral'}>{l.serials.length}/{l.ordered}</Badge></td>
-                    <td className="px-3 py-2.5 text-right">{canEdit && <Icon name="chevron_right" className="text-[18px] text-ink-faint" />}</td>
+                    className={'border-b border-surface-line/60 transition-colors last:border-0 ' + (canEdit ? 'cursor-pointer hover:bg-surface-sunken/50' : '')}>
+                    <td className="px-3 py-3"><div className="font-mono text-xs text-ink">{l.code}</div><div className="truncate text-xs text-ink-soft">{l.name}{l.uom ? ' · ' + l.uom : ''}</div></td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumber(l.ordered)}</td>
+                    <td className="px-3 py-3 text-right"><Badge tone={done ? 'positive' : 'neutral'}>{l.serials.length}/{l.ordered}</Badge></td>
+                    <td className="px-3 py-3 text-right">{canEdit && <Icon name="chevron_right" className="text-[18px] text-ink-faint" />}</td>
                   </tr>
                 )
               })}
@@ -291,24 +291,24 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
         </div>
         <div className="max-h-[50vh] overflow-y-auto">
           <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-surface-sunken text-[11px] uppercase tracking-wide text-ink-faint">
-                <th className="w-12 px-3 py-2 text-left font-semibold">#</th>
-                <th className="px-3 py-2 text-left font-semibold">Serial No</th>
-                {canEdit && <th className="w-10 px-3 py-2" />}
+            <thead className="sticky top-0 z-10 bg-surface">
+              <tr className="border-b border-surface-line text-[11px] uppercase tracking-wide text-ink-faint">
+                <th className="w-12 px-3 py-2.5 text-left font-semibold">#</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Serial No</th>
+                {canEdit && <th className="w-10 px-3 py-2.5" />}
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={i} className="border-t border-surface-line">
-                  <td className="px-3 py-1.5 text-ink-faint">{i + 1}</td>
+                <tr key={i} className="border-b border-surface-line/60 last:border-0">
+                  <td className="px-3 py-1.5 text-ink-faint tabular-nums">{i + 1}</td>
                   <td className="px-3 py-1.5">
                     <input ref={el => { inputRefs.current[i] = el }} value={r.serial_no} disabled={!canEdit}
                       onChange={e => setValue(i, e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (commitRow(i)) focusNextEmpty(i) } }}
                       onPaste={e => pasteFill(i, e)}
                       placeholder="Scan or paste serial(s)…"
-                      className="w-full rounded-md border border-brand-200/70 bg-surface px-2.5 py-1.5 font-mono text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken" />
+                      className="w-full rounded-md border border-transparent bg-transparent px-2.5 py-1.5 font-mono text-sm outline-none transition-colors focus:border-brand-500 focus:bg-surface focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken" />
                   </td>
                   {canEdit && (
                     <td className="px-3 py-1.5 text-center">

@@ -161,20 +161,20 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-surface-line py-6 text-center text-sm text-ink-faint">No items yet — search a Model above and add it</p>
       ) : isGrn ? (
-        <div className="overflow-x-auto rounded-lg border border-surface-line">
+        <div className="overflow-x-auto rounded-xl border border-surface-line">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-surface-line bg-surface-sunken text-left text-[11px] font-medium uppercase tracking-wide text-ink-faint">
-                <th className="w-8 px-3 py-2 text-center">#</th><th className="px-3 py-2">Item</th>
-                <th className="w-16 px-2 py-2 text-right">Exp</th><th className="w-28 px-2 py-2">Condition</th><th className="w-32 px-2 py-2">Location</th><th className="w-20 px-2 py-2 text-right">Recd</th><th className="w-10 px-2 py-2"></th>
+              <tr className="border-b border-surface-line text-left text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+                <th className="w-8 px-3 py-2.5 text-center">#</th><th className="px-3 py-2.5">Item</th>
+                <th className="w-16 px-2 py-2.5 text-right">Exp</th><th className="w-28 px-2 py-2.5">Condition</th><th className="w-32 px-2 py-2.5">Location</th><th className="w-20 px-2 py-2.5 text-right">Recd</th><th className="w-10 px-2 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => { const p = byId[r.product_id]; return (
-                <tr key={i} className="border-b border-surface-line/70 last:border-0">
-                  <td className="px-3 py-2 text-center text-xs text-ink-faint">{i + 1}</td>
-                  <td className="px-3 py-2"><div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div><div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div></td>
-                  <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.expected_qty ?? ''} onChange={e => setRow(i, { expected_qty: e.target.value })} className="fiori-input h-8 w-16 text-right" /></td>
+                <tr key={i} className="border-b border-surface-line/60 transition-colors last:border-0 hover:bg-surface-sunken/40">
+                  <td className="px-3 py-2.5 text-center text-xs text-ink-faint">{i + 1}</td>
+                  <td className="px-3 py-2.5"><div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div><div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div></td>
+                  <td className="px-2 py-2.5 text-right"><input type="number" step="any" value={r.expected_qty ?? ''} onChange={e => setRow(i, { expected_qty: e.target.value })} className="fiori-input h-8 w-16 text-right" /></td>
                   <td className="px-2 py-2"><SelectBox value={r.stock_status ?? 'good'} onChange={e => setRow(i, { stock_status: e.target.value })} className="h-8 w-full text-xs">{CONDITION_LIST.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</SelectBox></td>
                   <td className="px-2 py-2"><SelectBox value={r.location_id ?? ''} onChange={e => setRow(i, { location_id: e.target.value })} className="h-8 w-full text-xs"><option value="">Location</option>{(locations ?? []).map(l => <option key={l.id} value={l.id}>{l.location_code}</option>)}</SelectBox></td>
                   <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-20 text-right" /></td>
@@ -182,24 +182,24 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
                 </tr> )})}
             </tbody>
           </table>
-          <div className="flex justify-between border-t border-surface-line bg-surface-sunken px-3 py-2 text-xs text-ink-soft"><span>{rows.length} line(s)</span><span>Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span></div>
+          <div className="flex justify-between border-t border-surface-line px-3 py-2.5 text-xs text-ink-soft"><span>{rows.length} line(s)</span><span>Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span></div>
         </div>
       ) : priced ? (
-        <div className="overflow-x-auto rounded-lg border border-surface-line">
+        <div className="overflow-x-auto rounded-xl border border-surface-line">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-surface-line bg-surface-sunken text-left text-[11px] font-medium uppercase tracking-wide text-ink-faint">
-                <th className="w-8 px-3 py-2 text-center">#</th><th className="px-3 py-2">Item</th>
-                <th className="w-20 px-2 py-2 text-right">Order Qty</th><th className="w-28 px-2 py-2 text-right">Basic / unit</th>
-                <th className="w-20 px-2 py-2 text-right">VAT %</th><th className="w-32 px-2 py-2 text-right">Line total</th><th className="w-10 px-2 py-2"></th>
+              <tr className="border-b border-surface-line text-left text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+                <th className="w-8 px-3 py-2.5 text-center">#</th><th className="px-3 py-2.5">Item</th>
+                <th className="w-20 px-2 py-2.5 text-right">Order Qty</th><th className="w-28 px-2 py-2.5 text-right">Basic / unit</th>
+                <th className="w-20 px-2 py-2.5 text-right">VAT %</th><th className="w-32 px-2 py-2.5 text-right">Line total</th><th className="w-10 px-2 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => { const p = byId[r.product_id]; return (
-                <tr key={i} className="border-b border-surface-line/70 last:border-0">
-                  <td className="px-3 py-2 text-center text-xs text-ink-faint">{i + 1}</td>
-                  <td className="px-3 py-2"><div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div><div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div></td>
-                  <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-16 text-right" /></td>
+                <tr key={i} className="border-b border-surface-line/60 transition-colors last:border-0 hover:bg-surface-sunken/40">
+                  <td className="px-3 py-2.5 text-center text-xs text-ink-faint">{i + 1}</td>
+                  <td className="px-3 py-2.5"><div className="font-mono text-sm text-ink">{p?.material_code ?? r.code ?? '?'}</div><div className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}{meta(p) ? ' · ' + meta(p) : ''}</div></td>
+                  <td className="px-2 py-2.5 text-right"><input type="number" step="any" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })} className="fiori-input h-8 w-16 text-right" /></td>
                   <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.basic_price ?? ''} onChange={e => setRow(i, { basic_price: e.target.value })} className="fiori-input h-8 w-24 text-right" placeholder="0.00" /></td>
                   <td className="px-2 py-2 text-right"><input type="number" step="any" value={r.vat_rate ?? ''} onChange={e => setRow(i, { vat_rate: e.target.value })} className="fiori-input h-8 w-16 text-right" placeholder="15" /></td>
                   <td className="px-2 py-2 text-right font-medium text-ink">{formatNumber(lineTotal(r))}</td>
@@ -207,10 +207,10 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
                 </tr> )})}
             </tbody>
           </table>
-          <div className="flex justify-between border-t border-surface-line bg-surface-sunken px-3 py-2 text-xs text-ink-soft"><span>{rows.length} line(s) · Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span><span>Total amount <span className="font-medium text-ink">{formatNumber(rows.reduce((s, r) => s + lineTotal(r), 0))}</span></span></div>
+          <div className="flex justify-between border-t border-surface-line px-3 py-2.5 text-xs text-ink-soft"><span>{rows.length} line(s) · Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span><span>Total amount <span className="font-medium text-ink">{formatNumber(rows.reduce((s, r) => s + lineTotal(r), 0))}</span></span></div>
         </div>
       ) : (
-        <div className="divide-y divide-surface-line overflow-hidden rounded-lg border border-surface-line">
+        <div className="divide-y divide-surface-line/60 overflow-hidden rounded-xl border border-surface-line">
           {rows.map((r, i) => {
             const p = byId[r.product_id]
             const a = avail(r.product_id)
@@ -247,7 +247,7 @@ export function LineItems({ rows, onChange, products, locations, variant, stock,
               </div>
             )
           })}
-          <div className="flex justify-between bg-surface-sunken px-3 py-2 text-xs text-ink-soft"><span>{rows.length} line(s)</span><span>Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span></div>
+          <div className="flex justify-between border-t border-surface-line/60 px-3 py-2.5 text-xs text-ink-soft"><span>{rows.length} line(s)</span><span>Total qty <span className="font-medium text-ink">{formatNumber(totalQty)}</span></span></div>
         </div>
       )}
     </div>

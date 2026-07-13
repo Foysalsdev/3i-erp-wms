@@ -39,14 +39,21 @@ function GroupedTabs({ tabs, active, onChange }: { tabs: Tab[]; active: string; 
 function TabRow({ tabs, active, onChange }: { tabs: Tab[]; active: string; onChange: (k: string) => void }) {
   return (
     <div className="flex gap-1 overflow-x-auto border-b border-surface-line">
-      {tabs.map(t => (
-        <button key={t.key} onClick={() => onChange(t.key)}
-          className={cn('relative whitespace-nowrap px-3.5 py-2.5 text-sm font-medium transition-colors',
-            active === t.key ? 'text-ink' : 'text-ink-faint hover:text-ink-soft')}>
-          {t.label}
-          {active === t.key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-500" />}
-        </button>
-      ))}
+      {tabs.map(t => {
+        const on = active === t.key
+        return (
+          <button key={t.key} onClick={() => onChange(t.key)}
+            className={cn('relative grid whitespace-nowrap px-3.5 py-2.5 text-sm transition-colors',
+              on ? 'text-brand-600' : 'text-ink-faint hover:text-ink-soft')}>
+            {/* Selected tab is bold gold. A hidden bold copy sits in the same grid
+                cell so every tab already reserves its bold width — switching never
+                nudges the neighbouring tabs (the jitter you saw). */}
+            <span aria-hidden className="invisible font-bold [grid-area:1/1]">{t.label}</span>
+            <span className={cn('[grid-area:1/1]', on ? 'font-bold' : 'font-medium')}>{t.label}</span>
+            {on && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-500" />}
+          </button>
+        )
+      })}
     </div>
   )
 }

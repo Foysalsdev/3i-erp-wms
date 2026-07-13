@@ -29,7 +29,7 @@ export function StockMovementHistory({ movementTypes, emptyTitle }: { movementTy
     if (!clientId) return
     setLoading(true)
     supabase.from('inventory_ledger').select('*, products(name,material_code), warehouses(code)')
-      .eq('client_id', clientId).in('movement_type', movementTypes)
+      .in('movement_type', movementTypes)
       .order('created_at', { ascending: false }).limit(500)
       .then(({ data, error }) => {
         if (error) notify('error', `Could not load movements: ${error.message}`)

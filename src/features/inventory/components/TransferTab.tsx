@@ -43,9 +43,9 @@ function TransferModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
 
   useEffect(() => {
     if (!clientId) return
-    supabase.from('products').select('id,name,material_code').eq('client_id', clientId).then(({ data }) => setProducts(data ?? []))
-    supabase.from('warehouses').select('id,name,code').eq('client_id', clientId).then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('locations').select('id,location_code,warehouse_id').eq('client_id', clientId).then(({ data }) => setLocations(data ?? []))
+    supabase.from('products').select('id,name,material_code').then(({ data }) => setProducts(data ?? []))
+    supabase.from('warehouses').select('id,name,code').then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('locations').select('id,location_code,warehouse_id').then(({ data }) => setLocations(data ?? []))
   }, [clientId])
 
   const fromLocs = locations.filter(l => l.warehouse_id === f.from_warehouse_id)
@@ -66,7 +66,7 @@ function TransferModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
       // Both legs post in ONE database transaction — a half-done transfer
       // (deducted from source, never added to destination) cannot happen.
       const { error } = await supabase.rpc('post_stock_transfer', {
-        p_client: clientId!, p_product: f.product_id!,
+         p_product: f.product_id!,
         // the SQL function takes nullable locations, but typegen marks
         // non-default args with their base type — hence the null casts
         p_from_warehouse: f.from_warehouse_id!, p_from_location: (f.from_location_id || null) as unknown as string,

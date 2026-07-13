@@ -29,7 +29,7 @@ export function useCollection<K extends TableName, T = Tables<K>>(
     setLoading(true)
     const all: T[] = []
     for (let from = 0; ; from += PAGE_SIZE) {
-      let q = supabase.from(table as any).select(opts?.select ?? '*').eq('client_id', clientId)
+      let q = supabase.from(table as any).select(opts?.select ?? '*')
       q = q.order(opts?.order ?? 'created_at', { ascending: opts?.ascending ?? false }).order('id', { ascending: true })
       const { data, error } = await q.range(from, from + PAGE_SIZE - 1)
       if (error) { setError(error.message); notify('error', `Could not load ${table}: ${error.message}`); setLoading(false); return }

@@ -200,7 +200,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: {
     if (h.sender_name) rememberSender(h.sender_name)
     setSaving(true)
     try {
-      const header = { client_id: clientId, req_date: h.req_date || today(), sender_name: h.sender_name || null, grand_total: grandTotal, remarks: h.remarks || null }
+      const header = {  req_date: h.req_date || today(), sender_name: h.sender_name || null, grand_total: grandTotal, remarks: h.remarks || null }
       let reqId = record?.id
       if (record) {
         const { error } = await supabase.from('finance_requisitions').update(header).eq('id', record.id)
@@ -215,7 +215,7 @@ function ReqForm({ record, clientId, notify, onClose, onDone }: {
       if (!reqId) throw new Error('Requisition id missing after save')
       await supabase.from('finance_requisition_lines').delete().eq('requisition_id', reqId)
       const payload = valid.map(l => ({
-        client_id: clientId, requisition_id: reqId, purpose: l.purpose.trim(),
+         requisition_id: reqId, purpose: l.purpose.trim(),
         amount: Number(l.amount) || 0, unit: l.unit || null, qty: l.qty ? Number(l.qty) : null, remarks: l.remarks || null
       }))
       const { error: lineErr } = await supabase.from('finance_requisition_lines').insert(payload)
@@ -340,7 +340,7 @@ function AddReceiptRow({ requisitionId, clientId, notify, remaining, onDone, onC
     if (Number(amount) > remaining + 0.004) { notify('error', `Cannot exceed the requisition's remaining amount (${formatNumber(remaining, 2)} BDT)`); return }
     setSaving(true)
     const { error } = await supabase.from('finance_fund_receipts').insert({
-      client_id: clientId, requisition_id: requisitionId, receipt_date: date, amount: Number(amount), remarks: remarks || null
+       requisition_id: requisitionId, receipt_date: date, amount: Number(amount), remarks: remarks || null
     })
     setSaving(false)
     if (error) { notify('error', error.message); return }

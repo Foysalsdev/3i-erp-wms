@@ -77,7 +77,7 @@ export function ConditionChangeModule({ config }: { config: CCConfig }) {
   const load = () => {
     if (!clientId) return
     setLoading(true)
-    supabase.from(config.table as any).select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+    supabase.from(config.table as any).select('*').order('created_at', { ascending: false })
       .then(({ data }) => { setDocs((data ?? []) as unknown as DocRecord[]); setLoading(false) })
   }
   useEffect(load, [clientId, config.table])
@@ -170,7 +170,7 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
 
   useEffect(() => {
     if (!config.linkSalesReturn || !clientId) return
-    supabase.from('sales_returns').select('id,doc_no,warehouse_id').eq('client_id', clientId).eq('status', 'posted')
+    supabase.from('sales_returns').select('id,doc_no,warehouse_id').eq('status', 'posted')
       .order('created_at', { ascending: false }).then(({ data }) => setSalesReturns(data ?? []))
   }, [clientId])
 
@@ -198,7 +198,7 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
     setSaving(true)
     try {
       const hdr: Record<string, unknown> = {
-        client_id: clientId, warehouse_id: h.warehouse_id,
+         warehouse_id: h.warehouse_id,
         [config.dateField]: h[config.dateField] || today(), remarks: h.remarks || null, status: 'draft'
       }
       if (config.linkSalesReturn) hdr.srn_id = h.srn_id || null
@@ -216,7 +216,7 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
       }
       const rows = valid.map(l => {
         const row: Record<string, unknown> = {
-          client_id: clientId, [config.itemFK]: docId, product_id: l.product_id,
+           [config.itemFK]: docId, product_id: l.product_id,
           location_id: l.location_id || null, from_status: l.from_status, to_status: l.to_status,
           qty: Number(l.qty) || 0, reason: l.reason || null
         }

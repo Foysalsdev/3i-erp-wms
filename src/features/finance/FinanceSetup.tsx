@@ -183,10 +183,10 @@ function MasterForm({ kind, rec, clientId, cats, notify, onClose, onDone }: {
     const res = kind === 'category'
       ? (r.id
           ? await supabase.from('finance_expense_categories').update({ name, is_active, code: r.code?.trim() || null }).eq('id', r.id)
-          : await supabase.from('finance_expense_categories').insert({ client_id: clientId, name, is_active, code: r.code?.trim() || null }))
+          : await supabase.from('finance_expense_categories').insert({  name, is_active, code: r.code?.trim() || null }))
       : (r.id
           ? await supabase.from('finance_items').update({ name, is_active, category_id: r.category_id || null, unit: r.unit?.trim() || null }).eq('id', r.id)
-          : await supabase.from('finance_items').insert({ client_id: clientId, name, is_active, category_id: r.category_id || null, unit: r.unit?.trim() || null }))
+          : await supabase.from('finance_items').insert({  name, is_active, category_id: r.category_id || null, unit: r.unit?.trim() || null }))
     setSaving(false)
     if (res.error) { notify('error', res.error.message); return }
     notify('success', `${TITLES[kind]} ${r.id ? 'updated' : 'added'}`); onDone()
@@ -225,10 +225,10 @@ function BudgetForm({ rec, clientId, notify, onClose, onDone }: {
     if (!y || !m) { notify('error', 'Pick a month'); return }
     if (!(Number(b.amount) >= 0)) { notify('error', 'Enter a budget amount'); return }
     setSaving(true)
-    const payload = { client_id: clientId, year: y, month: m, department: b.department || 'All', amount: Number(b.amount) }
+    const payload = {  year: y, month: m, department: b.department || 'All', amount: Number(b.amount) }
     const res = rec.id
       ? await supabase.from('finance_budgets').update(payload).eq('id', rec.id)
-      : await supabase.from('finance_budgets').upsert(payload, { onConflict: 'client_id,year,month,department' })
+      : await supabase.from('finance_budgets').upsert(payload, { onConflict: 'year,month,department' })
     setSaving(false)
     if (res.error) { notify('error', res.error.message); return }
     notify('success', `Budget ${rec.id ? 'updated' : 'saved'}`); onDone()
@@ -259,7 +259,7 @@ function OpeningBalanceForm({ clientId, notify, onClose, onDone }: {
     const amt = Number(o.amount)
     if (!amt) { notify('error', 'Enter the opening balance amount'); return }
     setSaving(true)
-    const { error } = await supabase.from('finance_balance_adjustments').insert({ client_id: clientId, adjustment_date: o.adjustment_date || today(), amount: amt, remarks: o.remarks?.trim() || 'Opening Balance' })
+    const { error } = await supabase.from('finance_balance_adjustments').insert({  adjustment_date: o.adjustment_date || today(), amount: amt, remarks: o.remarks?.trim() || 'Opening Balance' })
     setSaving(false)
     if (error) { notify('error', error.message); return }
     notify('success', 'Opening balance recorded'); onDone()

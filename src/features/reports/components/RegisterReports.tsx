@@ -19,7 +19,7 @@ function useClientRows<K extends keyof import('@/types/database.types').Database
     if (!currentClientId) return
     setLoading(true)
     // one dynamic seam: a generic table union is too deep for the typed client
-    supabase.from(table as any).select('*').eq('client_id', currentClientId).order('created_at', { ascending: false })
+    supabase.from(table as any).select('*').order('created_at', { ascending: false })
       .then(({ data }) => { setRows((data ?? []) as Tables<K>[]); setLoading(false) })
   }, [currentClientId, table])
   return { rows, loading, currentClientId }
@@ -35,7 +35,7 @@ export function InboundReport() {
   const [suppliers, setSuppliers] = useState<Record<string, string>>({})
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('suppliers').select('id,supplier_code,name').eq('client_id', currentClientId).then(({ data }) => {
+    supabase.from('suppliers').select('id,supplier_code,name').then(({ data }) => {
       const m: Record<string, string> = {}; (data ?? []).forEach(s => { m[s.id] = `${s.supplier_code} — ${s.name}` }); setSuppliers(m)
     })
   }, [currentClientId])
@@ -164,13 +164,13 @@ export function DeliveryRegisterReport() {
     ;(async () => {
       const { data: chs } = await supabase.from('delivery_challans')
         .select('id,challan_no,challan_date,status,posted_at,delivery_method,driver_name,transport_vendor,courier_name,courier_tracking_no,po_no,customer_id,sales_order_id')
-        .eq('client_id', currentClientId).order('challan_date', { ascending: false })
+        .order('challan_date', { ascending: false })
       const ids = (chs ?? []).map(c => c.id)
       const [{ data: items }, { data: customers }, { data: sos }, { data: products }] = await Promise.all([
         ids.length ? supabase.from('delivery_challan_items').select('challan_id,product_id,qty').in('challan_id', ids) : Promise.resolve({ data: [] as Pick<Tables<'delivery_challan_items'>, 'challan_id' | 'product_id' | 'qty'>[] }),
-        supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId),
-        supabase.from('sales_orders').select('id,so_no').eq('client_id', currentClientId),
-        supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId)
+        supabase.from('customers').select('id,customer_code,name'),
+        supabase.from('sales_orders').select('id,so_no'),
+        supabase.from('products').select('id,material_code,name')
       ])
       const custMap: Record<string, string> = {}; (customers ?? []).forEach(c => { custMap[c.id] = `${c.customer_code} — ${c.name}` })
       const soMap: Record<string, string> = {}; (sos ?? []).forEach(s => { soMap[s.id] = s.so_no })

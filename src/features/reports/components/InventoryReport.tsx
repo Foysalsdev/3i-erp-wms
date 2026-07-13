@@ -30,8 +30,8 @@ export function InventoryReport() {
     if (!currentClientId) return
     setLoading(true)
     Promise.all([
-      supabase.from('inventory_stock').select('product_id,quantity,reserved_qty,stock_status').eq('client_id', currentClientId),
-      supabase.from('products').select('id,category,model,material_code,name').eq('client_id', currentClientId)
+      supabase.from('inventory_stock').select('product_id,quantity,reserved_qty,stock_status'),
+      supabase.from('products').select('id,category,model,material_code,name')
     ]).then(([s, p]) => {
       setStock(s.data ?? [])
       const pm: Record<string, ProdInfo> = {}; (p.data ?? []).forEach(r => { pm[r.id] = r })

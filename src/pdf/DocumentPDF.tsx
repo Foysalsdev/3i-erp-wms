@@ -16,7 +16,7 @@ const s = StyleSheet.create({
   titleBar: { alignItems: 'flex-end' },
   docTitle: { fontSize: 15, fontWeight: 'bold', textAlign: 'right', letterSpacing: 0.5, textTransform: 'uppercase' },
   docNo: { fontSize: 10, color: '#63666c', textAlign: 'right', marginTop: 3, fontFamily: 'Helvetica-Bold' },
-  rule: { borderBottomWidth: 2, borderBottomColor: '#f2a900', marginBottom: 14 },
+  rule: { borderBottomWidth: 2, borderBottomColor: '#eeb111', marginBottom: 14 },
   metaBox: { flexDirection: 'row', justifyContent: 'space-between', borderWidth: 0.7, borderColor: '#d8d8d4', backgroundColor: '#fafaf8', borderRadius: 2, padding: 10, marginBottom: 14, fontSize: 9 },
   metaCol: { width: '48%' },
   metaRow: { flexDirection: 'row', marginBottom: 3 },
@@ -29,7 +29,7 @@ const s = StyleSheet.create({
   cPrice: { width: '15%', paddingHorizontal: 4, textAlign: 'right' },
   cAmt: { width: '15%', paddingHorizontal: 4, textAlign: 'right' },
   total: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 },
-  totalBox: { width: '30%', flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#f2a900', paddingTop: 5, fontWeight: 'bold' },
+  totalBox: { width: '30%', flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#eeb111', paddingTop: 5, fontWeight: 'bold' },
   signRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 46 },
   signBlock: { width: '30%', borderTopWidth: 0.7, borderColor: '#212326', paddingTop: 4, textAlign: 'center', fontSize: 8, color: '#63666c' },
   footer: { position: 'absolute', bottom: 20, left: 30, right: 30, fontSize: 7, color: '#9a9a9f', textAlign: 'center', borderTopWidth: 0.5, borderColor: '#ececec', paddingTop: 6 }

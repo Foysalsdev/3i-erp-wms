@@ -66,9 +66,9 @@ export function InboundGRN() {
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('suppliers').select('id,supplier_code,name').eq('client_id', currentClientId).then(({ data }) => setSuppliers(data ?? []))
-    supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
+    supabase.from('suppliers').select('id,supplier_code,name').then(({ data }) => setSuppliers(data ?? []))
+    supabase.from('warehouses').select('id,code,name').then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').then(({ data }) => setProducts(data ?? []))
   }, [currentClientId])
 
   const supplierName = (id: string | null) => { const s = suppliers.find(x => x.id === id); return s ? `${s.supplier_code} — ${s.name}` : '—' }
@@ -95,7 +95,7 @@ export function InboundGRN() {
         const postQty = Number(it.received_qty) > 0 ? Number(it.received_qty) : Number(it.qty)
         if (!it.product_id || !(postQty > 0)) continue
         const { error } = await supabase.rpc('post_stock_movement', {
-          p_client: currentClientId!, p_product: it.product_id, p_warehouse: grn.warehouse_id!,
+           p_product: it.product_id, p_warehouse: grn.warehouse_id!,
           p_location: it.location_id ?? undefined, p_stock_status: it.stock_status || 'good',
           p_qty_in: postQty, p_qty_out: 0, p_movement_type: 'GRN',
           p_reference_type: 'goods_receipt', p_reference_id: grn.id, p_reference_no: grn.grn_no ?? undefined,
@@ -230,7 +230,7 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
       const totalQty = lines.reduce((s, r) => s + (Number(r.qty) || 0), 0)
       const status = deriveStatus(record?.status, h.sap_grn_ref, h.sap_miro_ref)
       const header = {
-        client_id: clientId, supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
+         supplier_id: h.supplier_id || null, warehouse_id: h.warehouse_id || null,
         reference_no: h.reference_no || null, receipt_date: h.receipt_date || today(),
         sap_grn_ref: h.sap_grn_ref || null, sap_miro_ref: h.sap_miro_ref || null,
         gate_vehicle_no: h.gate_vehicle_no || null, gate_driver: h.gate_driver || null,
@@ -252,7 +252,7 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
       if (!grnId) throw new Error('GRN id missing after save')
       await supabase.from('goods_receipt_items').delete().eq('grn_id', grnId)
       const payloadLines = lines.filter(r => r.product_id).map(r => ({
-        client_id: clientId, grn_id: grnId, product_id: r.product_id, qty: Number(r.qty) || 0,
+         grn_id: grnId, product_id: r.product_id, qty: Number(r.qty) || 0,
         expected_qty: Number(r.expected_qty) || 0, received_qty: Number(r.qty) || 0,
         unit_price: Number(r.unit_price) || 0, stock_status: r.stock_status || 'good', location_id: r.location_id || null
       }))

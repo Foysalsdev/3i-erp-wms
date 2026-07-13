@@ -31,7 +31,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     def.fields.filter(f => f.relation).forEach(async f => {
       const rel = OP_RELATIONS[f.relation!]
       const cols = ['id', rel.code, rel.name].filter(Boolean).join(', ')
-      const { data } = await supabase.from(rel.table as any).select(cols).eq('client_id', clientId)
+      const { data } = await supabase.from(rel.table as any).select(cols)
       setRelOptions(o => ({
         ...o,
         [f.name]: ((data ?? []) as unknown as Record<string, string>[]).map(r => ({
@@ -48,7 +48,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     setSaving(true)
     try {
       // Build the payload from this document's own fields only.
-      const payload: Record<string, unknown> = { client_id: clientId }
+      const payload: Record<string, unknown> = { }
       def.fields.forEach(f => {
         let v = values[f.name]
         if (f.type === 'number') v = v === '' || v == null ? null : Number(v)

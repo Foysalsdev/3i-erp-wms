@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useTimeline } from '@/hooks/useTimeline'
 import { Icon } from '@/components/ui/Icon'
@@ -11,7 +10,6 @@ import { formatDateTime } from '@/lib/utils'
 import type { Tables } from '@/types/database.types'
 
 export function NotesPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
   const [rows, setRows] = useState<Tables<'notes'>[]>([])
   const [body, setBody] = useState('')
@@ -23,7 +21,7 @@ export function NotesPanel({ entityType, entityId }: { entityType: string; entit
   useEffect(() => { load() }, [entityType, entityId])
   const add = async () => {
     if (!body.trim()) return
-    const { error } = await supabase.from('notes').insert({ client_id: clientId!, entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
+    const { error } = await supabase.from('notes').insert({ entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
     if (error) { notify('error', error.message); return }
     setBody(''); load()
   }
@@ -47,7 +45,6 @@ export function NotesPanel({ entityType, entityId }: { entityType: string; entit
 }
 
 export function AttachmentsPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
   const [rows, setRows] = useState<Tables<'attachments'>[]>([])
   const [busy, setBusy] = useState(false)
@@ -60,12 +57,12 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
 
   const upload = async (file: File) => {
     setBusy(true)
-    const path = `${clientId}/${entityType}/${entityId}/${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`
+    const path = `${entityType}/${entityId}/${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`
     const up = await supabase.storage.from('media').upload(path, file, { upsert: true })
     if (up.error) { notify('error', 'Storage upload failed'); setBusy(false); return }
     const { data } = supabase.storage.from('media').getPublicUrl(path)
     await supabase.from('attachments').insert({
-      client_id: clientId!, entity_type: entityType, entity_id: entityId,
+      entity_type: entityType, entity_id: entityId,
       file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path, drive_url: data.publicUrl, source: 'supabase'
     })
     setBusy(false); load(); notify('success', 'File attached')

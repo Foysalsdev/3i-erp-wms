@@ -23,7 +23,7 @@ export function CourierRatesPanel({ courierId }: { courierId: string }) {
     if (!currentClientId || !courierId) return
     setLoading(true)
     Promise.all([
-      supabase.from('products').select('category').eq('client_id', currentClientId),
+      supabase.from('products').select('category'),
       supabase.from('courier_rates').select('category,rate').eq('courier_id', courierId),
       supabase.from('couriers').select('rate_per_unit').eq('id', courierId).single()
     ]).then(([prods, rr, c]) => {
@@ -44,7 +44,7 @@ export function CourierRatesPanel({ courierId }: { courierId: string }) {
     try {
       const upserts = cats
         .filter(cat => String(rates[cat] ?? '').trim() !== '')
-        .map(cat => ({ client_id: currentClientId!, courier_id: courierId, category: cat, rate: Number(rates[cat]) || 0 }))
+        .map(cat => ({ courier_id: courierId, category: cat, rate: Number(rates[cat]) || 0 }))
       const cleared = cats.filter(cat => String(rates[cat] ?? '').trim() === '' && initial[cat] !== undefined)
       if (upserts.length) {
         const { error } = await supabase.from('courier_rates').upsert(upserts, { onConflict: 'courier_id,category' })

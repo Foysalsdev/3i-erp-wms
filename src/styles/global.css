@@ -17,7 +17,7 @@
      while pure black stays crisp at any resolution. */
   --ink: 0 0 0; --ink-soft: 0 0 0; --ink-faint: 0 0 0;
   --sidebar: 255 255 255; --sidebar-fg: 0 0 0; --sidebar-muted: 0 0 0;
-  --sidebar-active: 253 246 230; --sidebar-active-fg: 124 83 0;
+  --sidebar-active: 252 241 212; --sidebar-active-fg: 129 96 9;
 }
 .dark {
   color-scheme: dark;
@@ -25,7 +25,7 @@
   /* Dark mode's "pure black" equivalent is pure white — same rule, inverted. */
   --ink: 255 255 255; --ink-soft: 255 255 255; --ink-faint: 255 255 255;
   --sidebar: 23 24 28; --sidebar-fg: 255 255 255; --sidebar-muted: 255 255 255;
-  --sidebar-active: 50 40 16; --sidebar-active-fg: 246 198 84;
+  --sidebar-active: 50 40 16; --sidebar-active-fg: 241 191 60;
 }
 
 * { -webkit-tap-highlight-color: transparent; }

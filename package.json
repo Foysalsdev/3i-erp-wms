@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "3i Logistics ERP + WMS — multi-client warehouse & logistics platform",
+  "description": "3i Logistics ERP + WMS — single-client warehouse & logistics platform",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

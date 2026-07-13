@@ -18,7 +18,7 @@ import { cashOut, isCredit } from './financeCash'
 
 // Same fixed categorical order used on the main Dashboard (green/gold/orange/red/gray) —
 // kept identical here so color meaning stays consistent across the app.
-const CAT_COLORS = ['#16a34a', '#f2a900', '#ea7a0c', '#dc2626', '#8c8f94']
+const CAT_COLORS = ['#16a34a', '#eeb111', '#ea7a0c', '#dc2626', '#8c8f94']
 const OTHER_COLOR = '#64748b' // distinct from all 5 above — "Other" must never repeat a top category's color
 const MAX_SERIES = 5 // top categories get their own color; the rest fold into "Other"
 const TREND_MONTHS = 6
@@ -218,7 +218,7 @@ export function MonthlyAdjustment() {
     if (!window.confirm(question)) return
     setSubmitting(true)
     const payload = {
-      client_id: currentClientId!, year, month,
+       year, month,
       total_fund_received: totalReceivedMonth, total_expense: totalExpenseMonth, closing_balance: closingBalance,
       submitted_at: new Date().toISOString()
     }
@@ -384,7 +384,7 @@ export function MonthlyAdjustment() {
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
                 <YAxis tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
                 <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
-                <Line type="monotone" dataKey="balance" name="Balance" stroke="#f2a900" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="balance" name="Balance" stroke="#eeb111" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -436,7 +436,7 @@ function AddBalanceAdjustmentRow({ clientId, notify, onDone, onCancel, kind = 'c
     if (!Number(amount) || (isTopup && Number(amount) <= 0)) { notify('error', isTopup ? 'Enter a top-up amount' : 'Enter an adjustment amount (positive to add, negative to subtract)'); return }
     setSaving(true)
     const { error } = await supabase.from('finance_balance_adjustments').insert({
-      client_id: clientId, adjustment_date: date, amount: Number(amount), remarks: remarks || null, kind
+       adjustment_date: date, amount: Number(amount), remarks: remarks || null, kind
     })
     setSaving(false)
     if (error) { notify('error', error.message); return }

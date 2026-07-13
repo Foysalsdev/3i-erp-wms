@@ -36,7 +36,7 @@ export function UserManagement() {
     const [{ data: profs }, { data: rs }, { data: ur }] = await Promise.all([
       supabase.from('profiles').select('id,full_name,email,designation,division,status,is_platform_admin'),
       supabase.from('roles').select('id,name,key'),
-      supabase.from('user_roles').select('user_id,role_id').eq('client_id', currentClientId!)
+      supabase.from('user_roles').select('user_id,role_id')
     ])
     setUsers(profs ?? []); setRoles(rs ?? [])
     const m: Record<string, string> = {}; (ur ?? []).forEach(r => { m[r.user_id] = r.role_id })
@@ -96,9 +96,9 @@ export function UserManagement() {
                 const { error } = await supabase.from('profiles').update({ designation: editing.designation || null, division: editing.division || null }).eq('id', editing.id)
                 if (error) { notify('error', error.message); return }
                 if (!editing.is_platform_admin) {
-                  await supabase.from('user_roles').delete().eq('client_id', currentClientId!).eq('user_id', editing.id)
+                  await supabase.from('user_roles').delete().eq('user_id', editing.id)
                   if (editing.role_id) {
-                    const { error: re } = await supabase.from('user_roles').insert({ client_id: currentClientId!, user_id: editing.id, role_id: editing.role_id })
+                    const { error: re } = await supabase.from('user_roles').insert({  user_id: editing.id, role_id: editing.role_id })
                     if (re) { notify('error', re.message); return }
                   }
                 }
@@ -135,8 +135,7 @@ export function UserManagement() {
                   const { data, error } = await supabase.functions.invoke('admin-create-user', { body: {
                     email: adding.email, password: adding.password, full_name: adding.full_name || null,
                     designation: adding.designation || null, division: adding.division || null,
-                    role_id: adding.role_id || null, client_id: currentClientId
-                  } })
+                    role_id: adding.role_id || null, } })
                   let msg = ''
                   if (error) { try { const j = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.(); msg = j?.error || error.message } catch { msg = error.message } }
                   else if ((data as { error?: string } | null)?.error) msg = (data as { error?: string }).error!

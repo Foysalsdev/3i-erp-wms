@@ -156,7 +156,7 @@ function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: 
       const submission_no = await nextFinanceDocNumber(clientId, 'HOS')
       if (!submission_no) throw new Error('Could not generate the HO Submission number')
       const { data: sub, error } = await supabase.from('finance_ho_submissions').insert({
-        client_id: clientId, submission_no, submission_date: today(), voucher_count: selectedRows.length,
+         submission_no, submission_date: today(), voucher_count: selectedRows.length,
         total_amount: totalAmount, remarks: remarks || null, category_order: categoryOrder, status: 'submitted'
       }).select('*').single()
       if (error) throw error
@@ -168,7 +168,7 @@ function CreateSubmissionModal({ clientId, eligible, notify, onClose, onDone }: 
         category: g.category,
         rows: g.rows.map(r => {
           slNo++
-          svPayload.push({ client_id: clientId, submission_id: sub.id, expense_id: r.id, sl_no: slNo, category_label: g.category })
+          svPayload.push({  submission_id: sub.id, expense_id: r.id, sl_no: slNo, category_label: g.category })
           return { slNo, expenseId: r.doc_no || r.id.slice(0, 8).toUpperCase(), vendorPayee: r.payee_name || '', amount: Number(r.amount) || 0, date: formatDate(r.expense_date) }
         })
       }))

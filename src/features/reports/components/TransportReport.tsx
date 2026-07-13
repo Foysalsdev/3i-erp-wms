@@ -36,13 +36,13 @@ export function TransportReport() {
     Promise.all([
       supabase.from('delivery_challans')
         .select('id,challan_no,challan_date,invoice_no,customer_id,warehouse_id,unloading_point,delivery_method,vehicle_id,transporter_id,transport_vendor,courier_name,courier_tracking_no,total_qty,delivery_cost,status,posted_at')
-        .eq('client_id', currentClientId).order('challan_date', { ascending: false }),
-      supabase.from('delivery_challan_items').select('challan_id,product_id,qty').eq('client_id', currentClientId),
-      supabase.from('customers').select('id,name').eq('client_id', currentClientId),
-      supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId),
-      supabase.from('vehicles').select('id,vehicle_number,vehicle_type').eq('client_id', currentClientId),
-      supabase.from('transport_vendors').select('id,name').eq('client_id', currentClientId),
-      supabase.from('products').select('id,category').eq('client_id', currentClientId)
+        .order('challan_date', { ascending: false }),
+      supabase.from('delivery_challan_items').select('challan_id,product_id,qty'),
+      supabase.from('customers').select('id,name'),
+      supabase.from('warehouses').select('id,code,name'),
+      supabase.from('vehicles').select('id,vehicle_number,vehicle_type'),
+      supabase.from('transport_vendors').select('id,name'),
+      supabase.from('products').select('id,category')
     ]).then(([ch, items, cust, wh, veh, tv, prods]) => {
       const by: Record<string, ItemSlice[]> = {}
       ;(items.data ?? []).forEach(it => { (by[it.challan_id] ??= []).push(it) })

@@ -92,7 +92,7 @@ export async function loadSettings<T extends AnySettings>(clientId: string, cate
   const { data } = await supabase
     .from('app_settings')
     .select('data')
-    .eq('client_id', clientId)
+    
     .eq('category', category)
     .maybeSingle()
   return { ...DEFAULTS[category], ...((data?.data as object) ?? {}) } as T
@@ -101,7 +101,7 @@ export async function loadSettings<T extends AnySettings>(clientId: string, cate
 export async function saveSettings(clientId: string, category: SettingsCategory, data: AnySettings) {
   const { error } = await supabase
     .from('app_settings')
-    .upsert({ client_id: clientId, category, data: data as unknown as Record<string, string | number | boolean | null> }, { onConflict: 'client_id,category' })
+    .upsert({  category, data: data as unknown as Record<string, string | number | boolean | null> }, { onConflict: 'category' })
   if (error) throw error
 }
 

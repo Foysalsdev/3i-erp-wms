@@ -54,7 +54,7 @@ export function NumberingTab({ canEdit }: { canEdit: boolean }) {
     if (!currentClientId) return
     setLoading(true)
     supabase.from('document_sequences').select('doc_type,prefix,padding,next_number,last_date')
-      .eq('client_id', currentClientId)
+      
       .then(({ data }) => {
         const catalog = docTypeCatalog()
         const byType: Record<string, Pick<DocSequence, 'prefix' | 'padding' | 'next_number' | 'last_date'>> =
@@ -92,7 +92,7 @@ export function NumberingTab({ canEdit }: { canEdit: boolean }) {
     try {
       for (const r of rows.filter(x => dirty.has(x.doc_type))) {
         const { error } = await supabase.rpc('update_doc_numbering', {
-          p_client: currentClientId, p_doc_type: r.doc_type, p_prefix: r.prefix, p_padding: r.padding
+           p_doc_type: r.doc_type, p_prefix: r.prefix, p_padding: r.padding
         })
         if (error) throw new Error(`${r.doc_type}: ${error.message}`)
       }

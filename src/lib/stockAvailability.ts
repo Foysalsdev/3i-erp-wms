@@ -32,8 +32,8 @@ const PENDING_DELIVERY_STATUSES = ['invoiced', 'dispatched']
 // editing an order would be dominated by the very qty already on that order.
 export async function fetchStockAvailability(clientId: string, excludeSoId?: string): Promise<Record<string, StockAvailability>> {
   const [{ data: stock }, { data: orders }] = await Promise.all([
-    supabase.from('inventory_stock').select('product_id,quantity,reserved_qty,stock_status').eq('client_id', clientId),
-    supabase.from('sales_orders').select('id,status').eq('client_id', clientId)
+    supabase.from('inventory_stock').select('product_id,quantity,reserved_qty,stock_status'),
+    supabase.from('sales_orders').select('id,status')
       .in('status', [...PENDING_INVOICE_STATUSES, ...PENDING_DELIVERY_STATUSES])
   ])
 

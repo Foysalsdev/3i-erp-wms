@@ -27,8 +27,8 @@ export function StockMovementReport() {
     if (!currentClientId) return
     setLoading(true)
     Promise.all([
-      supabase.from('inventory_ledger').select('*').eq('client_id', currentClientId).order('created_at', { ascending: false }).limit(1000),
-      supabase.from('products').select('id,material_code,name').eq('client_id', currentClientId)
+      supabase.from('inventory_ledger').select('*').order('created_at', { ascending: false }).limit(1000),
+      supabase.from('products').select('id,material_code,name')
     ]).then(([l, p]) => {
       setLedger(l.data ?? [])
       const pm: Record<string, ProdInfo> = {}; (p.data ?? []).forEach(r => { pm[r.id] = r })

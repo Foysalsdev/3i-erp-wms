@@ -61,7 +61,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     setLoading(true)
     // config-driven table names: the typed client can't take a 100-table union
     // (TS2589), so the from() boundary stays dynamic while rows are DocRecord.
-    supabase.from(config.table as any).select('*').eq('client_id', clientId).order('created_at', { ascending: false })
+    supabase.from(config.table as any).select('*').order('created_at', { ascending: false })
       .then(({ data }) => { setDocs((data ?? []) as unknown as DocRecord[]); setLoading(false) })
   }
   useEffect(load, [clientId, config.table])
@@ -70,7 +70,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   useEffect(() => {
     if (!clientId || !config.source) return
     const numberField = config.source.numberField ?? 'doc_no'
-    supabase.from(config.source.table as any).select(`id,${numberField}`).eq('client_id', clientId).in('status', config.source.statuses)
+    supabase.from(config.source.table as any).select(`id,${numberField}`).in('status', config.source.statuses)
       .order('created_at', { ascending: false })
       .then(({ data }) => setSources(((data ?? []) as unknown as DocRecord[]).map(r => ({ id: r.id, doc_no: cell(r, numberField) }))))
   }, [clientId, config])
@@ -102,7 +102,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
   }
 
   const buildItemRow = (docId: string, li: LineItem) => {
-    const row: Record<string, unknown> = { client_id: clientId, [config.itemFK]: docId, product_id: li.product_id, [config.qtyField]: Number(li.qty || 0) }
+    const row: Record<string, unknown> = {  [config.itemFK]: docId, product_id: li.product_id, [config.qtyField]: Number(li.qty || 0) }
     if (config.itemCols.price) row.unit_price = Number(li.unit_price || 0)
     if (config.itemCols.location) row.location_id = li.location_id || null
     if (config.itemCols.condition) row.stock_status = li.stock_status || 'good'
@@ -119,7 +119,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     setSaving(true)
     let docId = editId
     const hdr: Record<string, unknown> = {
-      client_id: clientId, warehouse_id: header.warehouse_id,
+       warehouse_id: header.warehouse_id,
       [config.dateField]: header[config.dateField] || new Date().toISOString().slice(0, 10),
       remarks: header.remarks || null, status: 'draft'
     }

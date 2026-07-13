@@ -35,8 +35,8 @@ export function StockAgingReport() {
     if (!currentClientId) return
     setLoading(true)
     Promise.all([
-      supabase.from('inventory_stock').select('*, products(name,material_code), warehouses(code)').eq('client_id', currentClientId).gt('quantity', 0),
-      supabase.from('inventory_ledger').select('product_id,warehouse_id,location_id,created_at').eq('client_id', currentClientId).gt('qty_in', 0).order('created_at', { ascending: true }).limit(5000)
+      supabase.from('inventory_stock').select('*, products(name,material_code), warehouses(code)').gt('quantity', 0),
+      supabase.from('inventory_ledger').select('product_id,warehouse_id,location_id,created_at').gt('qty_in', 0).order('created_at', { ascending: true }).limit(5000)
     ]).then(([s, l]) => {
       setStock(s.data ?? [])
       const earliest: Record<string, string> = {}

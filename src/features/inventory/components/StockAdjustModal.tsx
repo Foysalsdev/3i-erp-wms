@@ -28,8 +28,8 @@ export function StockAdjustModal({ open, onClose, onDone }: { open: boolean; onC
 
   useEffect(() => {
     if (!open || !clientId) return
-    supabase.from('products').select('id,name,material_code').eq('client_id', clientId).then(({ data }) => setProducts(data ?? []))
-    supabase.from('warehouses').select('id,name,code').eq('client_id', clientId).then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('products').select('id,name,material_code').then(({ data }) => setProducts(data ?? []))
+    supabase.from('warehouses').select('id,name,code').then(({ data }) => setWarehouses(data ?? []))
   }, [open, clientId])
   useEffect(() => {
     if (!f.warehouse_id) { setLocations([]); return }
@@ -42,7 +42,7 @@ export function StockAdjustModal({ open, onClose, onDone }: { open: boolean; onC
     if (!Number.isFinite(qty) || qty <= 0) { notify('error', 'Quantity must be a positive number — pick In/Out for the direction'); return }
     setSaving(true)
     const { error } = await supabase.rpc('post_stock_movement', {
-      p_client: clientId!, p_product: f.product_id, p_warehouse: f.warehouse_id,
+       p_product: f.product_id, p_warehouse: f.warehouse_id,
       p_location: f.location_id || undefined, p_stock_status: f.stock_status,
       p_qty_in: f.direction === 'in' ? qty : 0, p_qty_out: f.direction === 'out' ? qty : 0,
       p_movement_type: f.movement_type, p_reference_type: 'MANUAL', p_remarks: f.remarks || undefined

@@ -25,9 +25,17 @@ export function Combobox({ value, onChange, options, placeholder = 'Search…', 
     return () => document.removeEventListener('mousedown', h)
   }, [open])
 
+  // Multi-term, order-independent match: "whi 278" finds a product whose
+  // code/name contains both "whi" and "278" in any order. Each field searches
+  // code + description together, so a code, a name, or a fragment all work.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return (q ? options.filter(o => (o.label + ' ' + (o.sub ?? '')).toLowerCase().includes(q)) : options).slice(0, 50)
+    if (!q) return options.slice(0, 50)
+    const terms = q.split(/\s+/)
+    return options.filter(o => {
+      const hay = (o.label + ' ' + (o.sub ?? '')).toLowerCase()
+      return terms.every(t => hay.includes(t))
+    }).slice(0, 50)
   }, [options, query])
 
   const pick = (id: string) => { onChange(id); setOpen(false); setQuery('') }
@@ -44,6 +52,7 @@ export function Combobox({ value, onChange, options, placeholder = 'Search…', 
   return (
     <div ref={ref} className={cn('relative', className)}>
       <div className="relative">
+        <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-ink-faint" />
         <input ref={inputRef} disabled={disabled} value={open ? query : display} placeholder={placeholder}
           onChange={e => { setQuery(e.target.value); setOpen(true); setHi(0) }}
           onFocus={() => !disabled && setOpen(true)}
@@ -53,7 +62,7 @@ export function Combobox({ value, onChange, options, placeholder = 'Search…', 
             else if (e.key === 'Enter') { e.preventDefault(); onEnter() }
             else if (e.key === 'Escape') { setOpen(false); setQuery('') }
           }}
-          className={cn('fiori-input w-full', canClear ? 'pr-14' : 'pr-9')} autoComplete="off" />
+          className={cn('fiori-input w-full pl-9', canClear ? 'pr-14' : 'pr-9')} autoComplete="off" />
         <div className="absolute inset-y-0 right-2 flex items-center gap-0.5">
           {canClear && (
             <button type="button" tabIndex={-1} title="Clear"

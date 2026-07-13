@@ -43,7 +43,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
       // Build the payload from this master's own fields only, so stray form
       // defaults (e.g. the uom/unit seed values) never get sent to a table
       // that has no such column — which Supabase rejects outright.
-      const payload: Record<string, any> = { }
+      const payload: Record<string, unknown> = {}
       def.fields.forEach(f => {
         let v = values[f.name]
         if (f.type === 'number') v = v === '' || v == null ? null : Number(v)

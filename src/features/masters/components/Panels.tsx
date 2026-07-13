@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { useTimeline } from '@/hooks/useTimeline'
 import { Icon } from '@/components/ui/Icon'
@@ -8,11 +7,11 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
 import { EmptyState } from '@/components/ui/States'
 import { formatDateTime } from '@/lib/utils'
+import type { Tables } from '@/types/database.types'
 
 export function NotesPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<Tables<'notes'>[]>([])
   const [body, setBody] = useState('')
   const load = () => supabase.from('notes').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
     .order('created_at', { ascending: false }).then(({ data, error }) => {
@@ -22,7 +21,7 @@ export function NotesPanel({ entityType, entityId }: { entityType: string; entit
   useEffect(() => { load() }, [entityType, entityId])
   const add = async () => {
     if (!body.trim()) return
-    const { error } = await supabase.from('notes').insert({  entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
+    const { error } = await supabase.from('notes').insert({ entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
     if (error) { notify('error', error.message); return }
     setBody(''); load()
   }
@@ -46,9 +45,8 @@ export function NotesPanel({ entityType, entityId }: { entityType: string; entit
 }
 
 export function AttachmentsPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<Tables<'attachments'>[]>([])
   const [busy, setBusy] = useState(false)
   const load = () => supabase.from('attachments').select('*').eq('entity_type', entityType).eq('entity_id', entityId)
     .order('created_at', { ascending: false }).then(({ data, error }) => {
@@ -59,12 +57,12 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
 
   const upload = async (file: File) => {
     setBusy(true)
-    const path = `${clientId}/${entityType}/${entityId}/${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`
+    const path = `${entityType}/${entityId}/${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`
     const up = await supabase.storage.from('media').upload(path, file, { upsert: true })
     if (up.error) { notify('error', 'Storage upload failed'); setBusy(false); return }
     const { data } = supabase.storage.from('media').getPublicUrl(path)
     await supabase.from('attachments').insert({
-       entity_type: entityType, entity_id: entityId,
+      entity_type: entityType, entity_id: entityId,
       file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path, drive_url: data.publicUrl, source: 'supabase'
     })
     setBusy(false); load(); notify('success', 'File attached')
@@ -78,7 +76,7 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
       {rows.length === 0 ? <EmptyState icon="attach_file" title="No attachments" /> :
         <div className="divide-y divide-horizon-line">
           {rows.map(a => (
-            <a key={a.id} href={a.drive_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2 text-sm hover:text-brand-600">
+            <a key={a.id} href={a.drive_url ?? undefined} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2 text-sm hover:text-brand-600">
               <Icon name={a.source === 'google_drive' ? 'add_to_drive' : 'description'} className="text-brand-500" />
               <span className="flex-1 truncate">{a.file_name}</span>
               <Icon name="open_in_new" className="text-[16px] text-ink-faint" />

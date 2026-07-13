@@ -281,7 +281,7 @@ function CCForm({ config, record, clientId, products, warehouses, locations, pro
                     </td>
                     <td className="px-2 py-1.5">
                       <Combobox value={l.location_id ?? ''} disabled={readOnly}
-                        options={locForWh.map((loc: any) => ({ id: loc.id, label: loc.label }))}
+                        options={locForWh.map(loc => ({ id: loc.id, label: loc.label }))}
                         placeholder="—" onChange={(v: string) => updateLine(i, { location_id: v })} />
                     </td>
                     <td className="px-2 py-1.5">

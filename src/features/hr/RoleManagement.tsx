@@ -93,7 +93,7 @@ export function RoleManagement() {
       // the re-insert collided on role_permissions_pkey ("duplicate key"). One
       // race-safe RPC (which also enforces hr.role.manage) replaces the whole set.
       if (!roleId) throw new Error('Role id missing after save')
-      const { error: permErr } = await (supabase as any).rpc('set_role_permissions', {
+      const { error: permErr } = await supabase.rpc('set_role_permissions', {
         p_role_id: roleId, p_permission_ids: Array.from(sel)
       })
       if (permErr) throw permErr

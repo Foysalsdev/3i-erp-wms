@@ -24,14 +24,14 @@ export function CourierRatesPanel({ courierId }: { courierId: string }) {
     setLoading(true)
     Promise.all([
       supabase.from('products').select('category'),
-      (supabase as any).from('courier_rates').select('category,rate').eq('courier_id', courierId),
-      (supabase as any).from('couriers').select('rate_per_unit').eq('id', courierId).single()
-    ]).then(([prods, rr, c]: any[]) => {
+      supabase.from('courier_rates').select('category,rate').eq('courier_id', courierId),
+      supabase.from('couriers').select('rate_per_unit').eq('id', courierId).single()
+    ]).then(([prods, rr, c]) => {
       const set = new Set<string>()
-      ;(prods.data ?? []).forEach((p: any) => set.add(p.category || 'Other'))
-      ;(rr.data ?? []).forEach((r: any) => set.add(r.category))
+      ;(prods.data ?? []).forEach(p => set.add(p.category || 'Other'))
+      ;(rr.data ?? []).forEach(r => set.add(r.category))
       const m: Record<string, string> = {}
-      ;(rr.data ?? []).forEach((r: any) => { m[r.category] = String(r.rate) })
+      ;(rr.data ?? []).forEach(r => { m[r.category] = String(r.rate) })
       setCats([...set].sort())
       setRates(m); setInitial(m)
       setFallback(Number(c.data?.rate_per_unit) || 0)
@@ -44,14 +44,14 @@ export function CourierRatesPanel({ courierId }: { courierId: string }) {
     try {
       const upserts = cats
         .filter(cat => String(rates[cat] ?? '').trim() !== '')
-        .map(cat => ({  courier_id: courierId, category: cat, rate: Number(rates[cat]) || 0 }))
+        .map(cat => ({ courier_id: courierId, category: cat, rate: Number(rates[cat]) || 0 }))
       const cleared = cats.filter(cat => String(rates[cat] ?? '').trim() === '' && initial[cat] !== undefined)
       if (upserts.length) {
-        const { error } = await (supabase as any).from('courier_rates').upsert(upserts, { onConflict: 'courier_id,category' })
+        const { error } = await supabase.from('courier_rates').upsert(upserts, { onConflict: 'courier_id,category' })
         if (error) throw error
       }
       if (cleared.length) {
-        const { error } = await (supabase as any).from('courier_rates').delete().eq('courier_id', courierId).in('category', cleared)
+        const { error } = await supabase.from('courier_rates').delete().eq('courier_id', courierId).in('category', cleared)
         if (error) throw error
       }
       setInitial({ ...rates })

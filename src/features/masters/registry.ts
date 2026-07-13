@@ -38,13 +38,13 @@ export interface MasterDef {
   subField?: string
   imageField?: string
   fields: FieldDef[]
-  listColumns: Column<any>[]
+  listColumns: Column<MasterRecord>[]
   searchFields: string[]
 }
 
 // Master rows flow through one engine across many tables: known columns
 // typed, the rest via the index signature (same pattern as DocRecord).
-export type MasterRecord = { id: string; status?: string | null } & Record<string, unknown>
+export type MasterRecord = { id: string; status?: string | null } & Record<string, string | number | boolean | null | undefined>
 
 const statusBadge = (row: MasterRecord) =>
   createElement(Badge, { tone: ['active', 'in_use'].includes(row.status ?? '') ? 'positive' : 'neutral' }, row.status)

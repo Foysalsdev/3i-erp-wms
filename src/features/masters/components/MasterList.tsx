@@ -35,10 +35,10 @@ export function MasterList({ def }: { def: MasterDef }) {
   const [view, setView] = useState<'list' | 'card'>('list')
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
+  const [editing, setEditing] = useState<MasterRecord | null>(null)
   const [selected, setSelected] = useState<{ row: MasterRecord; tab: string } | null>(null)
-  const [deleting, setDeleting] = useState<any>(null)
-  const [addressesFor, setAddressesFor] = useState<any>(null)
+  const [deleting, setDeleting] = useState<MasterRecord | null>(null)
+  const [addressesFor, setAddressesFor] = useState<MasterRecord | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const clientName = clients.find(c => c.id === currentClientId)?.name ?? ''
@@ -123,7 +123,7 @@ export function MasterList({ def }: { def: MasterDef }) {
     ...(isAdmin ? [{ icon: 'delete', label: 'Delete', tone: '!text-bad hover:!text-bad hover:!bg-bad/10', onClick: () => setDeleting(row) }] : [])
   ]
 
-  const actionCol: Column<any> = {
+  const actionCol: Column<MasterRecord> = {
     key: '__actions', header: 'Action', className: 'w-px whitespace-nowrap',
     render: (row: MasterRecord) => (
       <div className="flex items-center justify-end" onClick={e => e.stopPropagation()}>
@@ -132,7 +132,7 @@ export function MasterList({ def }: { def: MasterDef }) {
     )
   }
 
-  const thumbCol: Column<any> | null = def.imageField ? {
+  const thumbCol: Column<MasterRecord> | null = def.imageField ? {
     key: '__thumb', header: '', className: 'w-px',
     render: (row: MasterRecord) => {
       const img = str(row[def.imageField!])
@@ -206,7 +206,7 @@ export function MasterList({ def }: { def: MasterDef }) {
       <ConfirmDelete open={!!deleting} onClose={() => setDeleting(null)}
         name={deleting ? `${def.singular} · ${deleting[def.nameField]}` : undefined}
         onConfirm={async () => {
-          const res = await supabase.from(def.table as any).delete().eq('id', deleting.id)
+          const res = await supabase.from(def.table as any).delete().eq('id', deleting!.id)
           if (!res.error) { setDeleting(null); refresh() }
           return res
         }}

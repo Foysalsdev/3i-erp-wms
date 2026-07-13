@@ -647,10 +647,8 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
                 placeholder="Search customer by code or name" />
             </Field>
             <Field label="Warehouse" required>
-              <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
-                <option value="">Select...</option>
-                {warehouses.map(w => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
-              </SelectBox>
+              <Combobox items={warehouses.map(w => ({ id: w.id, label: w.code, sublabel: w.name }))} value={h.warehouse_id ?? ''}
+                onChange={(id: string) => set({ warehouse_id: id })} placeholder="Search warehouse by code or name" />
             </Field>
             {!h.sales_order_id && (
               <Field label="SAP Invoice No" required>

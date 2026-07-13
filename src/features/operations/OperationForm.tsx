@@ -5,8 +5,9 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { OP_RELATIONS, type OpDef, type OpRecord } from './registry'
-import { Field, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea, type FieldSize } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
+import { Combobox } from '@/components/shared/Combobox'
 import { Button } from '@/components/ui/Button'
 import { ImageUpload } from '@/features/masters/components/ImageUpload'
 
@@ -17,7 +18,9 @@ export function OperationForm({ def, record, onDone, onCancel }:
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
   const [saving, setSaving] = useState(false)
-  const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string }[]>>({})
+  // Relation options carry code + name separately so the smart lookup shows the
+  // code as a mono chip and the description beside it, and searches both.
+  const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string; sublabel?: string }[]>>({})
 
   const defaults = record ?? {
     status: def.statuses[0]?.value,
@@ -35,7 +38,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
       setRelOptions(o => ({
         ...o,
         [f.name]: ((data ?? []) as unknown as Record<string, string>[]).map(r => ({
-          id: r.id, label: rel.name ? `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` : r[rel.code]
+          id: r.id, label: r[rel.code], sublabel: rel.name ? r[rel.name] : undefined
         }))
       }))
       // Re-apply the saved value once options exist (native select needs the option present).
@@ -78,6 +81,14 @@ export function OperationForm({ def, record, onDone, onCancel }:
 
   const onInvalid = () => notify('error', 'Please fill in all required fields highlighted below.')
 
+  // Field width in the 12-col grid: full for wide/rich types, small for
+  // date/number, half otherwise — overridable per field via `size` in registry.
+  const sizeFor = (f: typeof def.fields[number]): FieldSize =>
+    f.span2 || f.type === 'textarea' || f.type === 'image' ? 'full'
+    : f.size ? f.size
+    : f.type === 'date' || f.type === 'number' ? 'sm'
+    : 'lg'
+
   return (
     <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       {record && (
@@ -86,26 +97,33 @@ export function OperationForm({ def, record, onDone, onCancel }:
           <span className="font-semibold text-ink">{String(record[def.numberField] ?? '')}</span>
         </div>
       )}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
         {def.fields.map(f => {
           if (f.type === 'image')
-            return <div key={f.name} className={f.span2 ? 'sm:col-span-2' : ''}>
+            return <div key={f.name} className="sm:col-span-12">
               <ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} />
             </div>
-          const opts = f.relation ? (relOptions[f.name] ?? [])
-            : (f.options?.map(o => ({ id: o, label: o })) ?? [])
           return (
-            <Field key={f.name} label={f.label} required={f.required} className={f.span2 ? 'sm:col-span-2' : ''}
+            <Field key={f.name} label={f.label} required={f.required} size={sizeFor(f)}
               error={errors[f.name] ? `${f.label} is required` : undefined}>
               {f.type === 'textarea' ? (
                 <Textarea {...register(f.name, { required: f.required })} placeholder={f.placeholder} />
-              ) : (f.type === 'select' || f.type === 'relation') ? (() => {
+              ) : f.type === 'relation' ? (() => {
+                // Many-record master / document reference → searchable smart lookup.
+                register(f.name, { required: f.required })
+                return (
+                  <Combobox items={relOptions[f.name] ?? []} value={String(watch(f.name) ?? '')}
+                    onChange={id => setValue(f.name, id, { shouldValidate: true })}
+                    placeholder={`Search ${f.label.toLowerCase()}…`} />
+                )
+              })() : f.type === 'select' ? (() => {
+                // Small fixed option set (status…) → dropdown.
                 register(f.name, { required: f.required })
                 return (
                   <SelectBox value={String(watch(f.name) ?? '')}
                     onChange={e => setValue(f.name, e.target.value, { shouldValidate: true })}>
                     <option value="">Select…</option>
-                    {opts.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    {(f.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
                   </SelectBox>
                 )
               })() : (

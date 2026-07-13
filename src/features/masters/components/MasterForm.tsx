@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { RELATIONS, type MasterDef, type MasterRecord } from '../registry'
-import { Field, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea, type FieldSize } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
+import { Combobox } from '@/components/shared/Combobox'
 import { Button } from '@/components/ui/Button'
 import { ImageUpload } from './ImageUpload'
 import { formatVehicleNo } from '@/lib/utils'
@@ -15,7 +16,9 @@ export function MasterForm({ def, record, onDone, onCancel }:
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
   const [saving, setSaving] = useState(false)
-  const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string }[]>>({})
+  // Relation options carry code + name separately so the smart lookup can show
+  // the code as a mono chip and the description beside it, and search both.
+  const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string; sublabel?: string }[]>>({})
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     defaultValues: record ?? { status: 'active', uom: 'PCS', unit: 'PCS' }
   })
@@ -28,7 +31,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
       const { data } = await supabase.from(rel.table as any).select(`id, ${rel.code}, ${rel.name}`)
       setRelOptions(o => ({
         ...o,
-        [f.name]: ((data ?? []) as unknown as Record<string, string>[]).map(r => ({ id: r.id, label: `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` }))
+        [f.name]: ((data ?? []) as unknown as Record<string, string>[]).map(r => ({ id: r.id, label: r[rel.code], sublabel: r[rel.name] }))
       }))
       // Re-apply the record's value once options exist — at mount the matching
       // <option> isn't rendered yet, so the native select can't show it.
@@ -67,30 +70,47 @@ export function MasterForm({ def, record, onDone, onCancel }:
   // Surface validation failures so the form never fails silently.
   const onInvalid = () => notify('error', 'Please fill in all required fields highlighted below.')
 
+  // Field width in the 12-col grid: full for wide/rich types, small for
+  // date/number, half otherwise — overridable per field via `size` in registry.
+  const sizeFor = (f: typeof def.fields[number]): FieldSize =>
+    f.span2 || f.type === 'textarea' || f.type === 'image' ? 'full'
+    : f.size ? f.size
+    : f.type === 'date' || f.type === 'number' ? 'sm'
+    : 'lg'
+
   return (
     <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
         {def.fields.map(f => {
           if (f.type === 'image')
-            return <div key={f.name} className="sm:col-span-2"><ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} /></div>
+            return <div key={f.name} className="sm:col-span-12"><ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} /></div>
           if (f.type === 'checkbox')
             return (
-              <label key={f.name} className="flex items-center gap-2 rounded-lg border border-surface-line px-3 py-2.5 text-sm">
+              <label key={f.name} className="flex items-center gap-2 rounded-lg border border-surface-line px-3 py-2.5 text-sm sm:col-span-4">
                 <input type="checkbox" {...register(f.name)} className="h-4 w-4 accent-brand-500" /> {f.label}
               </label>
             )
-          const opts = f.relation ? (relOptions[f.name] ?? []) : (f.options?.map(o => ({ id: o, label: o })) ?? [])
           return (
-            <Field key={f.name} label={f.label} required={f.required} className={f.span2 ? 'sm:col-span-2' : ''}
+            <Field key={f.name} label={f.label} required={f.required} size={sizeFor(f)}
               error={errors[f.name] ? `${f.label} is required` : undefined}>
               {f.type === 'textarea' ? <Textarea {...register(f.name, { required: f.required })} placeholder={f.placeholder} />
-              : (f.type === 'select' || f.relation) ? (() => {
+              : f.relation ? (() => {
+                // Many-record master data (warehouse, transporter, vehicle…) →
+                // searchable smart lookup, never a long native dropdown.
+                register(f.name, { required: f.required })
+                return (
+                  <Combobox items={relOptions[f.name] ?? []} value={String(watch(f.name) ?? '')}
+                    onChange={id => setValue(f.name, id, { shouldValidate: true })}
+                    placeholder={`Search ${f.label.toLowerCase()}…`} />
+                )
+              })() : f.type === 'select' ? (() => {
+                // Small fixed option set (status, category, terms…) → dropdown.
                 register(f.name, { required: f.required })
                 return (
                   <SelectBox value={String(watch(f.name) ?? '')}
                     onChange={e => setValue(f.name, e.target.value, { shouldValidate: true })}>
                     <option value="">Select…</option>
-                    {opts.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    {(f.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
                   </SelectBox>
                 )
               })() : (() => {

@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Icon } from '@/components/ui/Icon'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -149,7 +150,7 @@ function MasterCard<R extends { id: string; name: string | null; is_active: bool
           {rows.length === 0 ? <p className="p-4 text-sm text-ink-faint">Nothing yet.</p> : rows.map((r, i) => (
             <div key={r.id} className={'grid items-center gap-2 px-3 py-2.5 text-sm ' + (i ? 'border-t border-surface-line' : '')} style={{ gridTemplateColumns: template }}>
               {cols.map(c => <span key={c.h} className={'min-w-0 truncate ' + (r.is_active === false ? 'text-ink-faint line-through' : 'text-ink')}>{c.render(r)}</span>)}
-              <span><Badge tone={r.is_active !== false ? 'positive' : 'neutral'}>{r.is_active !== false ? 'Active' : 'Inactive'}</Badge></span>
+              <span><StatusBadge status={r.is_active !== false ? 'active' : 'inactive'} /></span>
               <span className="flex items-center justify-end gap-1">
                 {perms.canEdit && <button title={r.is_active !== false ? 'Deactivate' : 'Activate'} className="rounded-lg p-1.5 text-ink-faint hover:bg-surface-sunken hover:text-ink" onClick={() => onToggle(r)}><Icon name={r.is_active !== false ? 'toggle_on' : 'toggle_off'} className="text-[18px]" /></button>}
                 {perms.canEdit && <button title="Edit" className="rounded-lg p-1.5 text-ink-faint hover:bg-surface-sunken hover:text-ink" onClick={() => onEdit(r)}><Icon name="edit" className="text-[18px]" /></button>}

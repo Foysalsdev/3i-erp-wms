@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -32,7 +33,7 @@ export function TemplatesTab({ channel, canEdit, canDelete }: { channel: Channel
     { key: 'code', header: 'Code', accessor: r => r.code, sortable: true, className: 'font-medium' },
     { key: 'name', header: 'Name', accessor: r => r.name },
     ...(channel === 'email' ? [{ key: 'subject', header: 'Subject', accessor: (r: Template) => r.subject ?? '—' }] : []),
-    { key: 'is_active', header: 'Status', render: r => <Badge tone={r.is_active ? 'positive' : 'neutral'}>{r.is_active ? 'Active' : 'Inactive'}</Badge> },
+    { key: 'is_active', header: 'Status', render: r => <StatusBadge status={r.is_active ? 'active' : 'inactive'} /> },
     { key: 'updated_at', header: 'Updated', render: r => formatDate(r.updated_at) },
     ...(canEdit || canDelete ? [{
       key: '__a', header: '', className: 'w-px whitespace-nowrap',

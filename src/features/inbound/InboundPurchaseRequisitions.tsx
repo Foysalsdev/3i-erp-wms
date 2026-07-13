@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -106,7 +107,7 @@ export function InboundPurchaseRequisitions() {
     { key: 'order_date', header: 'Date', render: r => formatDate(r.order_date) },
     { key: 'expected_date', header: 'Expected By', render: r => r.expected_date ? formatDate(r.expected_date) : '—' },
     { key: 'total_qty', header: 'Qty', accessor: r => formatNumber(r.total_qty), className: 'text-right' },
-    { key: 'status', header: 'Status', render: r => <Badge tone={tone(r.status)}>{r.status}</Badge> },
+    { key: 'status', header: 'Status', render: r => <StatusBadge status={r.status} /> },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',
       render: r => (

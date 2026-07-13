@@ -11,6 +11,7 @@ import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -51,7 +52,7 @@ export function SerialsTab() {
     { key: 'code', header: 'Material', accessor: r => r.products?.material_code },
     { key: 'name', header: 'Product', accessor: r => r.products?.name },
     { key: 'wh', header: 'Warehouse', accessor: r => r.warehouses?.code ?? '—' },
-    { key: 'status', header: 'Status', render: r => <Badge tone={tone[r.status]}>{r.status}</Badge> },
+    { key: 'status', header: 'Status', render: r => <StatusBadge status={r.status} /> },
     { key: 'wstart', header: 'Warranty Start', render: r => formatDate(r.warranty_start) },
     { key: 'wend', header: 'Warranty End', render: r => formatDate(r.warranty_end) }
   ]

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Field'
-import { Spinner } from '@/components/ui/States'
+import { SkeletonText } from '@/components/ui/Skeleton'
 import { OUTBOUND_STAGES, setWorkflowSla } from '@/features/outbound/workflow'
 import {
   loadSettings, saveSettings, DEFAULT_WORKFLOW, type WorkflowSettings
@@ -45,7 +45,7 @@ export function WorkflowTab({ canEdit }: { canEdit: boolean }) {
     } finally { setSaving(false) }
   }
 
-  if (loading) return <Card className="p-2"><Spinner label="Loading…" /></Card>
+  if (loading) return <Card className="p-5"><SkeletonText lines={6} /></Card>
 
   return (
     <Card className="p-5">

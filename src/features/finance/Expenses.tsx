@@ -8,6 +8,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { SearchBar } from '@/components/shared/SearchBar'
@@ -154,7 +155,7 @@ export function Expenses() {
     { key: 'vendor', header: 'Vendor/Payee', render: r => r.payee_name || '—' },
     { key: 'department', header: 'Department', render: r => r.department || '—' },
     { key: 'payment_mode', header: 'Payment', render: r => r.payment_mode || '—' },
-    { key: 'voucher_status', header: 'Voucher Status', render: r => <Badge tone={VOUCHER_STATUS_TONE[r.voucher_status] || 'neutral'}>{VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status}</Badge> },
+    { key: 'voucher_status', header: 'Voucher Status', render: r => <StatusBadge status={r.voucher_status} label={VOUCHER_STATUS_LABEL[r.voucher_status]} /> },
     { key: 'amount', header: 'Total (BDT)', accessor: r => formatNumber(r.amount, 2), className: 'text-right' },
     {
       key: '__a', header: '', className: 'w-px whitespace-nowrap',

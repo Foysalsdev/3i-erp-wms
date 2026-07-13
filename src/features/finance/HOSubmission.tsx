@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Icon } from '@/components/ui/Icon'
 import { Field, Textarea } from '@/components/ui/Field'
 import { formatNumber, formatDate } from '@/lib/utils'
@@ -90,7 +91,7 @@ export function HOSubmission() {
                   <span className="text-ink-soft">{formatDate(s.submission_date)}</span>
                   <span className="text-right tabular-nums text-ink-soft">{s.voucher_count}</span>
                   <span className="text-right tabular-nums font-semibold text-ink">{formatNumber(s.total_amount, 2)}</span>
-                  <span><Badge tone={s.status === 'verified' ? 'positive' : 'brand'}>{s.status === 'verified' ? 'Verified' : 'Submitted'}</Badge></span>
+                  <span><StatusBadge status={s.status} label={s.status === 'verified' ? 'Verified' : 'Submitted'} /></span>
                   <span className="flex justify-end gap-1">
                     <button title="Reprint Cover Sheet" className="rounded-lg p-1.5 text-ink-faint hover:bg-surface-sunken hover:text-ink disabled:opacity-40" disabled={reprinting === s.id} onClick={() => reprint(s)}><Icon name="print" className="text-[18px]" /></button>
                     {s.status !== 'verified' && can('finance.edit') && <button title="Mark Verified" className="rounded-lg p-1.5 text-ink-faint hover:bg-ok/10 hover:text-ok" onClick={() => setVerifying(s)}><Icon name="task_alt" className="text-[18px]" /></button>}

@@ -5,7 +5,8 @@ import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
+import { Segmented } from '@/components/ui/Segmented'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
@@ -57,7 +58,7 @@ export function InboundReport() {
     { key: 'total_qty', header: 'Qty', className: 'text-right', accessor: r => formatNumber(r.total_qty) },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'approved' ? 'positive' : r.status === 'cancelled' ? 'negative' : 'info'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const totalQty = data.reduce((s, r) => s + r.total_qty, 0)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -96,7 +97,7 @@ export function AssetReport() {
     { key: 'assigned_to', header: 'Assigned', accessor: r => r.assigned_to },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'active' ? 'positive' : 'neutral'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const totalCost = data.reduce((s, r) => s + r.purchase_cost, 0)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -131,7 +132,7 @@ export function HrReport() {
     { key: 'joining_date', header: 'Joined', accessor: r => r.joining_date },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'active' ? 'positive' : 'neutral'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const byDept = data.reduce((m: Record<string, number>, r) => { m[r.department] = (m[r.department] ?? 0) + 1; return m }, {})
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -218,7 +219,7 @@ export function DeliveryRegisterReport() {
     { key: 'qty', header: 'Qty', className: 'text-right', accessor: r => formatNumber(r.qty) },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'issued' ? 'positive' : r.status === 'cancelled' ? 'negative' : 'neutral'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const challanCount = new Set(filtered.map(r => r.challan_no)).size
   const totalQty = filtered.reduce((s, r) => s + r.qty, 0)
   const courierCount = new Set(rows.filter(r => r.mode === 'Courier').map(r => r.challan_no)).size
@@ -227,11 +228,8 @@ export function DeliveryRegisterReport() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={filtered.length} onCSV={() => downloadCSV('Delivery Register', cols, filtered)} onPDF={() => downloadReportPDF('Delivery Register', `Which transport/courier carried what · ${challanCount} deliveries`, cols, filtered)}>
-        <div className="flex rounded-lg border border-surface-line p-0.5 text-sm">
-          <button onClick={() => setMode('all')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'all' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>All</button>
-          <button onClick={() => setMode('transport')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'transport' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Transport</button>
-          <button onClick={() => setMode('courier')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'courier' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Courier</button>
-        </div>
+        <Segmented value={mode} onChange={setMode} size="sm"
+          options={[{ value: 'all', label: 'All' }, { value: 'transport', label: 'Transport' }, { value: 'courier', label: 'Courier' }]} />
       </ReportToolbar>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

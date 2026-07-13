@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { BulkActionBar } from '@/components/ui/BulkActionBar'
@@ -186,7 +187,7 @@ export function MasterList({ def }: { def: MasterDef }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-ink">{str(r[def.nameField])}</p>
                       <p className="truncate text-xs text-ink-soft">{str(r[def.codeField])}</p>
-                      <div className="mt-2"><Badge tone={['active', 'in_use'].includes(r.status ?? '') ? 'positive' : 'neutral'}>{r.status}</Badge></div>
+                      <div className="mt-2"><StatusBadge status={r.status} /></div>
                     </div>
                   </button>
                 </div>

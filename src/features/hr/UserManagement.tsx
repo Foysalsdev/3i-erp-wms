@@ -15,7 +15,7 @@ import { Field, Input } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Button } from '@/components/ui/Button'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 
 // Manage login users: set each user's Role, Designation and Division.
 // (Creating brand-new login accounts comes later, under Settings.)
@@ -62,7 +62,7 @@ export function UserManagement() {
     }] : [])
   ]
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">

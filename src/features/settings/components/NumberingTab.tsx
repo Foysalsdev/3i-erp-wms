@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
-import { Spinner } from '@/components/ui/States'
+import { SkeletonText } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { OPERATIONS } from '@/features/operations/registry'
 import { DOC_CONFIGS } from '@/features/inbound/docConfigs'
@@ -103,7 +103,7 @@ export function NumberingTab({ canEdit }: { canEdit: boolean }) {
     } finally { setSaving(false) }
   }
 
-  if (loading) return <Card className="p-2"><Spinner label="Loading number ranges…" /></Card>
+  if (loading) return <Card className="p-5"><SkeletonText lines={6} /></Card>
 
   return (
     <Card className="p-5">

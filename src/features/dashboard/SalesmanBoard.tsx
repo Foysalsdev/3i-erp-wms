@@ -3,11 +3,13 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { DataTable, type Column } from '@/components/ui/DataTable'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
+import { Segmented } from '@/components/ui/Segmented'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, type RepCol } from '@/features/reports/export'
@@ -130,7 +132,7 @@ export default function SalesmanBoard() {
     { key: 'available', header: 'Available', className: 'text-right', accessor: r => `${formatNumber(r.available)}${r.uom ? ' ' + r.uom : ''}` }
   ]
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={5} />
   const cards = [
     { icon: 'receipt_long', label: 'My Orders', value: kpi.total, tone: 'text-brand-600' },
     { icon: 'today', label: 'Today', value: kpi.todayCount, tone: 'text-brand-600' },
@@ -156,10 +158,8 @@ export default function SalesmanBoard() {
       </div>
 
       {/* Orders / Saleable Stock toggle */}
-      <div className="flex rounded-lg border border-surface-line p-0.5 text-sm w-fit">
-        <button onClick={() => setMode('orders')} className={'rounded-md px-4 py-1.5 font-medium ' + (mode === 'orders' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>My Orders</button>
-        <button onClick={() => setMode('stock')} className={'rounded-md px-4 py-1.5 font-medium ' + (mode === 'stock' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Saleable Stock</button>
-      </div>
+      <Segmented value={mode} onChange={setMode}
+        options={[{ value: 'orders', label: 'My Orders' }, { value: 'stock', label: 'Saleable Stock' }]} />
 
       {mode === 'orders' ? (
         <>
@@ -182,7 +182,7 @@ export default function SalesmanBoard() {
                     <p className="mt-0.5 text-xs text-ink-faint">{formatDate(o.order_date)} · Qty {formatNumber(o.total_qty)} · Delivered {formatNumber(delivered[o.id])}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Badge tone={tone(o.status)}>{o.status}</Badge>
+                    <StatusBadge status={o.status} />
                     <ActionMenu items={[{ icon: 'visibility', label: 'View progress', onClick: () => setView(o) }]} />
                   </div>
                 </div>
@@ -235,7 +235,7 @@ function OrderProgress({ order, customerName, delivered, onClose }: {
         <div className="rounded-lg bg-surface-sunken px-3 py-3"><Stepper status={order.status} /></div>
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div><span className="text-ink-faint">Customer: </span>{customerName}</div>
-          <div><span className="text-ink-faint">Status: </span><Badge tone={tone(order.status)}>{order.status}</Badge></div>
+          <div><span className="text-ink-faint">Status: </span><StatusBadge status={order.status} /></div>
           <div><span className="text-ink-faint">Order Qty: </span>{formatNumber(order.total_qty)}</div>
           <div><span className="text-ink-faint">Delivered: </span>{formatNumber(delivered)}</div>
         </div>

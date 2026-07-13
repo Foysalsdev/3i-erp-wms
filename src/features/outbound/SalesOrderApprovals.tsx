@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { Modal } from '@/components/ui/Modal'
@@ -91,7 +92,7 @@ export function SalesOrderApprovals() {
     { key: 'amount', header: 'Amount', accessor: r => r.total_amount, render: r => formatNumber(r.total_amount), className: 'text-right', sortable: true },
     { key: 'payment', header: 'Payment', render: r => (
       <div className="flex items-center gap-1.5">
-        <Badge tone={paymentTone(r.payment_status ?? 'unpaid')}>{r.payment_status ?? 'unpaid'}</Badge>
+        <StatusBadge status={r.payment_status ?? 'unpaid'} />
         {Number(r.deposited_amount) > 0 && <span className="text-xs text-ink-soft">{formatNumber(r.deposited_amount)}</span>}
       </div>
     ) },
@@ -168,7 +169,7 @@ function ReviewModal({ so, customerName, products, onApprove, onReject, onClose 
           <Stat label="Total Amount" value={formatNumber(so.total_amount)} />
           <Stat label="Payment" value={
             <span className="flex items-center gap-1.5">
-              <Badge tone={paymentTone(so.payment_status ?? 'unpaid')}>{so.payment_status ?? 'unpaid'}</Badge>
+              <StatusBadge status={so.payment_status ?? 'unpaid'} />
               {Number(so.deposited_amount) > 0 && <span>{formatNumber(so.deposited_amount)} deposited{so.deposited_date ? ` (${formatDate(so.deposited_date)})` : ''}</span>}
             </span>
           } />

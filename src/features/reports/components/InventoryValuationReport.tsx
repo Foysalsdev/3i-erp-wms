@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
@@ -86,7 +86,7 @@ export function InventoryValuationReport() {
     { key: 'value', header: 'Value', className: 'text-right font-medium', accessor: r => r.value, render: r => formatNumber(r.value, 2), sortable: true }
   ]
 
-  if (loading) return <Spinner label="Valuing inventory…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={filteredRows.length}

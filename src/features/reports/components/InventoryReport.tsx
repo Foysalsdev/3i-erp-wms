@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber } from '@/lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
@@ -84,7 +84,7 @@ export function InventoryReport() {
     return Object.entries(m).map(([name, value]) => ({ name, value }))
   }, [rows])
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Inventory by Category-Model', cols, rows)} onPDF={() => downloadReportPDF('Inventory by Category & Model', 'Stock grouped by category and model', cols, rows)}>

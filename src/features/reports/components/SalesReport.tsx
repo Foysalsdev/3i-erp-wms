@@ -3,7 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
+import { Segmented } from '@/components/ui/Segmented'
 import { formatNumber } from '@/lib/utils'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
@@ -86,14 +87,12 @@ export function SalesReport() {
   const title = by === 'customer' ? 'Sales by Customer' : 'Sales by Salesman'
   const chartData = rows.slice(0, 8).map(r => ({ name: r.group.split(' — ')[0].slice(0, 12), Order: r.order_qty, Delivered: r.delivered_qty, Pending: r.pending_qty }))
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length} onCSV={() => downloadCSV(title, cols, exportRows)} onPDF={() => downloadReportPDF(title, 'Order / Invoiced / Delivered / Pending', cols, exportRows)}>
-        <div className="flex rounded-lg border border-surface-line p-0.5 text-sm">
-          <button onClick={() => setBy('customer')} className={'rounded-md px-3 py-1 font-medium ' + (by === 'customer' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>By Customer</button>
-          <button onClick={() => setBy('salesman')} className={'rounded-md px-3 py-1 font-medium ' + (by === 'salesman' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>By Salesman</button>
-        </div>
+        <Segmented value={by} onChange={setBy} size="sm"
+          options={[{ value: 'customer', label: 'By Customer' }, { value: 'salesman', label: 'By Salesman' }]} />
       </ReportToolbar>
 
       {chartData.length > 0 && (

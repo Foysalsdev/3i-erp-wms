@@ -151,7 +151,7 @@ export function NotificationBell() {
       <button
         onClick={() => { setOpen(o => !o); if (!open) load() }}
         title="Notifications"
-        className="relative rounded-lg p-2 text-ink-soft hover:bg-surface-sunken"
+        className="relative grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-surface-sunken"
       >
         <Icon name="notifications" />
         {unread.length > 0 && (

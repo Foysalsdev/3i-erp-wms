@@ -6,9 +6,20 @@ import { Footer } from './Footer'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
-import { Spinner } from '@/components/ui/States'
+import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { primeCompanyInfo, loadSettings, type WorkflowSettings } from '@/lib/settings'
 import { setWorkflowSla } from '@/features/outbound/workflow'
+
+// Neutral page-load skeleton for lazy route chunks: a title bar plus a table
+// placeholder — generic enough for any page, calmer than a centred spinner.
+function PageFallback() {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2"><Skeleton className="h-6 w-56" /><Skeleton className="h-3.5 w-80" /></div>
+      <TableSkeleton rows={8} cols={6} />
+    </div>
+  )
+}
 
 export function AppShell() {
   const [mobileNav, setMobileNav] = useState(false)
@@ -45,11 +56,11 @@ export function AppShell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar onOpenMobileNav={() => setMobileNav(true)} />
           <main className="flex-1 overflow-y-auto p-5 sm:p-7">
-            {/* Page chunk loads here (nav stays visible) with the same Spinner the
-                pages use for data loading, so route-load and data-load look like
-                one continuous loader instead of a whirlpool then a spinner. */}
+            {/* Page chunk loads here (nav stays visible) behind a neutral page
+                skeleton, so route-load and the page's own skeleton data-load read
+                as one continuous, calm loading state instead of a spinner flash. */}
             <ErrorBoundary key={pathname}>
-              <Suspense fallback={<Spinner label="Loading…" />}><Outlet /></Suspense>
+              <Suspense fallback={<PageFallback />}><Outlet /></Suspense>
             </ErrorBoundary>
           </main>
         </div>

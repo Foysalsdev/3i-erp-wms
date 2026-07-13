@@ -10,7 +10,7 @@ import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { formatNumber, formatDate } from '@/lib/utils'
@@ -89,7 +89,7 @@ export function StockAgingReport() {
     { key: 'bucket', header: 'Bucket', accessor: r => r.bucket, render: r => <Badge tone={bucketTone(r.bucket)}>{r.bucket}</Badge>, sortable: true }
   ]
 
-  if (loading) return <Spinner label="Computing aging…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={filteredRows.length}

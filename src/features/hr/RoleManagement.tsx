@@ -14,7 +14,7 @@ import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { Icon } from '@/components/ui/Icon'
 
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'post', 'approve']
@@ -101,7 +101,7 @@ export function RoleManagement() {
     } catch (e: any) { notify('error', e?.message ?? 'Could not save role') } finally { setBusy(false) }
   }
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">

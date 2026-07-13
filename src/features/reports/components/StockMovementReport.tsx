@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
@@ -63,7 +63,7 @@ export function StockMovementReport() {
     accessor: (r: MoveRow) => ['qty_in', 'qty_out', 'balance'].includes(c.key) ? (r[c.key] === '' ? '' : formatNumber(Number(r[c.key]))) : r[c.key]
   }))
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={rows.length} onCSV={() => downloadCSV('Stock Movement', cols, rows)} onPDF={() => downloadReportPDF('Stock Movement (Ledger)', 'Every inventory in/out movement', cols, rows)}>

@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Icon } from '@/components/ui/Icon'
 import { LoadingRing } from '@/components/ui/LoadingRing'
 import { Modal } from '@/components/ui/Modal'
@@ -301,7 +302,7 @@ export function OutboundSalesOrders() {
     { key: 'total_amount', header: 'Amount', accessor: r => r.total_amount, render: r => formatNumber(r.total_amount), className: 'text-right', sortable: true },
     { key: 'status', header: 'Status', accessor: r => r.status, sortable: true, render: r => (
       <div className="flex flex-col items-start gap-0.5">
-        <Badge tone={tone(r.status)}>{r.status}</Badge>
+        <StatusBadge status={r.status} />
         <DeliveryProgress so={r} />
       </div>
     ) },
@@ -934,7 +935,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
           <Stat label="Customer" value={customerName} />
           <Stat label="Order Date" value={formatDate(so.order_date)} />
           <Stat label="Customer PO" value={so.reference_no ?? '—'} />
-          <Stat label="Status" value={<Badge tone={tone(so.status)}>{so.status}</Badge>} />
+          <Stat label="Status" value={<StatusBadge status={so.status} />} />
           <Stat label="Total Qty" value={formatNumber(so.total_qty)} />
           <Stat label="Total Amount" value={formatNumber(so.total_amount)} />
           <Stat label="Owner" value={ownerName || '— unassigned'} />
@@ -1061,7 +1062,7 @@ function SOOverview({ so, customerName, products, customers, vehicles, ownerName
                       <span className="truncate text-ink-soft">· {carrier}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-ink-soft">
-                      {formatDate(d.challan_date)} {d.status === 'delivered' ? <Badge tone="positive">Delivered</Badge> : d.posted_at ? <Badge tone="info">Dispatched</Badge> : <Badge tone={tone(d.status)}>{d.status}</Badge>}
+                      {formatDate(d.challan_date)} {d.status === 'delivered' ? <StatusBadge status="delivered" /> : d.posted_at ? <StatusBadge status="dispatched" /> : <StatusBadge status={d.status} />}
                       <button type="button" title="Download challan PDF" onClick={() => downloadChallanPdfFor(d, { customers, vehicles, products }).catch((e: Error) => notify('error', e?.message ?? 'Could not generate PDF'))}
                         className="rounded-lg p-1 text-ink-faint hover:bg-surface-sunken hover:text-brand-600"><Icon name="download" className="text-[16px]" /></button>
                     </span>

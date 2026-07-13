@@ -8,6 +8,7 @@ import { Field, Input } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { EmptyState } from '@/components/ui/States'
 import { formatDate, formatVehicleNo } from '@/lib/utils'
 
@@ -38,7 +39,7 @@ export function VehiclesPanel({ vendorId }: { vendorId: string }) {
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map(v => (
             <div key={v.id} className="rounded-card border border-horizon-line p-3 text-sm">
-              <div className="flex items-center justify-between"><b>{v.vehicle_number}</b><Badge tone={v.status === 'active' ? 'positive' : 'neutral'}>{v.status}</Badge></div>
+              <div className="flex items-center justify-between"><b>{v.vehicle_number}</b><StatusBadge status={v.status} /></div>
               <p className="text-horizon-muted">{v.vehicle_type} · {v.capacity}</p>
               <p>Driver: {v.driver_name ?? '—'} ({v.driver_phone ?? '—'})</p>
               <p className="text-[11px] text-horizon-muted">License exp: {formatDate(v.license_expiry)} · Fitness: {formatDate(v.fitness_expiry)} · Insurance: {formatDate(v.insurance_expiry)}</p>

@@ -36,7 +36,13 @@ export function PendingMattersPanel() {
   if (!matters) return null              // quiet while loading — the dashboard has its own spinner rhythm
   if (matters.length === 0) return null  // nothing pending: no panel, no noise
 
-  const visible = (filter ? matters.filter(m => m.rule === filter) : matters).slice(0, showAll ? 100 : 6)
+  // Keep the panel compact: only the 4 most urgent show by default so more
+  // alerts never push the rest of the dashboard down — the overflow collapses
+  // behind a "+N more" toggle instead of growing the page.
+  const scoped = filter ? matters.filter(m => m.rule === filter) : matters
+  const CAP = 4
+  const visible = scoped.slice(0, showAll ? 100 : CAP)
+  const overflow = Math.max(0, scoped.length - CAP)
   const overdueTotal = matters.filter(m => m.overdue).length
 
   return (
@@ -73,10 +79,12 @@ export function PendingMattersPanel() {
           </button>
         ))}
       </div>
-      {(filter ? matters.filter(m => m.rule === filter) : matters).length > 6 && (
+      {overflow > 0 && (
         <button type="button" onClick={() => setShowAll(s => !s)}
-          className="w-full border-t border-surface-line px-4 py-2 text-center text-xs font-semibold text-brand-700 hover:bg-surface-sunken">
-          {showAll ? 'Show less' : `Show all ${(filter ? matters.filter(m => m.rule === filter) : matters).length}`}
+          className="flex w-full items-center justify-center gap-1 border-t border-surface-line px-4 py-2 text-center text-xs font-semibold text-brand-700 hover:bg-surface-sunken">
+          {showAll
+            ? <><Icon name="expand_less" className="text-[15px]" /> Show less</>
+            : <><Icon name="expand_more" className="text-[15px]" /> +{overflow} more · View all</>}
         </button>
       )}
     </Card>

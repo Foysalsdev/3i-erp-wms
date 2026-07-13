@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu, type MenuItem } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -91,7 +92,7 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
     { key: 'doc_no', header: 'Document No', accessor: r => r.doc_no, sortable: true, className: 'font-medium' },
     { key: 'date', header: 'Date', accessor: r => r.count_date, render: r => formatDate(r.count_date), sortable: true },
     { key: 'wh', header: 'Warehouse', accessor: r => whMap[r.warehouse_id ?? ''] ?? '', render: r => whMap[r.warehouse_id ?? '']?.split(' — ')[0] ?? '—', sortable: true },
-    { key: 'status', header: 'Status', accessor: r => r.status, render: r => <Badge tone={tone(r.status)}>{r.status}</Badge>, sortable: true },
+    { key: 'status', header: 'Status', accessor: r => r.status, render: r => <StatusBadge status={r.status} />, sortable: true },
     { key: '__actions', header: '', className: 'w-px whitespace-nowrap text-right',
       render: r => <div className="flex justify-end" onClick={e => e.stopPropagation()}><ActionMenu items={rowActions(r)} /></div> }
   ]
@@ -210,7 +211,7 @@ function CountForm({ countType, title, singular, record, clientId, products, war
   return (
     <Modal open onClose={onClose} title={`${record ? (readOnly ? 'View' : 'Edit') : 'New'} ${title}${record?.doc_no ? ' · ' + record.doc_no : ''}`} size="xl">
       <div className="space-y-4">
-        {readOnly && <div className="flex items-center gap-2"><Badge tone={tone(record.status)}>{record.status}</Badge>
+        {readOnly && <div className="flex items-center gap-2"><StatusBadge status={record.status} />
           {record.status === 'posted' && <span className="text-xs text-ink-soft">Posted counts are read-only.</span>}</div>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Warehouse" required>

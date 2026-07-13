@@ -4,7 +4,7 @@ import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Textarea } from '@/components/ui/Field'
-import { Spinner } from '@/components/ui/States'
+import { SkeletonText } from '@/components/ui/Skeleton'
 import {
   loadSettings, saveSettings, setCompanyCache,
   DEFAULT_COMPANY, type CompanySettings
@@ -39,7 +39,7 @@ export function CompanyTab({ canEdit }: { canEdit: boolean }) {
     }
   }
 
-  if (loading) return <Card className="p-2"><Spinner label="Loading…" /></Card>
+  if (loading) return <Card className="p-5"><SkeletonText lines={6} /></Card>
 
   return (
     <Card className="p-5">

@@ -3,13 +3,13 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
-import { useInboundData, STATUS_TONE } from '../hooks'
+import { useInboundData } from '../hooks'
 import type { DocConfig, ExtraField } from '../docConfigs'
 import { ItemsEditor, type LineItem } from './ItemsEditor'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
@@ -198,7 +198,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
         <Card className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-bold text-ink">{editId ? (readOnly ? 'View' : 'Edit') : 'New'} {config.title}{header.doc_no ? ` · ${header.doc_no}` : ''}</h2>
-            {readOnly && <Badge tone={STATUS_TONE[header.status ?? 'draft']}>{header.status}</Badge>}
+            {readOnly && <StatusBadge status={header.status ?? 'draft'} />}
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {party && (
@@ -241,7 +241,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
     { key: 'date', header: 'Date', render: r => formatDate(cell(r, config.dateField) as string), sortable: true, accessor: r => cell(r, config.dateField) as string },
     ...(party ? [{ key: 'party', header: partyLabel, render: (r: DocRecord) => partyMap[r[partyField] as string]?.split(' — ')[1] ?? '—' }] : []),
     { key: 'wh', header: 'Warehouse', render: r => warehouses.find(w => w.id === r.warehouse_id)?.label?.split(' — ')[0] ?? '—' },
-    { key: 'status', header: 'Status', render: r => <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge> },
+    { key: 'status', header: 'Status', render: r => <StatusBadge status={r.status} /> },
     { key: '__actions', header: 'Action', className: 'w-px whitespace-nowrap text-right', render: r => (
       <div className="flex justify-end" onClick={e => e.stopPropagation()}>
         <ActionMenu items={rowActions(r)} />

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { RELATIONS, type MasterDef, type MasterRecord } from '../registry'
-import { Field, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea, type FieldSize } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/shared/Combobox'
 import { Button } from '@/components/ui/Button'
@@ -70,20 +70,28 @@ export function MasterForm({ def, record, onDone, onCancel }:
   // Surface validation failures so the form never fails silently.
   const onInvalid = () => notify('error', 'Please fill in all required fields highlighted below.')
 
+  // Field width in the 12-col grid: full for wide/rich types, small for
+  // date/number, half otherwise — overridable per field via `size` in registry.
+  const sizeFor = (f: typeof def.fields[number]): FieldSize =>
+    f.span2 || f.type === 'textarea' || f.type === 'image' ? 'full'
+    : f.size ? f.size
+    : f.type === 'date' || f.type === 'number' ? 'sm'
+    : 'lg'
+
   return (
     <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
         {def.fields.map(f => {
           if (f.type === 'image')
-            return <div key={f.name} className="sm:col-span-2"><ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} /></div>
+            return <div key={f.name} className="sm:col-span-12"><ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} /></div>
           if (f.type === 'checkbox')
             return (
-              <label key={f.name} className="flex items-center gap-2 rounded-lg border border-surface-line px-3 py-2.5 text-sm">
+              <label key={f.name} className="flex items-center gap-2 rounded-lg border border-surface-line px-3 py-2.5 text-sm sm:col-span-4">
                 <input type="checkbox" {...register(f.name)} className="h-4 w-4 accent-brand-500" /> {f.label}
               </label>
             )
           return (
-            <Field key={f.name} label={f.label} required={f.required} className={f.span2 ? 'sm:col-span-2' : ''}
+            <Field key={f.name} label={f.label} required={f.required} size={sizeFor(f)}
               error={errors[f.name] ? `${f.label} is required` : undefined}>
               {f.type === 'textarea' ? <Textarea {...register(f.name, { required: f.required })} placeholder={f.placeholder} />
               : f.relation ? (() => {

@@ -5,7 +5,7 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { nextDocNumber } from '@/hooks/useDocNumber'
 import { OP_RELATIONS, type OpDef, type OpRecord } from './registry'
-import { Field, Input, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea, type FieldSize } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/shared/Combobox'
 import { Button } from '@/components/ui/Button'
@@ -81,6 +81,14 @@ export function OperationForm({ def, record, onDone, onCancel }:
 
   const onInvalid = () => notify('error', 'Please fill in all required fields highlighted below.')
 
+  // Field width in the 12-col grid: full for wide/rich types, small for
+  // date/number, half otherwise — overridable per field via `size` in registry.
+  const sizeFor = (f: typeof def.fields[number]): FieldSize =>
+    f.span2 || f.type === 'textarea' || f.type === 'image' ? 'full'
+    : f.size ? f.size
+    : f.type === 'date' || f.type === 'number' ? 'sm'
+    : 'lg'
+
   return (
     <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       {record && (
@@ -89,14 +97,14 @@ export function OperationForm({ def, record, onDone, onCancel }:
           <span className="font-semibold text-ink">{String(record[def.numberField] ?? '')}</span>
         </div>
       )}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
         {def.fields.map(f => {
           if (f.type === 'image')
-            return <div key={f.name} className={f.span2 ? 'sm:col-span-2' : ''}>
+            return <div key={f.name} className="sm:col-span-12">
               <ImageUpload label={f.label} value={watch(f.name) as string | undefined} onChange={v => setValue(f.name, v)} />
             </div>
           return (
-            <Field key={f.name} label={f.label} required={f.required} className={f.span2 ? 'sm:col-span-2' : ''}
+            <Field key={f.name} label={f.label} required={f.required} size={sizeFor(f)}
               error={errors[f.name] ? `${f.label} is required` : undefined}>
               {f.type === 'textarea' ? (
                 <Textarea {...register(f.name, { required: f.required })} placeholder={f.placeholder} />

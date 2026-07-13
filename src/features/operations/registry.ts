@@ -41,6 +41,7 @@ export interface OpFieldDef {
   relation?: keyof typeof OP_RELATIONS
   placeholder?: string
   span2?: boolean
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
 }
 
 export interface StatusDef { value: string; label: string; tone: 'positive' | 'negative' | 'neutral' | 'info' | 'critical' }

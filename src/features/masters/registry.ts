@@ -23,6 +23,7 @@ export interface FieldDef {
   relation?: RelationKey
   placeholder?: string
   span2?: boolean
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
   help?: string
   format?: 'vehicleNo'
 }

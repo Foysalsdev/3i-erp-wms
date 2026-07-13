@@ -616,10 +616,8 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
             {selCust?.sap_customer_code && <p className="mt-1 text-[11px] text-ink-faint">SAP customer code: <span className="font-mono text-ink-soft">{selCust.sap_customer_code}</span></p>}
           </Field>
           <Field label="Warehouse">
-            <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>
-              <option value="">Select…</option>
-              {warehouses.map(w => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
-            </SelectBox>
+            <Combobox items={warehouses.map(w => ({ id: w.id, label: w.code, sublabel: w.name }))} value={h.warehouse_id ?? ''}
+              onChange={(id: string) => set({ warehouse_id: id })} placeholder="Search warehouse by code or name" />
           </Field>
           <Field label="Order Ref">
             <div className="flex gap-2">

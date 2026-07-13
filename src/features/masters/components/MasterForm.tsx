@@ -21,6 +21,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
   // the code as a mono chip and the description beside it, and search both.
   const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string; sublabel?: string }[]>>({})
   const { register, handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm({
+    mode: 'onChange',  // live validation: required errors clear the moment a field is filled
     defaultValues: record ?? { status: 'active', uom: 'PCS', unit: 'PCS' }
   })
   useUnsavedChanges(isDirty && !saving)

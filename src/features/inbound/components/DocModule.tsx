@@ -266,7 +266,7 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
         {canEdit && <Button icon="add" onClick={openNew}>New {config.singular}</Button>}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DataTable fill loading={loading} columns={columns} rows={docs} rowKey={r => r.id} onRowClick={r => openDoc(r, true)} emptyTitle={`No ${config.title.toLowerCase()} yet`} />
+        <DataTable fill loading={loading} columns={columns} rows={docs} rowKey={r => r.id} onRowClick={r => openDoc(r, true)} rowMenu={rowActions} emptyTitle={`No ${config.title.toLowerCase()} yet`} />
       </Card>
     </div>
   )

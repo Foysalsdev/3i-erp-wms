@@ -27,7 +27,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     status: def.statuses[0]?.value,
     ...Object.fromEntries(def.fields.filter(f => f.type === 'date' && f.required).map(f => [f.name, today()]))
   }
-  const { register, handleSubmit, setValue, watch, formState: { errors, isDirty } } = useForm({ defaultValues: defaults })
+  const { register, handleSubmit, setValue, watch, formState: { errors, isDirty } } = useForm({ mode: 'onChange', defaultValues: defaults })
   useUnsavedChanges(isDirty && !saving)
 
   // Load linked dropdown options for relation fields.

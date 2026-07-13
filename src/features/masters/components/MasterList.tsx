@@ -169,7 +169,7 @@ export function MasterList({ def }: { def: MasterDef }) {
       {view === 'list' ? (
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <DataTable columns={columns} rows={filtered} loading={loading} fill
-            rowKey={r => r.id} onRowClick={r => setSelected({ row: r, tab: 'details' })} emptyTitle={`No ${def.title.toLowerCase()} yet`}
+            rowKey={r => r.id} onRowClick={r => setSelected({ row: r, tab: 'details' })} rowMenu={rowActions} emptyTitle={`No ${def.title.toLowerCase()} yet`}
             selection={{ selected: checked, onToggle: toggleOne, onToggleAll: toggleAll }} />
         </Card>
       ) : (

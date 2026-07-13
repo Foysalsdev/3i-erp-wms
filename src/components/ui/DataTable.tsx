@@ -1,9 +1,10 @@
-import { Fragment, useState, useMemo, useRef } from 'react'
+import { Fragment, useState, useMemo, useRef, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/utils'
 import { Icon } from './Icon'
 import { SelectBox } from './SelectBox'
 import { EmptyState } from './States'
+import type { MenuItem } from './ActionMenu'
 import { useUI } from '@/store/ui'
 
 // Varying widths so a loading table reads as content, not a uniform gray block.
@@ -41,12 +42,36 @@ interface Props<T> {
   // look (e.g. line items) without leaving the list or opening a modal.
   // Independent of onRowClick, so both can be wired on the same table.
   expand?: { render: (row: T) => React.ReactNode }
+  // Desktop right-click (context menu) on a row → the same actions as the
+  // kebab menu. Returns the menu items for the clicked row, or [] for none.
+  rowMenu?: (row: T) => MenuItem[]
 }
-export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records', emptyIcon, emptyHint, fill, selection, expand }: Props<T>) {
+export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, emptyTitle = 'No records', emptyIcon, emptyHint, fill, selection, expand, rowMenu }: Props<T>) {
   const compact = useUI(s => s.density) === 'compact'
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [dir, setDir] = useState<1 | -1>(1)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  // Right-click context menu (desktop): a fixed-positioned menu at the cursor,
+  // reusing each row's action items. Closes on outside click, Escape, or scroll.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  const openCtxMenu = (e: React.MouseEvent, row: T) => {
+    if (!rowMenu) return
+    const items = rowMenu(row)
+    if (!items.length) return
+    e.preventDefault()
+    const h = Math.min(items.length * 40 + 8, window.innerHeight - 16)
+    setCtxMenu({ x: Math.min(e.clientX, window.innerWidth - 232), y: Math.min(e.clientY, window.innerHeight - h - 8), items })
+  }
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtxMenu(null) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', close, true) }
+  }, [ctxMenu])
   const toggleExpand = (key: string) => setExpanded(prev => {
     const next = new Set(prev)
     next.has(key) ? next.delete(key) : next.add(key)
@@ -125,7 +150,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
                 const key = rowKey(row)
                 return (
                   <div key={vi.key} data-index={vi.index} ref={virtualizer.measureElement}
-                    onClick={() => onRowClick?.(row)}
+                    onClick={() => onRowClick?.(row)} onContextMenu={e => openCtxMenu(e, row)}
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)`, display: 'grid', gridTemplateColumns: gridTemplate }}
                     className={cn('border-b border-horizon-line/70 text-sm transition', onRowClick && 'cursor-pointer hover:bg-surface-sunken', selection?.selected.has(key) && 'bg-brand-500/5')}>
                     {selection && (
@@ -186,7 +211,7 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
               const isOpen = expand && expanded.has(key)
               return (
                 <Fragment key={key}>
-                  <tr onClick={() => onRowClick?.(row)}
+                  <tr onClick={() => onRowClick?.(row)} onContextMenu={e => openCtxMenu(e, row)}
                     className={cn('border-b border-horizon-line/70 transition', onRowClick && 'cursor-pointer hover:bg-surface-sunken', selection?.selected.has(key) && 'bg-brand-500/5')}>
                     {expand && (
                       <td className={cn('px-2', compact ? 'py-1' : 'py-3')} onClick={e => e.stopPropagation()}>
@@ -284,6 +309,19 @@ export function DataTable<T>({ columns, rows, loading, rowKey, onRowClick, empty
         })}
         </div>
       </div>
+
+      {ctxMenu && (
+        <div role="menu" style={{ top: ctxMenu.y, left: ctxMenu.x }}
+          onMouseDown={e => e.stopPropagation()}
+          className="fixed z-50 max-h-[calc(100vh-16px)] w-56 overflow-y-auto rounded-lg border border-surface-line bg-surface py-1 shadow-card">
+          {ctxMenu.items.map(it => (
+            <button key={it.label} role="menuitem" onClick={() => { setCtxMenu(null); it.onClick() }}
+              className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-sunken', it.tone)}>
+              <Icon name={it.icon} className="shrink-0 text-[18px]" /> {it.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -21,7 +21,7 @@ This repository is the **foundation build**: complete backend (database, securit
 | PDF | @react-pdf/renderer |
 | Attachments | Supabase Storage (+ Google Drive field support) |
 | PWA | vite-plugin-pwa (offline shell, installable) |
-| Deployment | Vercel |
+| Deployment | Cloudflare Pages |
 
 ---
 

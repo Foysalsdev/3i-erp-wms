@@ -52,7 +52,6 @@ export function Combobox({ value, onChange, options, placeholder = 'Search…', 
   return (
     <div ref={ref} className={cn('relative', className)}>
       <div className="relative">
-        <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-ink-faint" />
         <input ref={inputRef} disabled={disabled} value={open ? query : display} placeholder={placeholder}
           onChange={e => { setQuery(e.target.value); setOpen(true); setHi(0) }}
           onFocus={() => !disabled && setOpen(true)}
@@ -62,14 +61,20 @@ export function Combobox({ value, onChange, options, placeholder = 'Search…', 
             else if (e.key === 'Enter') { e.preventDefault(); onEnter() }
             else if (e.key === 'Escape') { setOpen(false); setQuery('') }
           }}
-          className={cn('fiori-input w-full pl-9', canClear ? 'pr-14' : 'pr-9')} autoComplete="off" />
-        <div className="absolute inset-y-0 right-2 flex items-center gap-0.5">
+          className={cn('fiori-input w-full', canClear ? 'pr-14' : 'pr-9')} autoComplete="off" />
+        <div className="absolute inset-y-0 right-1.5 flex items-center gap-0.5">
           {canClear && (
             <button type="button" tabIndex={-1} title="Clear"
               onMouseDown={e => { e.preventDefault(); onChange(''); setQuery(''); inputRef.current?.focus() }}
               className="rounded p-0.5 text-ink-faint hover:text-bad"><Icon name="close" className="text-[15px]" /></button>
           )}
-          <Icon name="expand_more" className={cn('pointer-events-none text-[18px] text-ink-faint transition-transform', open && 'rotate-180')} />
+          {/* SAP-style value-help (F4): a distinct coloured lookup icon that marks
+              this as a code+description lookup and opens the full record list. */}
+          <button type="button" tabIndex={-1} disabled={disabled} title="Show all records (F4)"
+            onMouseDown={e => { e.preventDefault(); if (disabled) return; setOpen(o => !o); setQuery(''); inputRef.current?.focus() }}
+            className="rounded p-0.5 text-brand-600 hover:bg-brand-500/10 hover:text-brand-700 disabled:text-ink-faint">
+            <Icon name="manage_search" className="text-[19px]" />
+          </button>
         </div>
       </div>
 

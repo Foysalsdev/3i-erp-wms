@@ -17,7 +17,9 @@
      while pure black stays crisp at any resolution. */
   --ink: 0 0 0; --ink-soft: 0 0 0; --ink-faint: 0 0 0;
   --sidebar: 255 255 255; --sidebar-fg: 0 0 0; --sidebar-muted: 0 0 0;
-  --sidebar-active: 252 241 212; --sidebar-active-fg: 129 96 9;
+  /* Active module = proper brand gold (brand-400) with near-black text — the
+     same punchy gold as the app's primary buttons, not a washed-out cream. */
+  --sidebar-active: 241 191 60; --sidebar-active-fg: 18 18 18;
 }
 .dark {
   color-scheme: dark;
@@ -25,7 +27,8 @@
   /* Dark mode's "pure black" equivalent is pure white — same rule, inverted. */
   --ink: 255 255 255; --ink-soft: 255 255 255; --ink-faint: 255 255 255;
   --sidebar: 23 24 28; --sidebar-fg: 255 255 255; --sidebar-muted: 255 255 255;
-  --sidebar-active: 50 40 16; --sidebar-active-fg: 241 191 60;
+  /* Same proper gold in dark mode — gold pill, near-black text. */
+  --sidebar-active: 241 191 60; --sidebar-active-fg: 18 18 18;
 }
 
 * { -webkit-tap-highlight-color: transparent; }
@@ -47,8 +50,10 @@ h1,h2,h3,h4 { @apply font-sans font-semibold tracking-tight; }
        panels couldn't see the old hairline grey. Near-black in light mode,
        clearly visible in dark. Brand colour still marks focus.
        16px on mobile prevents iOS Safari from auto-zooming on focus; 14px from sm up. */
+    /* Placeholder / hint text inside fields is deliberately light (ink at 40%)
+       so it reads as a hint, not as real content — the typed value stays ink. */
     @apply w-full rounded-lg border border-ink/60 bg-surface px-3.5 py-2.5 text-base sm:text-sm text-ink
-           placeholder:text-ink-faint outline-none transition-colors
+           placeholder:font-normal placeholder:text-ink/40 outline-none transition-colors
            hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
            disabled:bg-surface-sunken disabled:text-ink-faint disabled:border-surface-line;
   }

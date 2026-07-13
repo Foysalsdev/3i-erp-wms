@@ -14,7 +14,7 @@ export function Sidebar({ mobile, onNavigate }: { mobile?: boolean; onNavigate?:
   return (
     <aside className={cn('relative flex h-full flex-col border-r border-surface-line bg-sidebar text-sidebar-fg transition-[width] duration-300',
       collapsed ? 'w-[var(--sidebar-w-collapsed)]' : 'w-[var(--sidebar-w)]')}>
-      <div className="flex h-[var(--header-h)] items-center gap-2.5 border-b border-surface-line px-4">
+      <div className="flex h-[var(--header-h)] items-center gap-2.5 border-b-2 border-brand-500 px-4">
         <img src="/favicon.svg" alt="Whirlpool" className="h-9 w-9 shrink-0 rounded-xl ring-1 ring-surface-line" />
         {!collapsed && <div className="leading-tight">
           <p className="font-display text-[14px] font-bold tracking-tight">Whirlpool WH</p>
@@ -28,11 +28,13 @@ export function Sidebar({ mobile, onNavigate }: { mobile?: boolean; onNavigate?:
           const active = pathname.startsWith(m.path)
           return (
             <NavLink key={m.key} to={m.path} onClick={onNavigate} title={m.label}
-              className={cn('group relative flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] transition-colors',
-                active ? 'bg-sidebar-active font-semibold text-sidebar-activefg'
+              // Weight stays constant across states so the label never reflows
+              // (the old font-semibold-on-active caused a visible jitter). The
+              // gold pill alone marks the active module.
+              className={cn('group relative flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
+                active ? 'bg-sidebar-active text-sidebar-activefg'
                        : 'text-sidebar-fg hover:bg-surface-sunken')}>
-              {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-brand-500" />}
-              <Icon name={m.icon} className={cn('text-[20px]', active ? 'text-brand-600' : 'text-sidebar-muted')} filled={active} />
+              <Icon name={m.icon} className={cn('text-[20px]', active ? 'text-sidebar-activefg' : 'text-sidebar-muted')} filled={active} />
               {!collapsed && <span className="truncate">{m.label}</span>}
             </NavLink>
           )

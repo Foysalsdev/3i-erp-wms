@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ClipboardEvent as RClip } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesInsert } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
@@ -9,6 +10,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, EmptyState } from '@/components/ui/States'
 import { Field, Input, Textarea } from '@/components/ui/Field'
+import { SelectBox } from '@/components/ui/SelectBox'
+import { Modal } from '@/components/ui/Modal'
 import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { normaliseSerial, describeSerialHistory, type SerialHistoryItem } from '@/lib/serials'
@@ -32,9 +35,8 @@ interface WLine {
   qty: string               // received qty (editable)
   stock_status: string      // key from the condition registry (lib/conditions)
   location_id: string
+  batch: string             // optional batch / lot number (SAP-style)
   serials: SRow[]
-  scanOpen?: boolean
-  scanInput?: string
 }
 
 type Grn = Tables<'goods_receipts'>
@@ -209,6 +211,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
           product_id: it.product_id ?? '', expected: Number(it.expected_qty) || 0,
           qty: String(Number(it.received_qty) > 0 ? it.received_qty : it.qty),
           stock_status: (it.stock_status || 'good') as WLine['stock_status'], location_id: it.location_id ?? '',
+          batch: (it as { batch?: string | null }).batch ?? '',
           serials: (sMap[it.product_id ?? ''] ?? []).map(s => ({ serial: s.serial, existingId: s.id, status: s.status }))
         })))
         setLoading(false)
@@ -216,7 +219,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
         const { data: items } = await supabase.from('purchase_requisition_items').select('*').eq('pr_id', pr.id)
         setLines((items ?? []).map(it => ({
           product_id: it.product_id ?? '', expected: Number(it.qty) || 0, qty: String(it.qty ?? ''),
-          stock_status: 'good', location_id: '', serials: []
+          stock_status: 'good', location_id: '', batch: '', serials: []
         })))
       }
     })()
@@ -228,44 +231,23 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
   const whLocs = locations.filter(l => l.warehouse_id === h.warehouse_id)
   const totalQty = lines.reduce((s, l) => s + (Number(l.qty) || 0), 0)
 
-  // ---- serial capture (per line, inline) ----------------------------------
-  const allSerials = useMemo(() => {
-    const set = new Set<string>()
-    lines.forEach(l => l.serials.forEach(r => set.add(r.serial.toUpperCase())))
-    return set
-  }, [lines])
-
-  const addSerials = (i: number, raws: string[]) => {
-    const p: Partial<ProductLite> = prodById[lines[i].product_id] ?? {}
-    let dupes = 0
-    const fresh: SRow[] = []
-    for (const raw of raws) {
-      const r: SRow = normaliseSerial(raw, p)
-      if (!r.serial) continue
-      const up = r.serial.toUpperCase()
-      if (allSerials.has(up) || fresh.some(f => f.serial.toUpperCase() === up)) { dupes++; continue }
-      fresh.push(r)
-    }
-    if (fresh.length) setLine(i, { serials: [...fresh, ...lines[i].serials] })
-    if (dupes) notify('info', `${dupes} duplicate serial(s) skipped`)
-  }
-
-  const removeSerial = (i: number, r: SRow) => {
-    if (r.existingId && r.status && r.status !== 'in_stock') {
-      notify('error', `${r.serial} is already ${r.status} — it can't be removed`); return
-    }
-    setLine(i, { serials: lines[i].serials.filter(x => x !== r) })
-  }
+  // ---- serial capture (per line, via SAP-style popup) ---------------------
+  const [serialLine, setSerialLine] = useState<number | null>(null)
+  // Serials captured on OTHER lines — one serial can only sit on one line, so
+  // the popup rejects anything already scanned elsewhere on this receipt.
+  const otherSerials = (idx: number) => new Set(
+    lines.filter((_, k) => k !== idx).flatMap(l => l.serials.map(s => s.serial.toLowerCase()))
+  )
 
   // ---- step gates ----------------------------------------------------------
   const next = () => {
-    if (step === 0 && !h.warehouse_id) { notify('error', 'Warehouse select korun — stock ekhane dhukbe'); return }
+    if (step === 0 && !h.warehouse_id) { notify('error', 'Select a warehouse — received stock lands here'); return }
     if (step === 1) {
       const valid = lines.filter(l => l.product_id)
-      if (!valid.length) { notify('error', 'Onto ekta product line add korun'); return }
-      if (valid.some(l => !(Number(l.qty) > 0))) { notify('error', 'Protita line-e Received Qty din (0 er beshi)'); return }
+      if (!valid.length) { notify('error', 'Add at least one product line'); return }
+      if (valid.some(l => !(Number(l.qty) > 0))) { notify('error', 'Enter a Received Qty (more than 0) on every line'); return }
     }
-    if (step === 2 && !String(h.sap_grn_ref).trim()) { notify('error', 'SAP MIGO No din — eta diyei GRN track hobe'); return }
+    if (step === 2 && !String(h.sap_grn_ref).trim()) { notify('error', 'Enter the SAP MIGO No — the GRN is tracked by it'); return }
     setStep(s => Math.min(s + 1, 3))
   }
 
@@ -300,7 +282,8 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
       const payload = valid.map(l => ({
          grn_id: grnId, product_id: l.product_id, qty: Number(l.qty) || 0,
         expected_qty: l.expected || 0, received_qty: Number(l.qty) || 0,
-        unit_price: 0, stock_status: l.stock_status, location_id: l.location_id || null
+        unit_price: 0, stock_status: l.stock_status, location_id: l.location_id || null,
+        batch: l.batch.trim() || null
       }))
       if (payload.length) {
         const { error } = await supabase.from('goods_receipt_items').insert(payload)
@@ -429,102 +412,87 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
         {/* STEP 2 — Items & scan */}
         {step === 1 && (
           <div className="space-y-3">
-            <Field label="Add product">
-              <Combobox items={prodItems} value=""
-                onChange={(id: string) => {
-                  if (!id) return
-                  if (lines.some(l => l.product_id === id)) { notify('info', 'Product already on the receipt'); return }
-                  setLines(ls => [{ product_id: id, expected: 0, qty: '', stock_status: 'good', location_id: '', serials: [], scanOpen: false }, ...ls])
-                }}
-                placeholder="Search by material code / name to add a line" />
-            </Field>
+            <Combobox items={prodItems} value=""
+              onChange={(id: string) => {
+                if (!id) return
+                if (lines.some(l => l.product_id === id)) { notify('info', 'Product already on the receipt'); return }
+                setLines(ls => [{ product_id: id, expected: 0, qty: '', stock_status: 'good', location_id: '', batch: '', serials: [] }, ...ls])
+              }}
+              placeholder="Search material code / name to add a line — repeat for each item" />
 
-            {lines.length === 0 && <p className="py-6 text-center text-sm text-ink-faint">No lines yet — search a product above to start counting.</p>}
+            {lines.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-surface-line py-6 text-center text-sm text-ink-faint">No lines yet — add a product above for each item you're receiving.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-surface-line">
+                {/* One compact row per item — Qty, Condition, Location, Batch inline;
+                    serials go into a per-line popup (the SAP "serial numbers" grid). */}
+                <div className="min-w-[720px]">
+                  <div className="flex items-center gap-2 border-b border-surface-line px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+                    <span className="w-5 text-center">#</span>
+                    <span className="min-w-0 flex-1">Item · description</span>
+                    <span className="w-20 text-right">Qty</span>
+                    <span className="w-40">Condition</span>
+                    {locItems.length > 0 && <span className="w-36">Location</span>}
+                    <span className="w-28">Batch</span>
+                    <span className="w-24 text-center">Serials</span>
+                    <span className="w-7" />
+                  </div>
 
-            {lines.map((l, i) => {
-              const qty = Number(l.qty) || 0
-              const variance = l.expected > 0 ? qty - l.expected : 0
-              return (
-                <div key={l.product_id + i} className="rounded-xl border border-surface-line">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-surface-line bg-surface-sunken/60 px-3.5 py-2">
-                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{prodLabel(l.product_id)}</p>
-                    {l.expected > 0 && variance !== 0 && (
-                      <Badge tone={variance < 0 ? 'critical' : 'info'}>{variance < 0 ? `Short ${-variance}` : `Excess +${variance}`}</Badge>
-                    )}
-                    <button type="button" onClick={() => setLines(ls => ls.filter((_, idx) => idx !== i))}
-                      className="rounded p-1 text-ink-faint hover:bg-surface-sunken hover:text-bad"><Icon name="close" className="text-[16px]" /></button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-4">
-                    {l.expected > 0 && (
-                      <div><p className="fiori-label">Expected</p><p className="fiori-input flex items-center bg-surface-sunken text-ink-soft">{formatNumber(l.expected)}</p></div>
-                    )}
-                    <Field label="Received Qty" required>
-                      <Input type="number" min={0} value={l.qty} onChange={e => setLine(i, { qty: e.target.value })} placeholder="0" />
-                    </Field>
-                    <div className="col-span-2">
-                      <p className="fiori-label">Condition</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {CONDITION_LIST.map(c => (
-                          <button key={c.key} type="button" title={c.hint} onClick={() => setLine(i, { stock_status: c.key })}
-                            className={'rounded-lg border px-2.5 py-1.5 text-xs font-semibold ' + (l.stock_status === c.key
-                              ? (c.saleable ? 'border-ok/40 bg-ok/10 text-ok' : 'border-warn/40 bg-warn/10 text-warn')
-                              : 'border-surface-line text-ink-faint hover:bg-surface-sunken')}>
-                            {c.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {locItems.length > 0 && (
-                      <Field label="Location">
-                        <Combobox items={locItems} value={l.location_id} onChange={(id: string) => setLine(i, { location_id: id })} placeholder="Bin / location" />
-                      </Field>
-                    )}
-                  </div>
-                  {/* Serial capture — optional, inline */}
-                  <div className="border-t border-surface-line px-3 py-2">
-                    <button type="button" onClick={() => setLine(i, { scanOpen: !l.scanOpen })}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-ink-soft hover:text-brand-700">
-                      <Icon name={l.scanOpen ? 'expand_less' : 'qr_code_scanner'} className="text-[16px]" />
-                      Serials {l.serials.length > 0 && <span className={'rounded px-1.5 py-0.5 tabular-nums ' + (l.serials.length >= qty && qty > 0 ? 'bg-ok/10 text-ok' : 'bg-surface-sunken text-ink-soft')}>{l.serials.length}/{qty || '—'}</span>}
-                      <span className="font-normal text-ink-faint">(optional)</span>
-                    </button>
-                    {l.scanOpen && (
-                      <div className="mt-2 space-y-2">
-                        <input value={l.scanInput ?? ''} autoComplete="off" spellCheck={false}
-                          onChange={e => setLine(i, { scanInput: e.target.value })}
-                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const v = (l.scanInput ?? '').trim(); if (v) { addSerials(i, [v]); setLine(i, { scanInput: '' }) } } }}
-                          onPaste={e => {
-                            const t = e.clipboardData.getData('text')
-                            if (!/[\r\n\t]/.test(t)) return
-                            e.preventDefault()
-                            addSerials(i, t.split(/[\r\n\t]+/).map(x => x.trim()).filter(Boolean))
-                          }}
-                          placeholder="Scan serial and press Enter — or paste a list from Excel"
-                          className="fiori-input font-mono" />
-                        {l.serials.length > 0 && (
-                          <div className="max-h-40 overflow-y-auto rounded-lg border border-surface-line">
-                            {l.serials.map((r, si) => (
-                              <div key={r.serial} className={'flex items-center justify-between gap-2 px-3 py-1.5 text-sm ' + (si ? 'border-t border-surface-line/70' : '')}>
-                                <span className="min-w-0 truncate font-mono text-ink">{r.serial}</span>
-                                <span className="flex shrink-0 items-center gap-2 text-xs text-ink-faint">
-                                  {r.original && <span title={`Scanned as ${r.original}`}>was {r.original}</span>}
-                                  {r.existingId && <span>saved</span>}
-                                  <button type="button" onClick={() => removeSerial(i, r)}
-                                    className="rounded p-0.5 text-ink-faint hover:bg-surface-sunken hover:text-bad"><Icon name="close" className="text-[15px]" /></button>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                  {lines.map((l, i) => {
+                    const qty = Number(l.qty) || 0
+                    const variance = l.expected > 0 ? qty - l.expected : 0
+                    const p = prodById[l.product_id]
+                    const done = l.serials.length > 0 && l.serials.length >= qty && qty > 0
+                    return (
+                      <div key={l.product_id + i} className="flex items-center gap-2 border-b border-surface-line/60 px-3 py-2 transition-colors last:border-0 hover:bg-surface-sunken/40">
+                        <span className="w-5 shrink-0 text-center text-xs text-ink-faint">{i + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-mono text-xs text-ink">{p?.material_code ?? '?'}</p>
+                          <p className="truncate text-xs text-ink-soft">{p?.name ?? 'Unknown product'}
+                            {l.expected > 0 && <span className="text-ink-faint"> · exp {formatNumber(l.expected)}</span>}
+                            {l.expected > 0 && variance !== 0 && <span className={variance < 0 ? 'text-bad' : 'text-warn'}> · {variance < 0 ? `Short ${-variance}` : `Excess +${variance}`}</span>}
+                          </p>
+                        </div>
+                        <Input type="number" min={0} value={l.qty} onChange={e => setLine(i, { qty: e.target.value })} placeholder="0" className="w-20 text-right" />
+                        <div className="w-40">
+                          <SelectBox value={l.stock_status} onChange={e => setLine(i, { stock_status: e.target.value })}
+                            options={CONDITION_LIST.map(c => ({ value: c.key, label: c.label }))} />
+                        </div>
+                        {locItems.length > 0 && (
+                          <div className="w-36"><Combobox items={locItems} value={l.location_id} onChange={(id: string) => setLine(i, { location_id: id })} placeholder="Location" /></div>
                         )}
+                        <Input value={l.batch} onChange={e => setLine(i, { batch: e.target.value })} placeholder="Batch" className="w-28" />
+                        <button type="button" onClick={() => setSerialLine(i)}
+                          className={'flex w-24 shrink-0 items-center justify-center gap-1 rounded-lg border py-2 text-xs font-semibold transition-colors ' +
+                            (done ? 'border-ok/40 bg-ok/10 text-ok' : l.serials.length > 0 ? 'border-brand-400/50 bg-brand-500/10 text-brand-700' : 'border-surface-line text-ink-soft hover:border-brand-300 hover:text-brand-700')}>
+                          <Icon name="qr_code_scanner" className="text-[15px]" />
+                          {l.serials.length > 0 ? <span className="tabular-nums">{l.serials.length}/{qty || '—'}</span> : <span>Add</span>}
+                        </button>
+                        <button type="button" onClick={() => setLines(ls => ls.filter((_, idx) => idx !== i))}
+                          className="w-7 shrink-0 rounded p-1 text-ink-faint hover:bg-bad/10 hover:text-bad"><Icon name="close" className="text-[16px]" /></button>
                       </div>
-                    )}
+                    )
+                  })}
+
+                  <div className="flex justify-between border-t border-surface-line px-3 py-2.5 text-xs text-ink-soft">
+                    <span>{lines.filter(l => l.product_id).length} line(s)</span>
+                    <span>Total receiving <b className="text-ink">{formatNumber(totalQty)}</b> pcs</span>
                   </div>
                 </div>
-              )
-            })}
+              </div>
+            )}
 
-            {lines.length > 0 && (
-              <p className="text-right text-sm text-ink-soft">Total receiving: <b className="text-ink">{formatNumber(totalQty)}</b> pcs · {lines.filter(l => l.product_id).length} line(s)</p>
+            {serialLine !== null && lines[serialLine] && (
+              <SerialModal
+                code={prodById[lines[serialLine].product_id]?.material_code ?? '?'}
+                name={prodById[lines[serialLine].product_id]?.name ?? ''}
+                product={prodById[lines[serialLine].product_id]}
+                qty={Number(lines[serialLine].qty) || 0}
+                initial={lines[serialLine].serials}
+                otherSerials={otherSerials(serialLine)}
+                notify={notify}
+                onCancel={() => setSerialLine(null)}
+                onOk={serials => { setLine(serialLine, { serials }); setSerialLine(null) }} />
             )}
           </div>
         )}
@@ -600,5 +568,139 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
 
       {history && <SerialHistoryModal items={history} onClose={() => { setHistory(null); onExit() }} />}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Serial popup — the SAP "Display Serial Numbers" grid. One row per received
+// unit (from the line qty); scan/paste to fill, Enter jumps to the next empty
+// row, OK saves & closes. Serials are optional: close with nothing filled and
+// the line simply carries none. Duplicates (this grid or another line) are
+// rejected on entry.
+// ---------------------------------------------------------------------------
+function SerialModal({ code, name, product, qty, initial, otherSerials, notify, onCancel, onOk }: {
+  code: string; name: string; product?: ProductLite; qty: number
+  initial: SRow[]; otherSerials: Set<string>; notify: Notify
+  onCancel: () => void; onOk: (serials: SRow[]) => void
+}) {
+  const [rows, setRows] = useState<SRow[]>(() => {
+    const filled = initial.map(s => ({ ...s }))
+    const blanks = Array.from({ length: Math.max(0, qty - filled.length) }, () => ({ serial: '' } as SRow))
+    const all = [...filled, ...blanks]
+    return all.length ? all : [{ serial: '' }]
+  })
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  useEffect(() => {
+    const b = rows.findIndex(r => !r.serial.trim())
+    inputRefs.current[b >= 0 ? b : 0]?.focus()
+    // eslint-disable-next-line
+  }, [])
+
+  // Factory prefix (china code / barcode) → material code, per product master.
+  const norm = (raw: string): SRow => normaliseSerial(raw, product ?? {})
+  const setVal = (i: number, v: string) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, serial: v } : r))
+
+  const focusNext = (from: number) => {
+    const n = rows.findIndex((r, idx) => idx > from && !r.serial.trim())
+    const t = n >= 0 ? n : (from + 1 < rows.length ? from + 1 : -1)
+    if (t >= 0) inputRefs.current[t]?.focus()
+  }
+
+  const commit = (i: number): boolean => {
+    const r = norm(rows[i].serial)
+    if (r.serial !== rows[i].serial) setRows(rs => rs.map((x, idx) => idx === i ? { ...x, serial: r.serial, original: r.original } : x))
+    if (!r.serial) return true
+    const v = r.serial.toLowerCase()
+    const dup = rows.some((x, idx) => idx !== i && norm(x.serial).serial.toLowerCase() === v)
+    if (dup || otherSerials.has(v)) { notify('error', `Serial already used: ${r.serial}`); setVal(i, ''); return false }
+    return true
+  }
+
+  // Paste an Excel column / multi-line list: fill this row then the next empties.
+  const pasteFill = (i: number, e: RClip<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text')
+    if (!/[\r\n\t]/.test(text)) return
+    e.preventDefault()
+    const vals = text.split(/[\r\n\t]+/).map(s => norm(s).serial).filter(Boolean)
+    setRows(rs => {
+      const out = [...rs]
+      let idx = i
+      for (const v of vals) {
+        while (idx < out.length && out[idx].serial.trim()) idx++
+        if (idx >= out.length) out.push({ serial: '' })
+        out[idx] = { ...out[idx], serial: v }
+        idx++
+      }
+      return out
+    })
+  }
+
+  const filledCount = rows.filter(r => r.serial.trim()).length
+
+  const ok = () => {
+    const normed = rows.map(r => {
+      if (!r.serial.trim()) return r
+      const n = norm(r.serial)
+      return { ...r, serial: n.serial, original: r.original ?? n.original }
+    })
+    const keep = normed.filter(r => r.serial.trim())
+    for (let i = 0; i < keep.length; i++) {
+      const v = keep[i].serial.toLowerCase()
+      if (keep.some((x, idx) => idx !== i && x.serial.toLowerCase() === v)) { notify('error', `Duplicate serial: ${keep[i].serial}`); return }
+      if (otherSerials.has(v)) { notify('error', `Serial already on another line: ${keep[i].serial}`); return }
+    }
+    onOk(keep)
+  }
+
+  return (
+    <Modal open onClose={onCancel} title={`Serial numbers · ${code}`} size="md">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <p className="min-w-0 truncate text-ink-soft">{name}</p>
+          <span className="shrink-0 text-xs text-ink-faint">{filledCount}/{qty || rows.length} filled</span>
+        </div>
+        <div className="max-h-[52vh] overflow-y-auto rounded-xl border border-surface-line">
+          <table className="w-full border-collapse text-sm">
+            <thead className="sticky top-0 z-10 bg-surface">
+              <tr className="border-b border-surface-line text-[11px] uppercase tracking-wide text-ink-faint">
+                <th className="w-12 px-3 py-2.5 text-left font-semibold">#</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Serial No</th>
+                <th className="w-10 px-3 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="border-b border-surface-line/60 last:border-0">
+                  <td className="px-3 py-1.5 text-ink-faint tabular-nums">{i + 1}</td>
+                  <td className="px-3 py-1.5">
+                    <input ref={el => { inputRefs.current[i] = el }} value={r.serial} autoComplete="off" spellCheck={false}
+                      onChange={e => setVal(i, e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (commit(i)) focusNext(i) } }}
+                      onPaste={e => pasteFill(i, e)}
+                      placeholder="Scan or paste serial(s)…"
+                      className="w-full rounded-md border border-transparent bg-transparent px-2.5 py-1.5 font-mono text-sm outline-none transition-colors focus:border-brand-500 focus:bg-surface focus:ring-2 focus:ring-brand-500/25" />
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    {r.serial && <button type="button" onClick={() => setVal(i, '')} className="text-ink-faint hover:text-bad"><Icon name="close" className="text-[15px]" /></button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between">
+          <button type="button" onClick={() => setRows(rs => [...rs, { serial: '' }])}
+            className="flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline">
+            <Icon name="add" className="text-[16px]" /> Add row
+          </button>
+          <span className="hidden text-xs text-ink-faint sm:block">Enter jumps to the next row · paste a column from Excel</span>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-surface-line pt-3">
+          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button icon="check" onClick={ok}>OK</Button>
+        </div>
+      </div>
+    </Modal>
   )
 }

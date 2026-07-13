@@ -71,13 +71,20 @@ export function CreatableCombobox({ items, value, onChange, onCreate, placeholde
               <p className="px-3 py-4 text-center text-sm text-ink-faint">No matches</p>
             ) : matches.map((p, i) => {
               const on = p.id === value
+              const hasSub = !!p.sublabel
               return (
                 <button key={p.id} type="button" onMouseEnter={() => setActive(i)} onMouseDown={e => { e.preventDefault(); pick(p) }}
                   className={cn('flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
                     i === active ? 'bg-brand-500/10' : 'hover:bg-surface-sunken')}>
-                  <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[12px] font-semibold',
-                    on ? 'bg-brand-500/15 text-brand-700' : 'bg-surface-sunken text-ink-soft')}>{p.label}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{p.sublabel ?? ''}</span>
+                  {hasSub ? (
+                    <>
+                      <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[12px] font-semibold',
+                        on ? 'bg-brand-500/15 text-brand-700' : 'bg-surface-sunken text-ink-soft')}>{p.label}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{p.sublabel}</span>
+                    </>
+                  ) : (
+                    <span className={cn('min-w-0 flex-1 truncate text-sm text-ink', on ? 'font-semibold' : 'font-medium')}>{p.label}</span>
+                  )}
                   {on && <Icon name="check" className="shrink-0 text-[17px] text-brand-600" />}
                 </button>
               )

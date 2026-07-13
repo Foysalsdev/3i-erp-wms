@@ -27,22 +27,22 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
     <header className="sticky top-0 z-30 border-b border-surface-line bg-surface">
       {/* Gold brand strip — matches the accent bar on whirlpool-bangladesh.com's header/hero. */}
       <div className="h-[3px] w-full bg-brand-grad" />
-      <div className="flex h-[calc(var(--header-h)-3px)] items-center gap-2 px-3 sm:px-5">
-      <button onClick={onOpenMobileNav} className="rounded-lg p-2 text-ink-soft hover:bg-surface-sunken lg:hidden"><Icon name="menu" /></button>
-      <button onClick={toggleSidebar} className="hidden rounded-lg p-2 text-ink-soft hover:bg-surface-sunken lg:block"><Icon name="menu_open" /></button>
+      <div className="flex h-[calc(var(--header-h)-3px)] items-center gap-2 px-3 sm:px-4">
+      <button onClick={onOpenMobileNav} aria-label="Open menu" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-soft hover:bg-surface-sunken lg:hidden"><Icon name="menu" /></button>
+      <button onClick={toggleSidebar} aria-label="Toggle sidebar" className="hidden h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-soft hover:bg-surface-sunken lg:grid"><Icon name="menu_open" /></button>
 
       <button onClick={() => setSearch(true)}
-        className="flex flex-1 max-w-md items-center gap-2 rounded-lg border border-surface-line bg-surface-sunken px-3.5 py-2 text-sm text-ink-faint transition hover:border-brand-300">
+        className="flex h-9 flex-1 max-w-md items-center gap-2 rounded-lg border border-surface-line bg-surface-sunken px-3.5 text-sm text-ink-faint transition-colors hover:border-brand-300">
         <Icon name="search" className="text-[19px]" /> <span className="truncate">Search across modules…</span>
         <kbd className="ml-auto hidden rounded border border-surface-line bg-surface px-1.5 py-0.5 text-[10px] font-semibold sm:block">Ctrl K</kbd>
       </button>
 
-      <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+      <div className="ml-auto flex items-center gap-1">
         <NotificationBell />
 
         <div className="relative">
-          <button onClick={() => setMenu(m => !m)} className="flex items-center gap-2 rounded-full p-0.5 ring-1 ring-surface-line hover:ring-brand-300">
-            <Avatar profile={profile} className="h-9 w-9" />
+          <button onClick={() => setMenu(m => !m)} aria-label="Account menu" className="grid h-9 w-9 place-items-center rounded-full ring-1 ring-surface-line hover:ring-brand-300">
+            <Avatar profile={profile} className="h-8 w-8" />
           </button>
           {menu && (
             <>

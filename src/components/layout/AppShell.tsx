@@ -2,6 +2,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { Footer } from './Footer'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -32,25 +33,28 @@ export function AppShell() {
 
   useUI()
   return (
-    <div className="flex h-full overflow-hidden">
-      <div className="hidden lg:block"><Sidebar /></div>
-      {mobileNav && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNav(false)} />
-          <div className="absolute left-0 top-0 h-full"><Sidebar mobile onNavigate={() => setMobileNav(false)} /></div>
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="hidden lg:block"><Sidebar /></div>
+        {mobileNav && (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNav(false)} />
+            <div className="absolute left-0 top-0 h-full"><Sidebar mobile onNavigate={() => setMobileNav(false)} /></div>
+          </div>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar onOpenMobileNav={() => setMobileNav(true)} />
+          <main className="flex-1 overflow-y-auto p-5 sm:p-7">
+            {/* Page chunk loads here (nav stays visible) with the same Spinner the
+                pages use for data loading, so route-load and data-load look like
+                one continuous loader instead of a whirlpool then a spinner. */}
+            <ErrorBoundary key={pathname}>
+              <Suspense fallback={<Spinner label="Loading…" />}><Outlet /></Suspense>
+            </ErrorBoundary>
+          </main>
         </div>
-      )}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onOpenMobileNav={() => setMobileNav(true)} />
-        <main className="flex-1 overflow-y-auto p-5 sm:p-7">
-          {/* Page chunk loads here (nav stays visible) with the same Spinner the
-              pages use for data loading, so route-load and data-load look like
-              one continuous loader instead of a whirlpool then a spinner. */}
-          <ErrorBoundary key={pathname}>
-            <Suspense fallback={<Spinner label="Loading…" />}><Outlet /></Suspense>
-          </ErrorBoundary>
-        </main>
       </div>
+      <Footer />
     </div>
   )
 }

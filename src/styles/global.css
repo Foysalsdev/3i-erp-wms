@@ -56,6 +56,10 @@ h1,h2,h3,h4 { @apply font-sans font-semibold tracking-tight; }
   /* shadow-card (not shadow-soft) gives every card real, if quiet, depth —
      shadow-soft was so faint the whole app read as flat paper. */
   .fiori-card { @apply rounded-xl bg-surface ring-1 ring-surface-line shadow-card transition-shadow duration-200; }
+  /* Opt-in for clickable/product-tile style boxes (Whirlpool site's hover
+     state: ring brightens to gold, shadow lifts) — not the default so static
+     forms/tables don't get an unwanted hover jitter. */
+  .fiori-card-tile { @apply rounded-xl bg-surface ring-1 ring-surface-line shadow-card transition-all duration-200 hover:shadow-pop hover:ring-brand-300/70 cursor-pointer; }
 }
 
 /* Minimal number fields: no up/down spinners */

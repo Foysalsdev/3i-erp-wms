@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { formatNumber, formatDateTime } from '@/lib/utils'
 import { movementLabel } from '@/lib/movements'
 
@@ -55,7 +55,7 @@ export function StockMovementHistory({ movementTypes, emptyTitle }: { movementTy
     { key: 'ref', header: 'Reference', accessor: r => r.reference_no ?? '—' }
   ]
 
-  if (loading) return <Spinner label="Loading movements…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   return (
     <div className="space-y-4">
       <div className="w-full sm:w-72"><SearchBar value={q} onChange={setQ} placeholder="Search movements…" /></div>

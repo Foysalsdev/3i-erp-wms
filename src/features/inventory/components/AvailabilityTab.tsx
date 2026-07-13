@@ -4,7 +4,7 @@ import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { SearchBar } from '@/components/shared/SearchBar'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { formatNumber } from '@/lib/utils'
 import { fetchStockAvailability, type StockAvailability } from '@/lib/stockAvailability'
 
@@ -75,7 +75,7 @@ export function AvailabilityTab() {
         a delivery challan is issued.
       </p>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {loading ? <Spinner label="Loading availability…" /> : (
+        {loading ? <TableSkeleton rows={6} cols={4} /> : (
           <DataTable fill columns={columns} rows={filtered} rowKey={r => r.productId} emptyTitle="No stock on hand" />
         )}
       </Card>

@@ -7,7 +7,8 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
-import { Spinner, EmptyState } from '@/components/ui/States'
+import { EmptyState } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Combobox } from '@/components/shared/Combobox'
 import { formatNumber, formatDate } from '@/lib/utils'
@@ -103,7 +104,7 @@ export function ReceiveTab() {
       onExit={() => { setWizard(null); loadQueue() }} />
   }
 
-  if (queueLoading) return <Spinner label="Loading receiving queue…" />
+  if (queueLoading) return <TableSkeleton rows={5} cols={4} />
 
   return (
     <div className="space-y-5">
@@ -368,7 +369,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
     } finally { setSaving(false) }
   }
 
-  if (loading) return <Spinner label="Loading receipt…" />
+  if (loading) return <TableSkeleton rows={5} cols={4} />
 
   const supItems = suppliers.map(s => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))
   const whItems = warehouses.map(w => ({ id: w.id, label: w.code, sublabel: w.name }))

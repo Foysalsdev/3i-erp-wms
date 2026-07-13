@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { initials } from '@/lib/utils'
 import { NotesPanel, AttachmentsPanel, TimelinePanel } from './Panels'
 import { CourierRatesPanel } from './CourierRatesPanel'
@@ -34,7 +35,7 @@ export function MasterProfile({ def, record, onEdit, onBack, canEdit, initialTab
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h2 className="font-display text-lg font-bold text-ink">{str(record[def.nameField])}</h2>
-              <Badge tone={['active', 'in_use'].includes(record.status ?? '') ? 'positive' : 'neutral'}>{record.status}</Badge>
+              <StatusBadge status={record.status} />
             </div>
             <p className="text-sm text-ink-soft">{def.codeField}: <b className="text-ink">{str(record[def.codeField])}</b>{def.subField && record[def.subField] ? ` · ${str(record[def.subField])}` : ''}</p>
           </div>

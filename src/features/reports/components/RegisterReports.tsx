@@ -5,7 +5,7 @@ import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
@@ -57,7 +57,7 @@ export function InboundReport() {
     { key: 'total_qty', header: 'Qty', className: 'text-right', accessor: r => formatNumber(r.total_qty) },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'approved' ? 'positive' : r.status === 'cancelled' ? 'negative' : 'info'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const totalQty = data.reduce((s, r) => s + r.total_qty, 0)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -96,7 +96,7 @@ export function AssetReport() {
     { key: 'assigned_to', header: 'Assigned', accessor: r => r.assigned_to },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'active' ? 'positive' : 'neutral'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const totalCost = data.reduce((s, r) => s + r.purchase_cost, 0)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -131,7 +131,7 @@ export function HrReport() {
     { key: 'joining_date', header: 'Joined', accessor: r => r.joining_date },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'active' ? 'positive' : 'neutral'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const byDept = data.reduce((m: Record<string, number>, r) => { m[r.department] = (m[r.department] ?? 0) + 1; return m }, {})
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -218,7 +218,7 @@ export function DeliveryRegisterReport() {
     { key: 'qty', header: 'Qty', className: 'text-right', accessor: r => formatNumber(r.qty) },
     { key: 'status', header: 'Status', render: r => <Badge tone={r.status === 'issued' ? 'positive' : r.status === 'cancelled' ? 'negative' : 'neutral'}>{r.status}</Badge> }
   ]
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const challanCount = new Set(filtered.map(r => r.challan_no)).size
   const totalQty = filtered.reduce((s, r) => s + r.qty, 0)
   const courierCount = new Set(rows.filter(r => r.mode === 'Courier').map(r => r.challan_no)).size

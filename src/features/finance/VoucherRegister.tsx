@@ -8,6 +8,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { SelectBox } from '@/components/ui/SelectBox'
@@ -141,7 +142,7 @@ export function VoucherRegister() {
     { key: 'expense_type', header: 'Type', render: r => r.expense_type || '—' },
     { key: 'vendor', header: 'Vendor/Payee', render: r => r.payee_name || '—' },
     { key: 'amount', header: 'Amount', accessor: r => formatNumber(r.amount, 2), className: 'text-right' },
-    { key: 'voucher_status', header: 'Voucher Status', render: r => <Badge tone={VOUCHER_STATUS_TONE[r.voucher_status] || 'neutral'}>{VOUCHER_STATUS_LABEL[r.voucher_status] || r.voucher_status}</Badge> },
+    { key: 'voucher_status', header: 'Voucher Status', render: r => <StatusBadge status={r.voucher_status} label={VOUCHER_STATUS_LABEL[r.voucher_status]} /> },
     {
       key: 'submission', header: 'HO Submission', render: (r: Expense) => {
         const st = submissionStatus(r)

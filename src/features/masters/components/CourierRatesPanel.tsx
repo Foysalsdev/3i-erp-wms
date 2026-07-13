@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 
 // Per-category rate card for one courier. Couriers charge per piece and the
 // price differs by product size class (category); a blank rate means the
@@ -63,7 +63,7 @@ export function CourierRatesPanel({ courierId }: { courierId: string }) {
     }
   }
 
-  if (loading) return <Spinner label="Loading rate card…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
 
   return (
     <div className="space-y-4">

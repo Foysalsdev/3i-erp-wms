@@ -4,7 +4,8 @@ import type { Tables } from '@/types/database.types'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
-import { Spinner, EmptyState } from '@/components/ui/States'
+import { EmptyState } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, type RepCol } from '../export'
@@ -180,7 +181,7 @@ export function DailyInOutReport() {
     }
   }
 
-  if (loading) return <Spinner label="Building report from stock movements…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
 
   const th = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-faint whitespace-nowrap'
   const td = 'px-3 py-1.5 whitespace-nowrap'

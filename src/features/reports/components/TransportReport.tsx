@@ -7,7 +7,7 @@ type ItemSlice = Pick<Tables<'delivery_challan_items'>, 'challan_id' | 'product_
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatDate, formatNumber } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
@@ -120,7 +120,7 @@ export function TransportReport() {
     { key: 'status', header: 'Status', accessor: r => r.status }
   ]
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={6} />
   const totalQty = rows.reduce((s, r) => s + r.total, 0)
   const totalCost = rows.reduce((s, r) => s + r.cost, 0)
   return (

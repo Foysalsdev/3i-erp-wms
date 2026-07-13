@@ -4,7 +4,7 @@ import type { Tables, TablesInsert } from '@/types/database.types'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { normaliseSerial, describeSerialHistory, type SerialHistoryItem } from '@/lib/serials'
 import { SerialHistoryModal } from '@/components/shared/SerialHistoryModal'
 
@@ -163,7 +163,7 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: {
 
   return (
     <Modal open onClose={onClose} title={`Receive Serials — ${grn.grn_no}`} size="lg">
-      {loading ? <Spinner label="Loading…" /> : (
+      {loading ? <TableSkeleton rows={6} cols={4} /> : (
         <div className="space-y-4">
           <p className="text-sm text-ink-soft">
             Scan with a barcode gun (Enter after each scan) or paste a column straight from Excel.

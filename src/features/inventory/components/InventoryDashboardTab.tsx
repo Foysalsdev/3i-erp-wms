@@ -4,7 +4,8 @@ import { useAuth } from '@/store/auth'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner, EmptyState } from '@/components/ui/States'
+import { EmptyState } from '@/components/ui/States'
+import { CardSkeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { formatNumber } from '@/lib/utils'
 
 export function InventoryDashboardTab() {
@@ -30,7 +31,12 @@ export function InventoryDashboardTab() {
     })()
   }, [clientId])
 
-  if (loading) return <Spinner />
+  if (loading) return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{[0, 1, 2].map(i => <CardSkeleton key={i} />)}</div>
+      <TableSkeleton rows={6} cols={4} />
+    </div>
+  )
   const cards = [
     { label: 'Good Stock', val: agg.good, icon: 'check_circle', tone: 'bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400' },
     { label: 'Damaged', val: agg.damaged, icon: 'report', tone: 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400' },

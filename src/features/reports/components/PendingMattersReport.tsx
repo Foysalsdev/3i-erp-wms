@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
-import { Spinner, EmptyState } from '@/components/ui/States'
+import { EmptyState } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { fetchAllPendingMatters, type PendingMatter } from '@/lib/pending'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
@@ -59,7 +60,7 @@ export function PendingMattersReport() {
     age: m.ageDays === 0 ? 'today' : `${m.ageDays}d`, flag: m.overdue ? 'OVERDUE' : 'open'
   }))
 
-  if (!matters) return <Spinner label="Evaluating pending matters…" />
+  if (!matters) return <TableSkeleton rows={8} cols={6} />
 
   const overdue = matters.filter(m => m.overdue).length
 

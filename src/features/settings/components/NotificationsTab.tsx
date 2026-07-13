@@ -4,7 +4,7 @@ import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
-import { Spinner } from '@/components/ui/States'
+import { SkeletonText } from '@/components/ui/Skeleton'
 import {
   loadSettings, saveSettings, DEFAULT_NOTIFICATIONS, type NotificationSettings
 } from '@/lib/settings'
@@ -51,7 +51,7 @@ export function NotificationsTab({ canEdit }: { canEdit: boolean }) {
     } finally { setSaving(false) }
   }
 
-  if (loading) return <Card className="p-2"><Spinner label="Loading…" /></Card>
+  if (loading) return <Card className="p-5"><SkeletonText lines={6} /></Card>
 
   return (
     <Card className="p-5">

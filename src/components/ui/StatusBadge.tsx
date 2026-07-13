@@ -43,6 +43,7 @@ const STATUS_TONE: Record<string, StatusTone> = {
   packed: 'info', loading: 'info', loaded: 'info', allocated: 'info', booked: 'info',
   assigned: 'info', in_transit: 'info', dispatched: 'info', issued: 'info', posted: 'info',
   reserved: 'info', collected: 'info', partial: 'info', partially_delivered: 'info', ready: 'info',
+  in_use: 'info',
   // Done / good
   approved: 'success', verified: 'success', received: 'success', completed: 'success',
   delivered: 'success', fully_delivered: 'success', closed: 'success', paid: 'success',

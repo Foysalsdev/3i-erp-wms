@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
-import { Spinner } from '@/components/ui/States'
+import { SkeletonText } from '@/components/ui/Skeleton'
 import {
   loadSettings, saveSettings, DEFAULT_BARCODE, type BarcodeSettings
 } from '@/lib/settings'
@@ -39,7 +39,7 @@ export function BarcodeTab({ canEdit }: { canEdit: boolean }) {
     } finally { setSaving(false) }
   }
 
-  if (loading) return <Card className="p-2"><Spinner label="Loading…" /></Card>
+  if (loading) return <Card className="p-5"><SkeletonText lines={6} /></Card>
   const sample = `${form.prefix}1234567890`
 
   return (

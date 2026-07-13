@@ -8,7 +8,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { DataTable, type Column } from '@/components/ui/DataTable'
-import { Spinner } from '@/components/ui/States'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, type RepCol } from '@/features/reports/export'
@@ -131,7 +131,7 @@ export default function SalesmanBoard() {
     { key: 'available', header: 'Available', className: 'text-right', accessor: r => `${formatNumber(r.available)}${r.uom ? ' ' + r.uom : ''}` }
   ]
 
-  if (loading) return <Spinner label="Loading…" />
+  if (loading) return <TableSkeleton rows={8} cols={5} />
   const cards = [
     { icon: 'receipt_long', label: 'My Orders', value: kpi.total, tone: 'text-brand-600' },
     { icon: 'today', label: 'Today', value: kpi.todayCount, tone: 'text-brand-600' },

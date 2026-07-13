@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { TableSkeleton } from '@/components/ui/Skeleton'
+import { Segmented } from '@/components/ui/Segmented'
 import { formatNumber, formatDate } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, ReportToolbar, type RepCol } from '../export'
 
@@ -227,11 +228,8 @@ export function DeliveryRegisterReport() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ReportToolbar count={filtered.length} onCSV={() => downloadCSV('Delivery Register', cols, filtered)} onPDF={() => downloadReportPDF('Delivery Register', `Which transport/courier carried what · ${challanCount} deliveries`, cols, filtered)}>
-        <div className="flex rounded-lg border border-surface-line p-0.5 text-sm">
-          <button onClick={() => setMode('all')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'all' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>All</button>
-          <button onClick={() => setMode('transport')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'transport' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Transport</button>
-          <button onClick={() => setMode('courier')} className={'rounded-md px-3 py-1 font-medium ' + (mode === 'courier' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Courier</button>
-        </div>
+        <Segmented value={mode} onChange={setMode} size="sm"
+          options={[{ value: 'all', label: 'All' }, { value: 'transport', label: 'Transport' }, { value: 'courier', label: 'Courier' }]} />
       </ReportToolbar>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

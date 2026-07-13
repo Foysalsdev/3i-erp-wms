@@ -6,6 +6,7 @@ import { useUI } from '@/store/ui'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/States'
 import { TableSkeleton } from '@/components/ui/Skeleton'
+import { Button } from '@/components/ui/Button'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, type RepCol } from '../export'
@@ -205,9 +206,9 @@ export function DailyInOutReport() {
           <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} className="rounded" /> All SKUs
         </label>
         <div className="ml-auto flex gap-2">
-          <button onClick={exportExcel} className="inline-flex items-center gap-1 rounded-lg bg-brand-400 px-3 py-1.5 text-sm font-semibold text-coal-900 hover:bg-brand-300">Excel (full report)</button>
-          <button onClick={() => exportCsvPdf('csv')} className="rounded-lg border border-surface-line px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-sunken">CSV</button>
-          <button onClick={() => exportCsvPdf('pdf')} className="rounded-lg border border-surface-line px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-sunken">PDF</button>
+          <Button size="sm" icon="table_view" onClick={exportExcel}>Excel</Button>
+          <Button size="sm" variant="secondary" icon="download" onClick={() => exportCsvPdf('csv')}>CSV</Button>
+          <Button size="sm" variant="secondary" icon="picture_as_pdf" onClick={() => exportCsvPdf('pdf')}>PDF</Button>
         </div>
       </div>
 

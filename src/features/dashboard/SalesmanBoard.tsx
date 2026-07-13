@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { TableSkeleton } from '@/components/ui/Skeleton'
+import { Segmented } from '@/components/ui/Segmented'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { formatNumber, formatDate, formatDateTime } from '@/lib/utils'
 import { downloadCSV, downloadReportPDF, type RepCol } from '@/features/reports/export'
@@ -157,10 +158,8 @@ export default function SalesmanBoard() {
       </div>
 
       {/* Orders / Saleable Stock toggle */}
-      <div className="flex rounded-lg border border-surface-line p-0.5 text-sm w-fit">
-        <button onClick={() => setMode('orders')} className={'rounded-md px-4 py-1.5 font-medium ' + (mode === 'orders' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>My Orders</button>
-        <button onClick={() => setMode('stock')} className={'rounded-md px-4 py-1.5 font-medium ' + (mode === 'stock' ? 'bg-brand-500 text-white' : 'text-ink-soft')}>Saleable Stock</button>
-      </div>
+      <Segmented value={mode} onChange={setMode}
+        options={[{ value: 'orders', label: 'My Orders' }, { value: 'stock', label: 'Saleable Stock' }]} />
 
       {mode === 'orders' ? (
         <>

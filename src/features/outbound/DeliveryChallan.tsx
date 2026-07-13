@@ -642,7 +642,7 @@ export function ChallanForm({ record, lockSo, customers, warehouses, vehicles, p
               <Combobox items={sos.map(o => ({ id: o.id, label: o.so_no, sublabel: customers.find(c => c.id === o.customer_id)?.name }))} value={h.sales_order_id ?? ''} onChange={selectSO} placeholder="Search sales order by SO no" />
             </Field>
             <Field label="Customer" required>
-              <Combobox items={customers.map(c => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''}
+              <Combobox items={customers.map(c => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} mruKey="customer"
                 onChange={(id: string) => { const c = customers.find(x => x.id === id); set({ customer_id: id, bill_to_address: c?.billing_address || '', ship_to_address: c?.shipping_address || '' }) }}
                 placeholder="Search customer by code or name" />
             </Field>

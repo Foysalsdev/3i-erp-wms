@@ -202,9 +202,9 @@ export function DocModule({ config, permModule = 'inbound' }: { config: DocConfi
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {party && (
-              <Field label={partyLabel}><Combobox value={str(header[partyField])} disabled={readOnly} options={partyOpts.map(o => ({ id: o.id, label: o.label, sub: o.sub }))} placeholder={`Search ${partyLabel.toLowerCase()}…`} onChange={v => setHeader({ ...header, [partyField]: v })} /></Field>
+              <Field label={partyLabel}><Combobox value={str(header[partyField])} disabled={readOnly} options={partyOpts.map(o => ({ id: o.id, label: o.label, sub: o.sub }))} mruKey={`party-${party}`} placeholder={`Search ${partyLabel.toLowerCase()}…`} onChange={v => setHeader({ ...header, [partyField]: v })} /></Field>
             )}
-            <Field label="Warehouse" required><Combobox value={header.warehouse_id ?? ''} disabled={readOnly} options={warehouses.map(w => ({ id: w.id, label: w.label, sub: w.sub }))} placeholder="Search warehouse…" onChange={v => setHeader({ ...header, warehouse_id: v })} /></Field>
+            <Field label="Warehouse" required><Combobox value={header.warehouse_id ?? ''} disabled={readOnly} options={warehouses.map(w => ({ id: w.id, label: w.label, sub: w.sub }))} mruKey="warehouse" placeholder="Search warehouse…" onChange={v => setHeader({ ...header, warehouse_id: v })} /></Field>
             <Field label="Date"><Input type="date" disabled={readOnly} value={str(header[config.dateField]).slice(0, 10)} onChange={e => setHeader({ ...header, [config.dateField]: e.target.value })} /></Field>
             {config.hasExpected && <Field label="Expected Date"><Input type="date" disabled={readOnly} value={str(header.expected_date).slice(0, 10)} onChange={e => setHeader({ ...header, expected_date: e.target.value })} /></Field>}
             {config.source && !readOnly && !editId && (

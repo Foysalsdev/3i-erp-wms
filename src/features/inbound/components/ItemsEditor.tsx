@@ -41,7 +41,7 @@ export function ItemsEditor({ items, setItems, products, locations, cols, disabl
           <tbody>
             {items.map((row, i) => (
               <tr key={i} className="border-b border-surface-line/70 align-top">
-                <td className="px-2 py-1.5"><Combobox value={row.product_id} disabled={disabled} options={prods} placeholder="Search product…" onChange={v => update(i, { product_id: v })} /></td>
+                <td className="px-2 py-1.5"><Combobox value={row.product_id} disabled={disabled} options={prods} mruKey="product" placeholder="Search product…" onChange={v => update(i, { product_id: v })} /></td>
                 {cols.fromTo && <td className="px-2 py-1.5"><Combobox value={row.from_location_id} disabled={disabled} options={loc} placeholder="From…" onChange={v => update(i, { from_location_id: v })} /></td>}
                 {cols.fromTo && <td className="px-2 py-1.5"><Combobox value={row.to_location_id} disabled={disabled} options={loc} placeholder="To…" onChange={v => update(i, { to_location_id: v })} /></td>}
                 {cols.location && <td className="px-2 py-1.5"><Combobox value={row.location_id} disabled={disabled} options={loc} placeholder="Location…" onChange={v => update(i, { location_id: v })} /></td>}

@@ -430,7 +430,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
         {step === 1 && (
           <div className="space-y-3">
             <Field label="Add product">
-              <Combobox items={prodItems} value=""
+              <Combobox items={prodItems} value="" mruKey="product"
                 onChange={(id: string) => {
                   if (!id) return
                   if (lines.some(l => l.product_id === id)) { notify('info', 'Product already on the receipt'); return }

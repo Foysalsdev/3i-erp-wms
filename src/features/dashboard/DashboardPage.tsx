@@ -5,7 +5,7 @@ import { useAuth } from '@/store/auth'
 import SalesmanBoard from './SalesmanBoard'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
-import { Spinner } from '@/components/ui/States'
+import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton'
 import { formatNumber, formatDateTime, cn } from '@/lib/utils'
 import { OPERATIONS } from '@/features/operations/registry'
 import { PendingMattersPanel } from '@/components/shared/PendingMattersPanel'
@@ -17,25 +17,36 @@ import type { Tables } from '@/types/database.types'
 
 type LedgerEntry = Pick<Tables<'inventory_ledger'>, 'movement_type' | 'qty_in' | 'qty_out' | 'created_at' | 'reference_no'>
 
-const COLORS = ['#16a34a', '#dc2626', '#ea7a0c']
-const AGING_COLORS = ['#16a34a', '#eeb111', '#ea7a0c', '#dc2626', '#8c8f94']
+// Enterprise chart palette — restrained, not a wall of green. Inbound reads
+// cool (blue), outbound reads warm (gold); condition/aging use a single
+// semantic ramp each so colour always means severity, never decoration.
+const CHART_IN = '#2563eb'   // inbound — calm blue
+const CHART_OUT = '#cd980f'  // outbound — brand gold
+const COLORS = ['#16a34a', '#dc2626', '#f59e0b']            // good · damaged · quarantine
+const AGING_COLORS = ['#64748b', '#38bdf8', '#f59e0b', '#ef4444', '#cbd5e1'] // fresh→stale escalation
+const AXIS = 'rgb(var(--ink-faint))'
+const TOOLTIP_STYLE = { borderRadius: 10, border: '1px solid rgba(0,0,0,0.06)', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.12)' } as const
 const BUCKETS = ['0–30', '31–60', '61–90', '90+', 'Unknown']
 
 const keyOf = (p: string, w: string, l: string | null) => `${p}|${w}|${l ?? ''}`
 const daysSince = (iso?: string | null) => iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)) : null
 const bucketOf = (age: number | null) => age === null ? 'Unknown' : age <= 30 ? '0–30' : age <= 60 ? '31–60' : age <= 90 ? '61–90' : '90+'
 
+// Unified KPI tile: quiet icon chip top-left, large value, label, optional
+// hint. Identical geometry across every card so the row reads as one unit.
 function Kpi({ icon, label, value, hint, hintTone = 'muted' }:
   { icon: string; label: string; value: string; hint?: string; hintTone?: 'muted' | 'ok' | 'warn' }) {
-  const tone = hintTone === 'ok' ? 'text-ok' : hintTone === 'warn' ? 'text-warn' : 'text-ink-faint'
+  const tone = hintTone === 'ok' ? 'text-green-600 dark:text-green-400'
+    : hintTone === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-ink-soft'
   return (
-    <Card className="p-5">
-      <div className="flex items-center gap-2 text-xs font-medium text-ink-soft">
-        <Icon name={icon} className="text-[16px] text-brand-600" /> {label}
-      </div>
-      <p className="mt-2.5 font-display text-[26px] font-bold leading-none text-ink">{value}</p>
-      {hint && <p className={`mt-2 text-[11px] ${tone}`}>{hint}</p>}
-    </Card>
+    <div className="fiori-card p-5">
+      <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-sunken text-ink-soft">
+        <Icon name={icon} className="text-[19px]" />
+      </span>
+      <p className="mt-4 font-display text-[28px] font-bold leading-none tracking-tight text-ink tabular-nums">{value}</p>
+      <p className="mt-2 text-[13px] font-medium text-ink-soft">{label}</p>
+      {hint && <p className={`mt-0.5 text-[11px] ${tone}`}>{hint}</p>}
+    </div>
   )
 }
 
@@ -74,15 +85,38 @@ function OpTile({ icon, label, value, to, alert }:
   { icon: string; label: string; value: number; to: string; alert?: boolean }) {
   return (
     <Link to={to}
-      className="group flex items-center justify-between rounded-card border border-surface-line bg-surface p-4 transition hover:border-brand-200 hover:shadow-card">
-      <div className="flex items-center gap-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${alert ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400' : 'bg-surface-sunken text-ink-soft'}`}>
+      className="group flex items-center justify-between rounded-xl border border-surface-line bg-surface px-4 py-3.5 transition-colors hover:bg-surface-sunken">
+      <span className="flex items-center gap-3">
+        <span className={cn('grid h-9 w-9 place-items-center rounded-lg',
+          alert ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400' : 'bg-surface-sunken text-ink-soft')}>
           <Icon name={icon} className="text-[18px]" />
         </span>
-        <span className="text-sm font-medium text-ink-soft">{label}</span>
-      </div>
-      <span className={`font-display text-xl font-bold ${alert ? 'text-amber-600' : 'text-ink'}`}>{formatNumber(value)}</span>
+        <span className="text-[13px] font-medium text-ink">{label}</span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className={cn('font-display text-xl font-bold tabular-nums', alert ? 'text-amber-600 dark:text-amber-400' : 'text-ink')}>{formatNumber(value)}</span>
+        <Icon name="chevron_right" className="text-[18px] text-ink-faint transition-transform group-hover:translate-x-0.5" />
+      </span>
     </Link>
+  )
+}
+
+// Skeleton that mirrors the dashboard's real shape — header, KPI row, charts —
+// so the layout holds still while data loads. Calmer than a centred spinner.
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-end justify-between gap-3 border-b border-surface-line pb-5">
+        <div className="space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-72" /></div>
+        <Skeleton className="h-9 w-40" />
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-72 rounded-xl" />)}
+      </div>
+    </div>
   )
 }
 
@@ -193,7 +227,7 @@ function AdminDashboard() {
     })()
   }, [currentClientId])
 
-  if (loading) return <Spinner label="Loading dashboard…" />
+  if (loading) return <DashboardSkeleton />
   const hour = new Date().getHours()
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const firstName = (profile?.full_name || 'there').split(' ')[0]
@@ -220,59 +254,57 @@ function AdminDashboard() {
       </div>
     ),
     charts: (
-      <div className="space-y-4">
-        <Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="lg:col-span-2">
           <CardHeader title="Inbound vs Outbound" subtitle="Last 14 days, from the stock ledger" />
           <div className="h-64 p-4">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trend} margin={{ left: -12 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128,128,128,0.16)" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
-                <YAxis tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
-                <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="in" name="Inbound" stroke="#16a34a" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="out" name="Outbound" stroke="#ea7a0c" strokeWidth={2} dot={false} />
+              <LineChart data={trend} margin={{ left: -12, top: 6, right: 6 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128,128,128,0.14)" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: AXIS }} tickLine={false} axisLine={{ stroke: 'rgba(128,128,128,0.2)' }} />
+                <YAxis tick={{ fontSize: 11, fill: AXIS }} tickLine={false} axisLine={false} width={40} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                <Line type="monotone" dataKey="in" name="Inbound" stroke={CHART_IN} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="out" name="Outbound" stroke={CHART_OUT} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </Card>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader title="Stock Aging" subtitle="On-hand qty by days since first receipt" />
-            <div className="h-64 p-4">
-              {aging.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={aging} margin={{ left: -12 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128,128,128,0.16)" />
-                    <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
-                    <YAxis tick={{ fontSize: 11, fill: 'currentColor' }} className="text-ink-faint" />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
-                    <Bar dataKey="qty" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                      {aging.map((_, i) => <Cell key={i} fill={AGING_COLORS[i % AGING_COLORS.length]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : <p className="grid h-full place-items-center text-sm text-ink-soft">No stock data yet</p>}
-            </div>
-          </Card>
-          <Card>
-            <CardHeader title="Stock by Condition" />
-            <div className="h-64 p-4">
+        <Card>
+          <CardHeader title="Stock Aging" subtitle="On-hand qty by days since first receipt" />
+          <div className="h-64 p-4">
+            {aging.length ? (
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={byStatus} dataKey="value" nameKey="name" innerRadius={54} outerRadius={82} paddingAngle={2} cornerRadius={4}>
-                    {byStatus.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: 10, border: 'none', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.14)' }} />
-                </PieChart>
+                <BarChart data={aging} margin={{ left: -12, top: 6, right: 6 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128,128,128,0.14)" />
+                  <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: AXIS }} tickLine={false} axisLine={{ stroke: 'rgba(128,128,128,0.2)' }} />
+                  <YAxis tick={{ fontSize: 11, fill: AXIS }} tickLine={false} axisLine={false} width={40} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(128,128,128,0.06)' }} />
+                  <Bar dataKey="qty" radius={[4, 4, 0, 0]} maxBarSize={44}>
+                    {aging.map((_, i) => <Cell key={i} fill={AGING_COLORS[i % AGING_COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
-              <div className="flex justify-center gap-4 text-xs text-ink-soft">
-                {byStatus.map((s, i) => <span key={s.name} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: COLORS[i] }} />{s.name}</span>)}
-              </div>
+            ) : <p className="grid h-full place-items-center text-sm text-ink-soft">No stock data yet</p>}
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Stock by Condition" subtitle="Share of on-hand units" />
+          <div className="flex h-64 flex-col p-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={byStatus} dataKey="value" nameKey="name" innerRadius={54} outerRadius={82} paddingAngle={2} cornerRadius={4} stroke="none">
+                  {byStatus.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
+                </Pie>
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex justify-center gap-4 text-xs text-ink-soft">
+              {byStatus.map((s, i) => <span key={s.name} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: COLORS[i] }} />{s.name}</span>)}
             </div>
-          </Card>
-        </div>
+          </div>
+        </Card>
       </div>
     ),
     movements: (
@@ -299,14 +331,14 @@ function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Clean header (no gold hero) */}
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-line pb-5">
-        <div>
-          <p className="text-xs font-medium text-ink-faint">{greet}, {firstName}</p>
-          <h1 className="font-display text-xl font-bold tracking-tight text-ink">{client?.name} · Operations overview</h1>
-          <p className="mt-0.5 text-sm text-ink-soft">Live inventory, stock health and recent movements.</p>
+      {/* Compact welcome + toolbar — greeting and title on two tight lines, the
+          date sits in the toolbar on the right rather than eating vertical space. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-line pb-4">
+        <div className="min-w-0">
+          <h1 className="truncate font-display text-xl font-bold tracking-tight text-ink">{client?.name} · Operations overview</h1>
+          <p className="mt-0.5 text-[13px] text-ink-soft">{greet}, {firstName} — here's what needs your attention today.</p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-surface-line bg-surface px-3 py-2 text-sm text-ink-soft">
+        <div className="flex items-center gap-2 rounded-lg border border-surface-line bg-surface px-3 py-2 text-[13px] font-medium text-ink-soft">
           <Icon name="calendar_today" className="text-[17px] text-ink-faint" />
           {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
         </div>

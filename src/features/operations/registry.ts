@@ -1,6 +1,6 @@
 import type { TableName } from '@/hooks/useCollection'
 import type { Column } from '@/components/ui/DataTable'
-import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { createElement } from 'react'
 
 // ---------------------------------------------------------------------------
@@ -70,9 +70,11 @@ export interface OpDef {
 export type OpRecord = { id: string; status?: string | null; created_at?: string; __rel?: Record<string, string> } & Record<string, unknown>
 const cellStr = (v: unknown) => (v == null ? '' : String(v))
 
+// Render via the unified StatusBadge so every operational module shares one
+// status vocabulary; the module's own label wins, colour is resolved centrally.
 const statusTone = (statuses: StatusDef[]) => (row: OpRecord) => {
   const s = statuses.find(x => x.value === row.status)
-  return createElement(Badge, { tone: s?.tone ?? 'neutral' }, s?.label ?? row.status)
+  return createElement(StatusBadge, { status: row.status ?? null, label: s?.label })
 }
 
 const S = {

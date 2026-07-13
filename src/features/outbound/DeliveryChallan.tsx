@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -144,7 +145,7 @@ export function DeliveryChallan() {
     { key: 'total_qty', header: 'Qty', accessor: r => r.total_qty, render: r => formatNumber(r.total_qty), className: 'text-right', sortable: true },
     { key: 'status', header: 'Status', accessor: r => r.status, sortable: true, render: r => (
       <div className="flex items-center gap-1">
-        <Badge tone={tone(r.status)}>{statusLabel(r.status)}</Badge>
+        <StatusBadge status={r.status} label={statusLabel(r.status)} />
         {r.posted_at && r.status === 'draft' && <Badge tone="info">Stock deducted</Badge>}
       </div>
     ) },
@@ -852,7 +853,7 @@ function ChallanOverview({ challan, customerName, vehicles, products, transportV
           <Stat label={challan.delivery_method === 'courier' ? 'Courier' : 'Transport Vendor'} value={carrier} />
           {challan.delivery_method === 'courier' && <Stat label="CN / Tracking" value={challan.courier_tracking_no || '—'} />}
           <Stat label={challan.delivery_method === 'courier' ? 'Courier Bill' : 'Transport Cost'} value={challan.delivery_cost != null ? formatNumber(challan.delivery_cost) : '—'} />
-          <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(challan.status)}>{statusLabel(challan.status)}</Badge></div>} />
+          <Stat label="Status" value={<div className="flex items-center gap-1"><StatusBadge status={challan.status} label={statusLabel(challan.status)} /></div>} />
           <Stat label="Dispatched At" value={challan.dispatch_time || '—'} />
         </div>
 

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Icon } from '@/components/ui/Icon'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -182,7 +183,7 @@ export default function SalesmanBoard() {
                     <p className="mt-0.5 text-xs text-ink-faint">{formatDate(o.order_date)} · Qty {formatNumber(o.total_qty)} · Delivered {formatNumber(delivered[o.id])}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Badge tone={tone(o.status)}>{o.status}</Badge>
+                    <StatusBadge status={o.status} />
                     <ActionMenu items={[{ icon: 'visibility', label: 'View progress', onClick: () => setView(o) }]} />
                   </div>
                 </div>
@@ -235,7 +236,7 @@ function OrderProgress({ order, customerName, delivered, onClose }: {
         <div className="rounded-lg bg-surface-sunken px-3 py-3"><Stepper status={order.status} /></div>
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div><span className="text-ink-faint">Customer: </span>{customerName}</div>
-          <div><span className="text-ink-faint">Status: </span><Badge tone={tone(order.status)}>{order.status}</Badge></div>
+          <div><span className="text-ink-faint">Status: </span><StatusBadge status={order.status} /></div>
           <div><span className="text-ink-faint">Order Qty: </span>{formatNumber(order.total_qty)}</div>
           <div><span className="text-ink-faint">Delivered: </span>{formatNumber(delivered)}</div>
         </div>

@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDelete } from '@/components/ui/ConfirmDelete'
@@ -132,7 +133,7 @@ export function InboundGRN() {
     { key: 'total_qty', header: 'Qty', accessor: r => formatNumber(r.total_qty), className: 'text-right' },
     { key: 'status', header: 'Status', render: r => (
       <div className="flex items-center gap-1">
-        <Badge tone={tone(r.status)}>{statusLabel(r.status)}</Badge>
+        <StatusBadge status={r.status} label={statusLabel(r.status)} />
         {r.billable && <Badge tone="info">Billable</Badge>}
       </div>
     ) },
@@ -305,7 +306,7 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
 
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-sm">
           <span className="text-ink-faint">Status on save:</span>
-          <Badge tone={tone(previewStatus)}>{statusLabel(previewStatus)}</Badge>
+          <StatusBadge status={previewStatus} label={statusLabel(previewStatus)} />
           <span className="text-xs text-ink-faint">{previewStatus === 'completed' ? '· ready to approve into stock' : previewStatus === 'draft' ? '· add SAP MIRO No to complete' : ''}</span>
           {h.sap_miro_ref && h.sap_miro_ref.trim() && <Badge tone="info">Billable</Badge>}
         </div>
@@ -342,7 +343,7 @@ function GRNOverview({ grn, supplierName, warehouseName, products, canEdit, onEd
           <Stat label="Receipt Date" value={formatDate(grn.receipt_date)} />
           <Stat label="SAP MIGO" value={grn.sap_grn_ref || '—'} />
           <Stat label="SAP MIRO" value={grn.sap_miro_ref || <span className="text-ink-faint">pending</span>} />
-          <Stat label="Status" value={<div className="flex items-center gap-1"><Badge tone={tone(grn.status)}>{statusLabel(grn.status)}</Badge>{grn.posted_at && <Badge tone="positive">In stock</Badge>}</div>} />
+          <Stat label="Status" value={<div className="flex items-center gap-1"><StatusBadge status={grn.status} label={statusLabel(grn.status)} />{grn.posted_at && <Badge tone="positive">In stock</Badge>}</div>} />
         </div>
 
         <div>

@@ -8,6 +8,7 @@ import { Field, Input, Textarea, type FieldSize } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/shared/Combobox'
 import { Button } from '@/components/ui/Button'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { ImageUpload } from './ImageUpload'
 import { formatVehicleNo } from '@/lib/utils'
 
@@ -19,9 +20,10 @@ export function MasterForm({ def, record, onDone, onCancel }:
   // Relation options carry code + name separately so the smart lookup can show
   // the code as a mono chip and the description beside it, and search both.
   const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string; sublabel?: string }[]>>({})
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm({
     defaultValues: record ?? { status: 'active', uom: 'PCS', unit: 'PCS' }
   })
+  useUnsavedChanges(isDirty && !saving)
 
   // Load linked dropdown options for relation fields
   useEffect(() => {

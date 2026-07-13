@@ -9,6 +9,7 @@ import { Field, Input, Textarea, type FieldSize } from '@/components/ui/Field'
 import { SelectBox } from '@/components/ui/SelectBox'
 import { Combobox } from '@/components/shared/Combobox'
 import { Button } from '@/components/ui/Button'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { ImageUpload } from '@/features/masters/components/ImageUpload'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -26,7 +27,8 @@ export function OperationForm({ def, record, onDone, onCancel }:
     status: def.statuses[0]?.value,
     ...Object.fromEntries(def.fields.filter(f => f.type === 'date' && f.required).map(f => [f.name, today()]))
   }
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({ defaultValues: defaults })
+  const { register, handleSubmit, setValue, watch, formState: { errors, isDirty } } = useForm({ defaultValues: defaults })
+  useUnsavedChanges(isDirty && !saving)
 
   // Load linked dropdown options for relation fields.
   useEffect(() => {

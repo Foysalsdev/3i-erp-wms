@@ -44,7 +44,7 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('warehouses').select('id,code,name').then(({ data }) => setWarehouses(data ?? []))
   }, [currentClientId])
 
   const load = () => {
@@ -52,7 +52,7 @@ export function StockTab({ statusFilter, title }: { statusFilter?: string; title
     setLoading(true)
     let query = supabase.from('inventory_stock')
       .select('*, products(name,material_code,restock_level), warehouses(name,code), locations(location_code)')
-      .eq('client_id', currentClientId)
+      
     if (nonSaleableMode) query = query.neq('stock_status', 'good').gt('quantity', 0)
     else if (statusFilter) query = query.eq('stock_status', statusFilter)
     query.then(({ data, error }) => {
@@ -160,7 +160,7 @@ function StockTrailModal({ row, clientId, onClose }: { row: StockJoined; clientI
   useEffect(() => {
     supabase.from('inventory_ledger')
       .select('id,created_at,movement_type,qty_in,qty_out,balance_after,reference_no,remarks')
-      .eq('client_id', clientId).eq('product_id', row.product_id).eq('warehouse_id', row.warehouse_id)
+      .eq('product_id', row.product_id).eq('warehouse_id', row.warehouse_id)
       .eq('stock_status', row.stock_status)
       .order('created_at', { ascending: false }).limit(60)
       .then(({ data }) => setEntries(data ?? []))

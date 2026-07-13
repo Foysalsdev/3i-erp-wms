@@ -74,11 +74,11 @@ export default function SalesmanBoard() {
     if (!currentClientId || !uid) return
     setLoading(true)
     Promise.all([
-      supabase.from('sales_orders').select('id,so_no,customer_id,order_date,total_qty,total_amount,status,billing_doc_no').eq('client_id', currentClientId).eq('created_by', uid).order('created_at', { ascending: false }),
-      supabase.from('sales_order_items').select('so_id,delivered_qty').eq('client_id', currentClientId),
-      supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId),
+      supabase.from('sales_orders').select('id,so_no,customer_id,order_date,total_qty,total_amount,status,billing_doc_no').eq('created_by', uid).order('created_at', { ascending: false }),
+      supabase.from('sales_order_items').select('so_id,delivered_qty'),
+      supabase.from('customers').select('id,customer_code,name'),
       fetchStockAvailability(currentClientId),
-      supabase.from('products').select('id,material_code,name,category,uom').eq('client_id', currentClientId)
+      supabase.from('products').select('id,material_code,name,category,uom')
     ]).then(([o, it, c, stockAvail, pr]) => {
       setOrders(o.data ?? [])
       const d: Record<string, number> = {}; (it.data ?? []).forEach(r => { if (r.so_id) d[r.so_id] = (d[r.so_id] ?? 0) + n(r.delivered_qty) })

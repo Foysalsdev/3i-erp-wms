@@ -115,15 +115,15 @@ function AdminDashboard() {
     ;(async () => {
       const since14 = new Date(); since14.setDate(since14.getDate() - 13); since14.setHours(0, 0, 0, 0)
       const [{ count: skus }, { count: warehouses }, { data: stock }, { data: products }, { data: recentLedger }, { data: trendLedger }, { data: firstIn }] = await Promise.all([
-        supabase.from('products').select('id', { count: 'exact', head: true }).eq('client_id', currentClientId),
-        supabase.from('warehouses').select('id', { count: 'exact', head: true }).eq('client_id', currentClientId),
-        supabase.from('inventory_stock').select('product_id, warehouse_id, location_id, quantity, stock_status').eq('client_id', currentClientId),
-        supabase.from('products').select('id, name, restock_level').eq('client_id', currentClientId),
-        supabase.from('inventory_ledger').select('movement_type, qty_in, qty_out, created_at, reference_no').eq('client_id', currentClientId).order('created_at', { ascending: false }).limit(8),
+        supabase.from('products').select('id', { count: 'exact', head: true }),
+        supabase.from('warehouses').select('id', { count: 'exact', head: true }),
+        supabase.from('inventory_stock').select('product_id, warehouse_id, location_id, quantity, stock_status'),
+        supabase.from('products').select('id, name, restock_level'),
+        supabase.from('inventory_ledger').select('movement_type, qty_in, qty_out, created_at, reference_no').order('created_at', { ascending: false }).limit(8),
         // Last 14 days of movement, for the inbound-vs-outbound trend.
-        supabase.from('inventory_ledger').select('qty_in, qty_out, created_at').eq('client_id', currentClientId).gte('created_at', since14.toISOString()),
+        supabase.from('inventory_ledger').select('qty_in, qty_out, created_at').gte('created_at', since14.toISOString()),
         // Earliest inbound per product/warehouse/location, to age today's on-hand stock.
-        supabase.from('inventory_ledger').select('product_id, warehouse_id, location_id, created_at').eq('client_id', currentClientId).gt('qty_in', 0).order('created_at', { ascending: true }).limit(5000)
+        supabase.from('inventory_ledger').select('product_id, warehouse_id, location_id, created_at').gt('qty_in', 0).order('created_at', { ascending: true }).limit(5000)
       ])
       const statusAgg: Record<string, number> = { good: 0, damaged: 0, quarantine: 0 }
       const perProduct: Record<string, number> = {}
@@ -178,14 +178,14 @@ function AdminDashboard() {
         // overload resolution (same tradeoff as DocModule/RegisterReports).
         const { count } = await supabase.from(def.table as any)
           .select('id', { count: 'exact', head: true })
-          .eq('client_id', currentClientId)
+          
           .in('status', def.openStatuses)
         return [def.key, count ?? 0] as const
       }))
       setOps(Object.fromEntries(entries))
       const [{ data: locs }, { data: stock }] = await Promise.all([
-        supabase.from('locations').select('capacity').eq('client_id', currentClientId),
-        supabase.from('inventory_stock').select('quantity').eq('client_id', currentClientId)
+        supabase.from('locations').select('capacity'),
+        supabase.from('inventory_stock').select('quantity')
       ])
       const capacity = (locs ?? []).reduce((s, l) => s + Number(l.capacity ?? 0), 0)
       const used = (stock ?? []).reduce((s, r) => s + Number(r.quantity ?? 0), 0)

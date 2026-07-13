@@ -62,7 +62,7 @@ export function NotificationBell() {
         // overload resolution (same tradeoff as DocModule/RegisterReports).
         const { count } = await supabase.from(def.table as any)
           .select('id', { count: 'exact', head: true })
-          .eq('client_id', currentClientId)
+          
           .in('status', def.openStatuses)
         return count ?? 0
       }))
@@ -84,7 +84,7 @@ export function NotificationBell() {
       if (can('outbound.view')) {
         const { data: orders } = await supabase.from('sales_orders')
           .select('status, order_date, required_date')
-          .eq('client_id', currentClientId)
+          
           .not('status', 'in', '(delivered,closed,cancelled)')
         const list = orders ?? []
         const overdue = list.filter(o => workflowState(o).overdue).length
@@ -110,8 +110,8 @@ export function NotificationBell() {
       // Low-stock alert (items at or below their restock level).
       if (prefs.lowStock && can('inventory.view')) {
         const [{ data: products }, { data: stock }] = await Promise.all([
-          supabase.from('products').select('id, restock_level').eq('client_id', currentClientId),
-          supabase.from('inventory_stock').select('product_id, quantity').eq('client_id', currentClientId)
+          supabase.from('products').select('id, restock_level'),
+          supabase.from('inventory_stock').select('product_id, quantity')
         ])
         const perProduct: Record<string, number> = {}
         ;(stock ?? []).forEach(s => { perProduct[s.product_id] = (perProduct[s.product_id] ?? 0) + Number(s.quantity) })

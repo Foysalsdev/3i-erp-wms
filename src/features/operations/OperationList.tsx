@@ -79,7 +79,7 @@ export function OperationList({ def }: { def: OpDef }) {
     def.fields.filter(f => f.relation).forEach(async f => {
       const r = OP_RELATIONS[f.relation!]
       const cols = ['id', r.code, r.name].filter(Boolean).join(', ')
-      const { data } = await supabase.from(r.table as any).select(cols).eq('client_id', currentClientId) as { data: Record<string, string>[] | null }
+      const { data } = await supabase.from(r.table as any).select(cols) as { data: Record<string, string>[] | null }
       const m: Record<string, string> = {}
       ;(data ?? []).forEach(row => { m[row.id] = r.name ? `${row[r.code]}${row[r.name] ? ' — ' + row[r.name] : ''}` : row[r.code] })
       setRel(prev => ({ ...prev, [f.name]: m }))

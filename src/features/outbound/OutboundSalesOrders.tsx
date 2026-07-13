@@ -164,12 +164,12 @@ export function OutboundSalesOrders() {
 
   useEffect(() => {
     if (!currentClientId) return
-    supabase.from('customers').select('id,customer_code,name,email,billing_address,shipping_address,sap_customer_code').eq('client_id', currentClientId).then(({ data }) => setCustomers(data ?? []))
-    supabase.from('warehouses').select('id,code,name').eq('client_id', currentClientId).then(({ data }) => setWarehouses(data ?? []))
-    supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').eq('client_id', currentClientId).then(({ data }) => setProducts(data ?? []))
-    supabase.from('vehicles').select('id,vehicle_number,vehicle_type,vendor_id,driver_name,driver_phone').eq('client_id', currentClientId).then(({ data }) => setVehicles(data ?? []))
-    supabase.from('transport_vendors').select('id,vendor_code,name').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
-    supabase.from('couriers').select('id,courier_code,name,rate_per_unit').eq('client_id', currentClientId).eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
+    supabase.from('customers').select('id,customer_code,name,email,billing_address,shipping_address,sap_customer_code').then(({ data }) => setCustomers(data ?? []))
+    supabase.from('warehouses').select('id,code,name').then(({ data }) => setWarehouses(data ?? []))
+    supabase.from('products').select('id,material_code,name,barcode,category,uom,plant').then(({ data }) => setProducts(data ?? []))
+    supabase.from('vehicles').select('id,vehicle_number,vehicle_type,vendor_id,driver_name,driver_phone').then(({ data }) => setVehicles(data ?? []))
+    supabase.from('transport_vendors').select('id,vendor_code,name').eq('status', 'active').then(({ data }) => setTransportVendors(data ?? []))
+    supabase.from('couriers').select('id,courier_code,name,rate_per_unit').eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
     supabase.from('profiles').select('id,full_name').eq('status', 'active').then(({ data }) => setUsers(data ?? []))
   }, [currentClientId])
 
@@ -271,7 +271,7 @@ export function OutboundSalesOrders() {
     const prodById = (id: string | null) => products.find(p => p.id === id)
     const [{ data: items }, { data: serials }] = await Promise.all([
       supabase.from('sales_order_items').select('*').eq('so_id', r.id),
-      supabase.from('serial_numbers').select('serial_no,product_id').eq('client_id', currentClientId!).eq('reference_no', r.so_no)
+      supabase.from('serial_numbers').select('serial_no,product_id').eq('reference_no', r.so_no)
     ])
     const cust = customers.find(c => c.id === r.customer_id)
     const lines = (items ?? []).map((it, i) => ({
@@ -436,7 +436,7 @@ export function OutboundSalesOrders() {
           if (itemIds.length) {
             await supabase.from('serial_numbers')
               .update({ so_item_id: null, reference_no: null, status: 'in_stock' })
-              .eq('client_id', currentClientId!).in('so_item_id', itemIds)
+              .in('so_item_id', itemIds)
           }
           const res = await supabase.from('sales_orders').delete().eq('id', deleting.id)
           if (!res.error) { setDeleting(null); refresh() }
@@ -486,7 +486,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
     try {
       const d = new Date()
       const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-      const { data } = await supabase.from('sales_orders').select('reference_no').eq('client_id', clientId).like('reference_no', `PO-${day}-%`)
+      const { data } = await supabase.from('sales_orders').select('reference_no').like('reference_no', `PO-${day}-%`)
       let max = 0
       for (const row of data ?? []) { const m = /-(\d+)$/.exec(row.reference_no || ''); if (m) max = Math.max(max, parseInt(m[1], 10)) }
       set({ reference_no: `PO-${day}-${String(max + 1).padStart(3, '0')}` })
@@ -522,7 +522,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
       const status = approvalCleared && String(h.billing_doc_no || '').trim() && preInvoice.includes(h.status || 'pending')
         ? 'invoiced' : (h.status || 'pending')
       const header = {
-        client_id: clientId, customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
+         customer_id: h.customer_id || null, warehouse_id: h.warehouse_id || null,
         reference_no: h.reference_no || null, order_date: h.order_date || today(), required_date: h.required_date || null,
         total_qty: totalQty, total_amount: totalAmount, status, remarks: h.remarks || null,
         mail_ref: h.mail_ref || null, assigned_to: h.assigned_to || null,
@@ -567,7 +567,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
       }
       if (added.length) {
         const { error } = await supabase.from('sales_order_items').insert(added.map(r => ({
-          client_id: clientId, so_id: soId, product_id: r.product_id, ...lineVals(r)
+           so_id: soId, product_id: r.product_id, ...lineVals(r)
         })))
         if (error) throw error
       }
@@ -581,10 +581,10 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
         if (!count) {
           const { data: curItems } = await supabase.from('sales_order_items').select('id,product_id,qty').eq('so_id', soId)
           const { data: inv, error: invErr } = await (supabase as any).from('so_invoices')
-            .insert({ client_id: clientId, so_id: soId, invoice_no: bdn }).select('id').single()
+            .insert({  so_id: soId, invoice_no: bdn }).select('id').single()
           if (!invErr && inv) {
             await (supabase as any).from('so_invoice_items').insert((curItems ?? []).map((it: any) => ({
-              client_id: clientId, invoice_id: inv.id, so_item_id: it.id, product_id: it.product_id, qty: it.qty
+               invoice_id: inv.id, so_item_id: it.id, product_id: it.product_id, qty: it.qty
             })))
           }
         }
@@ -732,11 +732,11 @@ function InvoiceModal({ order, products, notify, onClose, onDone }: {
     setSaving(true)
     try {
       const { data: inv, error } = await (supabase as any).from('so_invoices').insert({
-        client_id: currentClientId, so_id: order.id, invoice_no: invoiceNo, invoice_date: h.invoice_date || today()
+         so_id: order.id, invoice_no: invoiceNo, invoice_date: h.invoice_date || today()
       }).select('id').single()
       if (error) throw error
       const { error: e2 } = await (supabase as any).from('so_invoice_items').insert(lines.map(({ it, q }) => ({
-        client_id: currentClientId, invoice_id: inv.id, so_item_id: it.id, product_id: it.product_id, qty: q
+         invoice_id: inv.id, so_item_id: it.id, product_id: it.product_id, qty: q
       })))
       if (e2) throw e2
       // Order-level SAP refs + status. billing_doc_no/invoice_no mirror the

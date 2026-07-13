@@ -25,7 +25,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
     if (!clientId) return
     def.fields.filter(f => f.relation).forEach(async f => {
       const rel = RELATIONS[f.relation!]
-      const { data } = await supabase.from(rel.table as any).select(`id, ${rel.code}, ${rel.name}`).eq('client_id', clientId)
+      const { data } = await supabase.from(rel.table as any).select(`id, ${rel.code}, ${rel.name}`)
       setRelOptions(o => ({
         ...o,
         [f.name]: ((data ?? []) as unknown as Record<string, string>[]).map(r => ({ id: r.id, label: `${r[rel.code]}${r[rel.name] ? ' — ' + r[rel.name] : ''}` }))
@@ -43,7 +43,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
       // Build the payload from this master's own fields only, so stray form
       // defaults (e.g. the uom/unit seed values) never get sent to a table
       // that has no such column — which Supabase rejects outright.
-      const payload: Record<string, any> = { client_id: clientId }
+      const payload: Record<string, any> = { }
       def.fields.forEach(f => {
         let v = values[f.name]
         if (f.type === 'number') v = v === '' || v == null ? null : Number(v)

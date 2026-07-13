@@ -35,7 +35,7 @@ export function CustomerAddresses({ customer, onClose }: { customer: { id: strin
     if (!editing.address?.trim()) { notify('error', 'Enter the address'); return }
     setSaving(true)
     const payload = {
-      client_id: currentClientId!, customer_id: customer.id,
+       customer_id: customer.id,
       label: editing.label || null, address_type: editing.address_type || null,
       address: editing.address.trim(), is_default: !!editing.is_default
     }

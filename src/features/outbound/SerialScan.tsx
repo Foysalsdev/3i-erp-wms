@@ -47,7 +47,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
       const guard = pids.length ? pids : ['00000000-0000-0000-0000-000000000000']
       const [{ data: prods }, { data: existing }] = await Promise.all([
         supabase.from('products').select('id,material_code,name,uom,china_code,barcode').in('id', guard),
-        supabase.from('serial_numbers').select('id,serial_no,product_id,so_item_id').eq('client_id', currentClientId!).eq('reference_no', order?.so_no ?? '__none__')
+        supabase.from('serial_numbers').select('id,serial_no,product_id,so_item_id').eq('reference_no', order?.so_no ?? '__none__')
       ])
       type ProdInfo = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'uom' | 'china_code' | 'barcode'>
       const pmap: Record<string, ProdInfo> = {}; (prods ?? []).forEach(p => { pmap[p.id] = p })
@@ -83,7 +83,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
     let reused: Pick<Tables<'serial_numbers'>, 'id' | 'serial_no' | 'reference_no' | 'status'>[] = []
     if (fresh.length) {
       const { data: clash } = await supabase.from('serial_numbers').select('id,serial_no,reference_no,status')
-        .eq('client_id', currentClientId!).in('serial_no', fresh.map(f => f.serial_no))
+        .in('serial_no', fresh.map(f => f.serial_no))
       reused = (clash ?? []).filter(c => c.reference_no !== soRow!.so_no)
     }
     if (removedIds.length) {
@@ -102,7 +102,7 @@ export function SerialScan({ lockSoId, onDone }: { lockSoId: string; onDone?: ()
     const inserts = fresh.filter(f => !reusedSet.has(f.serial_no))
     if (inserts.length) {
       const rows = inserts.map(f => ({
-        client_id: currentClientId!, product_id: f.product_id, serial_no: f.serial_no,
+         product_id: f.product_id, serial_no: f.serial_no,
         so_item_id: f.so_item_id, reference_no: soRow!.so_no, warehouse_id: soRow!.warehouse_id || null,
         status: 'reserved' // serial_numbers_status_check only allows in_stock/reserved/delivered/returned/damaged/quarantine/scrapped
       }))

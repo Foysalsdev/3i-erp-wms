@@ -143,7 +143,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
 
       const masterHits = Promise.all(SEARCH_MASTERS.map(async s => {
         const { data } = await supabase.from(s.table).select(s.cols)
-          .eq('client_id', clientId).or(orFilter(s.search)).limit(5)
+          .or(orFilter(s.search)).limit(5)
         return ((data ?? []) as unknown as SearchRow[]).map(r => ({
           cat: s.cat, icon: s.icon, label: r[s.label] ?? r[s.sub] ?? '—',
           sub: `${s.cat} · ${r[s.sub] ?? ''}`, path: s.path
@@ -152,7 +152,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
 
       const txnHits = Promise.all(TXNS.map(async s => {
         const { data } = await supabase.from(s.table).select(s.cols)
-          .eq('client_id', clientId).or(orFilter(s.search)).limit(5)
+          .or(orFilter(s.search)).limit(5)
         return ((data ?? []) as unknown as SearchRow[]).map(r => {
           const id = r[s.idField] ?? ''
           const extra = s.sub(r)
@@ -168,13 +168,13 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
       // gate passes), so a vehicle search reveals its operational history.
       const vehicleHits = (async (): Promise<Hit[]> => {
         const { data: vehs } = await supabase.from('vehicles').select('id,vehicle_number')
-          .eq('client_id', clientId).ilike('vehicle_number', `%${safe}%`).limit(3)
+          .ilike('vehicle_number', `%${safe}%`).limit(3)
         if (!vehs || vehs.length === 0) return []
         const ids = vehs.map(v => v.id)
         const vmap: Record<string, string> = Object.fromEntries(vehs.map(v => [v.id, v.vehicle_number]))
         const [{ data: ch }, { data: gp }] = await Promise.all([
-          supabase.from('delivery_challans').select('challan_no,vehicle_id,challan_date').eq('client_id', clientId).in('vehicle_id', ids).limit(8),
-          supabase.from('gate_passes').select('gate_pass_no,vehicle_id,gate_out_date').eq('client_id', clientId).in('vehicle_id', ids).limit(8)
+          supabase.from('delivery_challans').select('challan_no,vehicle_id,challan_date').in('vehicle_id', ids).limit(8),
+          supabase.from('gate_passes').select('gate_pass_no,vehicle_id,gate_out_date').in('vehicle_id', ids).limit(8)
         ])
         const out: Hit[] = []
         ;(ch ?? []).forEach(c => out.push({ cat: 'Vehicle', icon: 'local_shipping', label: c.challan_no, sub: `Delivery Challan · Vehicle ${vmap[c.vehicle_id ?? ''] ?? ''}`, path: `/outbound/delivery-challan?q=${encodeURIComponent(c.challan_no)}` }))

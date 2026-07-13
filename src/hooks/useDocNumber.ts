@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 // Calls the atomic server-side client-wise document numbering function.
 export async function nextDocNumber(clientId: string, docType: string): Promise<string | null> {
   const { data, error } = await supabase.rpc('next_document_number', {
-    p_client: clientId, p_doc_type: docType
+     p_doc_type: docType
   })
   if (error) { console.error(error); return null }
   return data
@@ -12,7 +12,7 @@ export async function nextDocNumber(clientId: string, docType: string): Promise<
 // HOS-YYYYMM-00001) — a separate sequence from the daily-reset one above.
 export async function nextFinanceDocNumber(clientId: string, prefix: 'EXP' | 'IV' | 'HOS'): Promise<string | null> {
   const { data, error } = await supabase.rpc('next_finance_document_number', {
-    p_client: clientId, p_prefix: prefix
+     p_prefix: prefix
   })
   if (error) { console.error(error); return null }
   return data
@@ -23,7 +23,7 @@ export async function nextFinanceDocNumber(clientId: string, prefix: 'EXP' | 'IV
 // all-time challan serial (5-digit), e.g. "055050100147". Invoice is required.
 export async function nextChallanNumber(clientId: string, invoiceNo: string): Promise<string | null> {
   const { data, error } = await supabase.rpc('next_challan_number', {
-    p_client: clientId, p_invoice: invoiceNo
+     p_invoice: invoiceNo
   })
   if (error) { console.error(error); return null }
   return data

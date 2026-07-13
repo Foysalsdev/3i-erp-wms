@@ -25,7 +25,7 @@ export function SnapshotTab() {
     if (!clientId) return
     setLoading(true)
     supabase.from('inventory_snapshots').select('*, products(name,material_code), warehouses(code)')
-      .eq('client_id', clientId).order('snapshot_date', { ascending: false }).limit(500)
+      .order('snapshot_date', { ascending: false }).limit(500)
       .then(({ data, error }) => {
         if (error) notify('error', `Could not load snapshots: ${error.message}`)
         setRows(data ?? []); setLoading(false)
@@ -35,11 +35,11 @@ export function SnapshotTab() {
 
   const capture = async () => {
     setBusy(true)
-    const { data: stock, error: readErr } = await supabase.from('inventory_stock').select('product_id,warehouse_id,stock_status,quantity').eq('client_id', clientId!)
+    const { data: stock, error: readErr } = await supabase.from('inventory_stock').select('product_id,warehouse_id,stock_status,quantity')
     if (readErr) { notify('error', `Could not read stock: ${readErr.message}`); setBusy(false); return }
     if (stock?.length) {
       const { error: insErr } = await supabase.from('inventory_snapshots').insert(stock.map(s => ({
-        client_id: clientId!, product_id: s.product_id, warehouse_id: s.warehouse_id, stock_status: s.stock_status, quantity: s.quantity
+         product_id: s.product_id, warehouse_id: s.warehouse_id, stock_status: s.stock_status, quantity: s.quantity
       })))
       if (insErr) { notify('error', `Snapshot failed: ${insErr.message}`); setBusy(false); return }
       notify('success', `Snapshot captured (${stock.length} rows)`)

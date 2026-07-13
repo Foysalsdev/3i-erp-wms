@@ -1,6 +1,8 @@
 # 3i Logistics — ERP + WMS
 
-A production-grade, multi-client **ERP + Warehouse Management System** for **3i Logistics Pvt. Ltd.** (3PL partner of Whirlpool Bangladesh), serving **Whirlpool, Robi, Godrej and 3i Internal** operations with strict client-wise data isolation, dynamic RBAC, audit trails, PDF generation, attachment management, PWA support and a responsive SAP Fiori Horizon–inspired interface using Whirlpool Bangladesh branding.
+A production-grade, single-client **ERP + Warehouse Management System** for **3i Logistics Pvt. Ltd.** (3PL partner of Whirlpool Bangladesh), running **Whirlpool** operations with dynamic RBAC, audit trails, PDF generation, attachment management, PWA support and a responsive SAP Fiori Horizon–inspired interface using Whirlpool Bangladesh branding.
+
+> **Note:** This system was originally built multi-tenant (a `clients` table, per-client `user_clients` membership and a client switcher). It has since been converted to a single-tenant deployment — every `client_id` column, the `clients`/`user_clients` tables and the client switcher were removed, and RBAC roles are now global. See `supabase/migrations/20260721090000..090003_singleclient_*`.
 
 This repository is the **foundation build**: complete backend (database, security, business logic), the full design system, authentication + RBAC + app shell, and **two fully working reference modules — Masters and Inventory** — that establish the exact pattern for the remaining modules.
 
@@ -19,7 +21,7 @@ This repository is the **foundation build**: complete backend (database, securit
 | PDF | @react-pdf/renderer |
 | Attachments | Supabase Storage (+ Google Drive field support) |
 | PWA | vite-plugin-pwa (offline shell, installable) |
-| Deployment | Vercel |
+| Deployment | Cloudflare Pages |
 
 ---
 

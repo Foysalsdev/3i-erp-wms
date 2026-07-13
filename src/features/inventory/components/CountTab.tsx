@@ -56,7 +56,7 @@ export function CountTab({ countType, title, singular }: { countType: 'cycle' | 
   const load = () => {
     if (!clientId) return
     setLoading(true)
-    supabase.from('stock_counts').select('*').eq('client_id', clientId).eq('count_type', countType)
+    supabase.from('stock_counts').select('*').eq('count_type', countType)
       .order('created_at', { ascending: false })
       .then(({ data }) => { setDocs(data ?? []); setLoading(false) })
   }
@@ -157,7 +157,7 @@ function CountForm({ countType, title, singular, record, clientId, products, war
     setLoadingStock(true)
     const { data } = await supabase.from('inventory_stock')
       .select('product_id, location_id, stock_status, quantity')
-      .eq('client_id', clientId).eq('warehouse_id', h.warehouse_id)
+      .eq('warehouse_id', h.warehouse_id)
     setLines((data ?? []).map(r => ({
       product_id: r.product_id ?? undefined, location_id: r.location_id ?? undefined, stock_status: r.stock_status,
       system_qty: Number(r.quantity), counted_qty: Number(r.quantity)
@@ -177,7 +177,7 @@ function CountForm({ countType, title, singular, record, clientId, products, war
     setSaving(true)
     try {
       const hdr: Omit<TablesInsert<'stock_counts'>, 'doc_no'> & { doc_no?: string } = {
-        client_id: clientId, warehouse_id: h.warehouse_id, count_type: countType,
+         warehouse_id: h.warehouse_id, count_type: countType,
         count_date: h.count_date || today(), remarks: h.remarks || null, status: 'draft'
       }
       let docId = record?.id
@@ -194,7 +194,7 @@ function CountForm({ countType, title, singular, record, clientId, products, war
       }
       if (!docId) throw new Error('Count id missing after save')
       const rows = valid.map(l => ({
-        client_id: clientId, count_id: docId, product_id: l.product_id!, location_id: l.location_id || null,
+         count_id: docId, product_id: l.product_id!, location_id: l.location_id || null,
         stock_status: l.stock_status, system_qty: Number(l.system_qty) || 0, counted_qty: Number(l.counted_qty) || 0
       }))
       const { error: ie } = await supabase.from('stock_count_items').insert(rows)

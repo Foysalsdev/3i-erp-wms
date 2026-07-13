@@ -33,9 +33,9 @@ export function SalesReport() {
     if (!currentClientId) return
     setLoading(true)
     Promise.all([
-      supabase.from('sales_orders').select('id,customer_id,created_by,total_qty,total_amount,status').eq('client_id', currentClientId),
-      supabase.from('sales_order_items').select('so_id,delivered_qty').eq('client_id', currentClientId),
-      supabase.from('customers').select('id,customer_code,name').eq('client_id', currentClientId),
+      supabase.from('sales_orders').select('id,customer_id,created_by,total_qty,total_amount,status'),
+      supabase.from('sales_order_items').select('so_id,delivered_qty'),
+      supabase.from('customers').select('id,customer_code,name'),
       supabase.from('profiles').select('id,full_name,division')
     ]).then(([o, it, c, p]) => {
       setOrders(o.data ?? [])

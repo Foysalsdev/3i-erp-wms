@@ -22,7 +22,7 @@ export function NotesPanel({ entityType, entityId }: { entityType: string; entit
   useEffect(() => { load() }, [entityType, entityId])
   const add = async () => {
     if (!body.trim()) return
-    const { error } = await supabase.from('notes').insert({ client_id: clientId!, entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
+    const { error } = await supabase.from('notes').insert({  entity_type: entityType, entity_id: entityId, body, created_by: (await supabase.auth.getUser()).data.user?.id })
     if (error) { notify('error', error.message); return }
     setBody(''); load()
   }
@@ -64,7 +64,7 @@ export function AttachmentsPanel({ entityType, entityId }: { entityType: string;
     if (up.error) { notify('error', 'Storage upload failed'); setBusy(false); return }
     const { data } = supabase.storage.from('media').getPublicUrl(path)
     await supabase.from('attachments').insert({
-      client_id: clientId!, entity_type: entityType, entity_id: entityId,
+       entity_type: entityType, entity_id: entityId,
       file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path, drive_url: data.publicUrl, source: 'supabase'
     })
     setBusy(false); load(); notify('success', 'File attached')

@@ -1,26 +1,33 @@
 # Architecture — 3i ERP + WMS
 
-## Multi-tenancy & isolation model
+## Tenancy model (single-tenant)
 
-Every business row carries a `client_id`. A user's accessible clients come from `user_clients`; a `profiles.is_platform_admin` flag grants 3i internal staff visibility across all clients. Isolation is enforced in the database (not just the app) through Row-Level Security.
+> **Historical note:** this system was originally multi-tenant — every business
+> row carried a `client_id`, membership came from `user_clients`, and RLS gated
+> access with `app.has_client_access(client_id)`. It has been converted to a
+> **single-tenant** deployment: all `client_id` columns, the `clients` /
+> `user_clients` tables and the client switcher were dropped, and RBAC roles are
+> now global. The sections below describe the current model.
+
+There is one implicit client. Access is governed purely by **permissions** (dynamic RBAC) plus a `profiles.is_platform_admin` super-admin flag. Isolation is enforced in the database (not just the app) through Row-Level Security.
 
 Helper functions live in the `app` schema and are `SECURITY DEFINER` (so RLS policies can call them without recursion):
 
 ```sql
-app.is_platform_admin()        -- true if current user is a 3i super-admin
-app.current_client_ids()       -- uuid[] of clients the current user may see
-app.has_client_access(uuid)    -- membership check used by every RLS policy
-app.has_permission(key, client)-- dynamic RBAC check (role → permission)
+app.is_platform_admin()   -- true if current user is a super-admin (all permissions)
+app.has_permission(key)   -- dynamic RBAC check (role → permission), global
+-- app.has_client_access(uuid) / app.current_client_ids() remain as no-op stubs
+-- (return true / empty) so any legacy reference stays harmless.
 ```
 
-Typical policy on a business table:
+Typical policy on a business table (reads open to any authenticated user; writes gated by permission):
 
 ```sql
 create policy products_select on public.products
-  for select using ( app.has_client_access(client_id) );
+  for select using ( true );
 create policy products_insert on public.products
-  for insert with check ( app.has_client_access(client_id) );
--- update / delete mirror the same predicate
+  for insert with check ( app.has_permission('masters.create') );
+-- update / delete mirror the same permission predicate
 ```
 
 ## Dynamic RBAC

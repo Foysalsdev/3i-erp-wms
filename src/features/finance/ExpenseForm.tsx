@@ -121,7 +121,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
     setRow(i, { item_id: id, name: it.name, unit: it.unit || '', rate: it.last_price != null ? Number(it.last_price) : undefined, category_id: it.category_id || '' })
   }
   const createItem = async (name: string) => {
-    const { data, error } = await supabase.from('finance_items').insert({ client_id: clientId, name }).select('id,name').single()
+    const { data, error } = await supabase.from('finance_items').insert({  name }).select('id,name').single()
     if (error) { notify('error', error.message); return null }
     onMastersChanged?.()
     return { id: data.id, label: data.name }
@@ -187,7 +187,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
         if (!voucherNo) throw new Error('Could not generate the Internal Voucher number')
       }
       const header: TablesInsert<'finance_expenses'> = {
-        client_id: clientId, expense_date: h.expense_date || today(), expense_type: h.expense_type,
+         expense_date: h.expense_date || today(), expense_type: h.expense_type,
         payee_name: h.payee_name || null, payment_mode: h.payment_mode || null,
         due_date: isCredit ? (h.due_date || null) : null, department: h.department || null,
         description: h.description || null, amount: grand,
@@ -220,7 +220,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
       if (isProcurement) {
         await supabase.from('finance_expense_bills').delete().eq('expense_id', expId)
         const billPayload = validRows.map(r => ({
-          client_id: clientId, expense_id: expId, item_id: r.item_id || null, bill_ref: r.name || null,
+           expense_id: expId, item_id: r.item_id || null, bill_ref: r.name || null,
           category_id: r.category_id || null, unit: r.unit || null, qty: Number(r.qty) || null,
           rate: Number(r.rate) || null, amount: lineTotal(r)
         }))
@@ -236,7 +236,7 @@ export function ExpenseForm({ record, clientId, items, categories, recentPayees,
         }
         await supabase.from('finance_additional_expenses').delete().eq('expense_id', expId)
         const addlPayload = addl.filter(a => a.expense_type && Number(a.amount) > 0)
-          .map(a => ({ client_id: clientId, expense_id: expId, expense_type: a.expense_type, amount: Number(a.amount) || 0 }))
+          .map(a => ({  expense_id: expId, expense_type: a.expense_type, amount: Number(a.amount) || 0 }))
         if (addlPayload.length) {
           const { error } = await supabase.from('finance_additional_expenses').insert(addlPayload)
           if (error) throw error

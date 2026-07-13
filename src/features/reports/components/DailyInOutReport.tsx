@@ -33,7 +33,7 @@ async function fetchLedger(clientId: string, beforeIso: string): Promise<LedgerR
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from('inventory_ledger')
       .select('product_id,movement_type,qty_in,qty_out,created_at')
-      .eq('client_id', clientId).lt('created_at', beforeIso)
+      .lt('created_at', beforeIso)
       .order('created_at', { ascending: true }).range(from, from + 999)
     if (error) throw error
     out.push(...(data ?? []))
@@ -81,7 +81,7 @@ export function DailyInOutReport() {
     if (!currentClientId) return
     setLoading(true)
     Promise.all([
-      supabase.from('products').select('id,material_code,name,category').eq('client_id', currentClientId),
+      supabase.from('products').select('id,material_code,name,category'),
       fetchLedger(currentClientId, nextMonth)
     ]).then(([{ data: prods }, led]) => {
       setProducts(prods ?? []); setLedger(led)

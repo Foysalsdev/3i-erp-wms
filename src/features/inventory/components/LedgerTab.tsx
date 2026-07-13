@@ -26,7 +26,7 @@ export function LedgerTab() {
     if (!clientId) return
     setLoading(true)
     supabase.from('inventory_ledger').select('*, products(name,material_code), warehouses(code)')
-      .eq('client_id', clientId).order('created_at', { ascending: false }).limit(500)
+      .order('created_at', { ascending: false }).limit(500)
       .then(({ data, error }) => {
         if (error) notify('error', `Could not load ledger: ${error.message}`)
         setRows(data ?? []); setLoading(false)

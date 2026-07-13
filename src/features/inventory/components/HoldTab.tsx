@@ -37,7 +37,7 @@ export function HoldTab() {
     setLoading(true)
     supabase.from('inventory_stock')
       .select('*, products(name,material_code), warehouses(code), locations(location_code)')
-      .eq('client_id', currentClientId).gt('quantity', 0)
+      .gt('quantity', 0)
       .then(({ data, error }) => {
         if (error) notify('error', `Could not load stock: ${error.message}`)
         setRows(data ?? []); setLoading(false)

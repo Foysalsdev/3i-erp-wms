@@ -277,7 +277,7 @@ function GRNForm({ record, suppliers, warehouses, products, clientId, notify, on
         {approved && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">This GRN is approved and posted to inventory. Editing lines will not change posted stock.</p>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Supplier">
-            <Combobox items={suppliers.map(s => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))} value={h.supplier_id ?? ''} onChange={(id: string) => set({ supplier_id: id })} placeholder="Search supplier by code or name" />
+            <Combobox items={suppliers.map(s => ({ id: s.id, label: s.supplier_code, sublabel: s.name }))} value={h.supplier_id ?? ''} mruKey="supplier" onChange={(id: string) => set({ supplier_id: id })} placeholder="Search supplier by code or name" />
           </Field>
           <Field label="Warehouse">
             <SelectBox value={h.warehouse_id ?? ''} onChange={e => set({ warehouse_id: e.target.value })}>

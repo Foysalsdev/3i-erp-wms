@@ -613,7 +613,7 @@ function SOForm({ record, customers, warehouses, products, users, clientId, noti
         })()}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Customer (Dealer)">
-            <Combobox items={customers.map(c => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
+            <Combobox items={customers.map(c => ({ id: c.id, label: c.customer_code, sublabel: c.name }))} value={h.customer_id ?? ''} mruKey="customer" onChange={(id: string) => set({ customer_id: id })} placeholder="Search customer by code or name" />
             {selCust?.sap_customer_code && <p className="mt-1 text-[11px] text-ink-faint">SAP customer code: <span className="font-mono text-ink-soft">{selCust.sap_customer_code}</span></p>}
           </Field>
           <Field label="Warehouse">

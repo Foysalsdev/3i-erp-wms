@@ -193,7 +193,7 @@ export function OperationList({ def }: { def: OpDef }) {
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable fill columns={columns} rows={rows} loading={loading} rowKey={r => r.id}
           onRowClick={canEdit ? (r => { setEditing(r); setModal(true) }) : (r => setViewing(r))}
-          emptyTitle={`No ${def.singular.toLowerCase()} records yet`}
+          rowMenu={rowActions} emptyTitle={`No ${def.singular.toLowerCase()} records yet`}
           selection={{ selected: checked, onToggle: toggleOne, onToggleAll: toggleAll }} />
       </Card>
 

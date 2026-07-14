@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
@@ -29,6 +29,14 @@ export function OperationForm({ def, record, onDone, onCancel }:
   }
   const { register, handleSubmit, setValue, watch, formState: { errors, isDirty } } = useForm({ mode: 'onChange', defaultValues: defaults })
   useUnsavedChanges(isDirty && !saving)
+
+  // Smart focus: cursor on the first real field when the form opens ([name]
+  // skips combobox search inputs so their dropdown doesn't open on mount).
+  const formRef = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    const el = formRef.current?.querySelector<HTMLElement>('input[name]:not([disabled]), textarea[name], select[name]')
+    el?.focus()
+  }, [])
 
   // Load linked dropdown options for relation fields.
   useEffect(() => {
@@ -92,7 +100,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     : 'lg'
 
   return (
-    <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       {record && (
         <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm">
           <span className="text-ink-faint">Document No: </span>

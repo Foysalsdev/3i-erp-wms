@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
@@ -25,6 +25,15 @@ export function MasterForm({ def, record, onDone, onCancel }:
     defaultValues: record ?? { status: 'active', uom: 'PCS', unit: 'PCS' }
   })
   useUnsavedChanges(isDirty && !saving)
+
+  // Smart focus: land the cursor on the first real field when the form opens.
+  // [name] targets react-hook-form inputs, skipping the combobox search inputs
+  // (which would otherwise pop their dropdown open on mount).
+  const formRef = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    const el = formRef.current?.querySelector<HTMLElement>('input[name]:not([disabled]), textarea[name], select[name]')
+    el?.focus()
+  }, [])
 
   // Load linked dropdown options for relation fields
   useEffect(() => {
@@ -82,7 +91,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
     : 'lg'
 
   return (
-    <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
         {def.fields.map(f => {
           if (f.type === 'image')

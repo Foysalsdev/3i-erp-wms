@@ -2345,6 +2345,7 @@ export type Database = {
       }
       goods_receipt_items: {
         Row: {
+          batch: string | null
           created_at: string
           expected_qty: number
           grn_id: string
@@ -2358,6 +2359,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          batch?: string | null
           created_at?: string
           expected_qty?: number
           grn_id: string
@@ -2371,6 +2373,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          batch?: string | null
           created_at?: string
           expected_qty?: number
           grn_id?: string

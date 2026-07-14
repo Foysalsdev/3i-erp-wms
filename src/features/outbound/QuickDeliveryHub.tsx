@@ -96,6 +96,9 @@ export default function QuickDeliveryHub() {
   // Challans that ALREADY exist for the picked invoice — the basis for
   // duplicate detection (shown as a banner, re-checked at generate time).
   const [existing, setExisting] = useState<{ challan_no: string; status: string; posted_at: string | null }[]>([])
+  // Ship-To addresses already on the customer master — used to decide whether a
+  // typed address is new (and worth saving back as a side-delivery address).
+  const [custAddrs, setCustAddrs] = useState<string[]>([])
   const [lines, setLines] = useState<HubLine[]>([])
   const [del, setDel] = useState<DeliveryInfo>(emptyDelivery())
   const [printNote, setPrintNote] = useState(DEFAULT_CHALLAN_NOTE)
@@ -144,7 +147,7 @@ export default function QuickDeliveryHub() {
 
   const reset = useCallback(() => {
     setCtx(null); setLines([]); setDel(emptyDelivery()); setPrintNote(DEFAULT_CHALLAN_NOTE)
-    setCreated(null); setLoadingInv(false); setGuideOpen(false); setExisting([])
+    setCreated(null); setLoadingInv(false); setGuideOpen(false); setExisting([]); setCustAddrs([])
     setTimeout(() => searchRef.current?.focus(), 0)
   }, [])
 
@@ -197,7 +200,11 @@ export default function QuickDeliveryHub() {
         customerShipping: row.customerShipping, warehouseId: row.warehouseId
       })
       setLines(seeded)
+      // Ship-To auto-fills from the customer's default address; the operator can
+      // change it, and a changed one is saved back to the master (see generate).
       setDel(d => ({ ...d, shipToAddress: row.customerShipping || d.shipToAddress }))
+      supabase.from('customer_addresses').select('address').eq('customer_id', row.customerId)
+        .then(({ data }) => setCustAddrs((data ?? []).map(a => a.address)))
       setPrintNote(DEFAULT_CHALLAN_NOTE)
       // Open the guided popup so the operator is asked each delivery field one
       // at a time. Quantities are a separate step (the item grid) — the popup
@@ -302,6 +309,18 @@ export default function QuickDeliveryHub() {
         supabase.from('vehicles').update({
           driver_name: del.driverName || null, driver_phone: del.driverPhone || null, vendor_id: del.transporterId || null
         }).eq('id', del.vehicleId).then(() => {})
+      }
+      // If the operator changed the Ship-To to an address the customer master
+      // doesn't have yet, save it back as a side-delivery address so it's
+      // available next time (fire-and-forget — never blocks the challan).
+      const shipAddr = (del.shipToAddress || '').trim()
+      if (shipAddr) {
+        const known = new Set([ctx.customerShipping, ...custAddrs].map(a => (a || '').trim().toLowerCase()).filter(Boolean))
+        if (!known.has(shipAddr.toLowerCase())) {
+          supabase.from('customer_addresses')
+            .insert({ customer_id: ctx.customerId, address: shipAddr, address_type: 'Shipping', is_default: false, label: 'Side Delivery' })
+            .then(({ error }) => { if (!error) setCustAddrs(a => [...a, shipAddr]) })
+        }
       }
       setCreated(ch)
       notify('success', `Challan ${ch.challan_no} generated`)

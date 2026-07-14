@@ -236,19 +236,29 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
     return set
   }, [lines])
 
+  // Never capture more serials than the line's received qty — a line of 10
+  // units accepts exactly 10 serials (0 qty = unknown, no cap).
   const addSerials = (i: number, raws: string[]) => {
     const p: Partial<ProductLite> = prodById[lines[i].product_id] ?? {}
-    let dupes = 0
+    const cap = Number(lines[i].qty) || 0
+    const current = lines[i].serials.length
+    let dupes = 0, over = 0, wrong = 0
     const fresh: SRow[] = []
     for (const raw of raws) {
-      const r: SRow = normaliseSerial(raw, p)
-      if (!r.serial) continue
-      const up = r.serial.toUpperCase()
+      const { serial, original, matched } = normaliseSerial(raw, p)
+      if (!serial) continue
+      // Wrong item: serial carries neither this product's Material Code nor its
+      // China Code / barcode prefix → reject.
+      if (!matched) { wrong++; continue }
+      const up = serial.toUpperCase()
       if (allSerials.has(up) || fresh.some(f => f.serial.toUpperCase() === up)) { dupes++; continue }
-      fresh.push(r)
+      if (cap > 0 && current + fresh.length >= cap) { over++; continue }
+      fresh.push({ serial, original })
     }
     if (fresh.length) setLine(i, { serials: [...fresh, ...lines[i].serials] })
+    if (wrong) notify('error', `Wrong item — ${wrong} serial(s) don't match ${p.material_code ?? 'this product'}`)
     if (dupes) notify('info', `${dupes} duplicate serial(s) skipped`)
+    if (over) notify('error', `Line is full — only ${cap} serial(s) can be scanned for this item`)
   }
 
   const removeSerial = (i: number, r: SRow) => {
@@ -492,6 +502,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
                     {l.scanOpen && (
                       <div className="mt-2 space-y-2">
                         <input value={l.scanInput ?? ''} autoComplete="off" spellCheck={false}
+                          disabled={qty > 0 && l.serials.length >= qty}
                           onChange={e => setLine(i, { scanInput: e.target.value })}
                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const v = (l.scanInput ?? '').trim(); if (v) { addSerials(i, [v]); setLine(i, { scanInput: '' }) } } }}
                           onPaste={e => {
@@ -500,7 +511,7 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
                             e.preventDefault()
                             addSerials(i, t.split(/[\r\n\t]+/).map(x => x.trim()).filter(Boolean))
                           }}
-                          placeholder="Scan serial and press Enter — or paste a list from Excel"
+                          placeholder={qty > 0 && l.serials.length >= qty ? `All ${qty} serial(s) scanned` : 'Scan serial and press Enter — or paste a list from Excel'}
                           className="fiori-input font-mono" />
                         {l.serials.length > 0 && (
                           <div className="max-h-40 overflow-y-auto rounded-lg border border-surface-line">

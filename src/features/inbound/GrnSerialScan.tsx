@@ -67,20 +67,38 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: {
     return set
   }, [rows])
 
+  // Received quantity for a line = received_qty when set, else the ordered qty.
+  // 0 means unknown → no cap enforced.
+  const qtyOf = (pid: string) => {
+    const it = items.find(x => x.product_id === pid)
+    if (!it) return 0
+    return Number(it.received_qty) > 0 ? Number(it.received_qty) : Number(it.qty)
+  }
+
   // Add one or many raw scans to a product; returns how many were new.
+  // Never captures more serials than the received quantity for the line — a
+  // line of 10 units accepts exactly 10 serials, matching the outbound scans.
   const add = (pid: string, raws: string[]) => {
     const p = prods[pid]
-    let added = 0, dupes = 0
+    const cap = qtyOf(pid)
+    const current = (rows[pid] ?? []).length
+    let added = 0, dupes = 0, over = 0, wrong = 0
     const fresh: Row[] = []
     for (const raw of raws) {
-      const r: Row = normaliseSerial(raw, p ?? {})
-      if (!r.serial) continue
-      const owner = allSerials.get(norm(r.serial))
-      if (owner || fresh.some(f => norm(f.serial) === norm(r.serial))) { dupes++; continue }
-      fresh.push(r); added++
+      const { serial, original, matched } = normaliseSerial(raw, p ?? {})
+      if (!serial) continue
+      // Rule 3: serial doesn't carry this product's Material Code or China Code
+      // prefix → wrong item, reject it (never lands on the line).
+      if (!matched) { wrong++; continue }
+      const owner = allSerials.get(norm(serial))
+      if (owner || fresh.some(f => norm(f.serial) === norm(serial))) { dupes++; continue }
+      if (cap > 0 && current + fresh.length >= cap) { over++; continue }
+      fresh.push({ serial, original }); added++
     }
     if (fresh.length) setRows(m => ({ ...m, [pid]: [...fresh, ...(m[pid] ?? [])] }))
+    if (wrong) notify('error', `Wrong item — ${wrong} serial(s) don't match ${p?.material_code ?? 'this product'}`)
     if (dupes) notify('info', `${dupes} duplicate serial(s) skipped`)
+    if (over) notify('error', `Line is full — only ${cap} serial(s) can be scanned for this item`)
     return added
   }
 
@@ -188,10 +206,11 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: {
                     <input
                       ref={el => { inputRefs.current[it.product_id] = el }}
                       value={input[it.product_id] ?? ''}
+                      disabled={complete}
                       onChange={e => setInput(s => ({ ...s, [it.product_id]: e.target.value }))}
                       onKeyDown={e => onKey(it.product_id, e)}
                       onPaste={e => onPaste(it.product_id, e)}
-                      placeholder="Scan serial and press Enter — or paste a list"
+                      placeholder={complete ? `All ${qty} serial(s) scanned` : 'Scan serial and press Enter — or paste a list'}
                       className="fiori-input font-mono"
                       autoComplete="off" spellCheck={false}
                     />

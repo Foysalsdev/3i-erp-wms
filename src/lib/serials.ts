@@ -7,16 +7,29 @@ import { supabase } from '@/lib/supabase'
 // Material Code so every product keeps a single serial scheme.
 export interface ProductCodes { material_code?: string | null; china_code?: string | null; barcode?: string | null }
 
-export function normaliseSerial(raw: string, p: ProductCodes): { serial: string; original?: string } {
+// Validate + normalise one scanned serial against a product's codes. `matched`
+// tells the caller whether the serial actually belongs to this product, so a
+// mis-scan can be rejected ("wrong item") instead of silently accepted:
+//   1. Material Code — the serial's leading code (first 5 digits by default);
+//      the primary rule, always checked.
+//   2. China Code / barcode — a factory prefix the unit may be labelled with;
+//      when the serial starts with it, swap it for the Material Code so one
+//      product keeps a single serial scheme.
+//   3. Neither → matched:false (wrong item for this product).
+// Pure string work — no I/O — so it stays instant under a rapid-fire scanner.
+export function normaliseSerial(raw: string, p: ProductCodes): { serial: string; original?: string; matched: boolean } {
   const s = raw.trim()
   const up = (x: string) => x.trim().toUpperCase()
   const code = String(p.material_code ?? '').trim()
-  if (!s || !code || up(s).startsWith(up(code))) return { serial: s }
+  if (!s) return { serial: s, matched: false }
+  // No Material Code on the master → nothing to validate against; accept as-is.
+  if (!code) return { serial: s, matched: true }
+  if (up(s).startsWith(up(code))) return { serial: s, matched: true }
   for (const alt of [p.china_code, p.barcode]) {
     const a = String(alt ?? '').trim()
-    if (a && up(s).startsWith(up(a))) return { serial: code + s.slice(a.length), original: s }
+    if (a && up(s).startsWith(up(a))) return { serial: code + s.slice(a.length), original: s, matched: true }
   }
-  return { serial: s }
+  return { serial: s, matched: false }
 }
 
 // ---------------------------------------------------------------------------

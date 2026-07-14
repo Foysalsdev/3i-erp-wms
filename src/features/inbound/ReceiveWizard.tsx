@@ -242,17 +242,21 @@ function Wizard({ clientId, grn, pr, suppliers, warehouses, locations, products,
     const p: Partial<ProductLite> = prodById[lines[i].product_id] ?? {}
     const cap = Number(lines[i].qty) || 0
     const current = lines[i].serials.length
-    let dupes = 0, over = 0
+    let dupes = 0, over = 0, wrong = 0
     const fresh: SRow[] = []
     for (const raw of raws) {
-      const r: SRow = normaliseSerial(raw, p)
-      if (!r.serial) continue
-      const up = r.serial.toUpperCase()
+      const { serial, original, matched } = normaliseSerial(raw, p)
+      if (!serial) continue
+      // Wrong item: serial carries neither this product's Material Code nor its
+      // China Code / barcode prefix → reject.
+      if (!matched) { wrong++; continue }
+      const up = serial.toUpperCase()
       if (allSerials.has(up) || fresh.some(f => f.serial.toUpperCase() === up)) { dupes++; continue }
       if (cap > 0 && current + fresh.length >= cap) { over++; continue }
-      fresh.push(r)
+      fresh.push({ serial, original })
     }
     if (fresh.length) setLine(i, { serials: [...fresh, ...lines[i].serials] })
+    if (wrong) notify('error', `Wrong item — ${wrong} serial(s) don't match ${p.material_code ?? 'this product'}`)
     if (dupes) notify('info', `${dupes} duplicate serial(s) skipped`)
     if (over) notify('error', `Line is full — only ${cap} serial(s) can be scanned for this item`)
   }

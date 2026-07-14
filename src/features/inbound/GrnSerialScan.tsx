@@ -82,17 +82,21 @@ export function GrnSerialScan({ grn, clientId, notify, onClose }: {
     const p = prods[pid]
     const cap = qtyOf(pid)
     const current = (rows[pid] ?? []).length
-    let added = 0, dupes = 0, over = 0
+    let added = 0, dupes = 0, over = 0, wrong = 0
     const fresh: Row[] = []
     for (const raw of raws) {
-      const r: Row = normaliseSerial(raw, p ?? {})
-      if (!r.serial) continue
-      const owner = allSerials.get(norm(r.serial))
-      if (owner || fresh.some(f => norm(f.serial) === norm(r.serial))) { dupes++; continue }
+      const { serial, original, matched } = normaliseSerial(raw, p ?? {})
+      if (!serial) continue
+      // Rule 3: serial doesn't carry this product's Material Code or China Code
+      // prefix → wrong item, reject it (never lands on the line).
+      if (!matched) { wrong++; continue }
+      const owner = allSerials.get(norm(serial))
+      if (owner || fresh.some(f => norm(f.serial) === norm(serial))) { dupes++; continue }
       if (cap > 0 && current + fresh.length >= cap) { over++; continue }
-      fresh.push(r); added++
+      fresh.push({ serial, original }); added++
     }
     if (fresh.length) setRows(m => ({ ...m, [pid]: [...fresh, ...(m[pid] ?? [])] }))
+    if (wrong) notify('error', `Wrong item — ${wrong} serial(s) don't match ${p?.material_code ?? 'this product'}`)
     if (dupes) notify('info', `${dupes} duplicate serial(s) skipped`)
     if (over) notify('error', `Line is full — only ${cap} serial(s) can be scanned for this item`)
     return added

@@ -211,15 +211,22 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
 
   const setValue = (i: number, v: string) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, serial_no: v } : r))
 
-  // Factory prefix (china code / barcode) -> material code, per product master.
-  const normVal = (raw: string) => normaliseSerial(raw, { material_code: line.code, china_code: line.china, barcode: line.bar }).serial
+  // Validate + normalise against THIS line's product (factory prefix -> material
+  // code). `matched` is false when the serial belongs to a different product.
+  const validate = (raw: string) => normaliseSerial(raw, { material_code: line.code, china_code: line.china, barcode: line.bar })
+  const normVal = (raw: string) => validate(raw).serial
 
-  // Returns false (and clears the field) when the value duplicates another
-  // row in this grid or a serial already scanned on a different line.
+  // Returns false (and clears the field) when the value is the wrong item,
+  // duplicates another row in this grid, or a serial already scanned elsewhere.
   const commitRow = (i: number) => {
-    const v = normVal(rows[i].serial_no)
+    const { serial: v, matched } = validate(rows[i].serial_no)
     if (v !== rows[i].serial_no) setValue(i, v)
     if (!v) return true
+    if (!matched) {
+      notify('error', `Wrong item — ${v} doesn't match ${line.code}`)
+      setValue(i, '')
+      return false
+    }
     const dupInGrid = rows.some((r, idx) => idx !== i && normVal(r.serial_no).toLowerCase() === v.toLowerCase())
     if (dupInGrid || otherSerials.has(v.toLowerCase())) {
       notify('error', `Serial already scanned: ${v}`)
@@ -234,7 +241,15 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
     const text = e.clipboardData.getData('text')
     if (!/[\r\n\t]/.test(text)) return
     e.preventDefault()
-    const vals = text.split(/[\r\n\t]+/).map(s => normVal(s)).filter(Boolean)
+    let wrong = 0
+    const vals: string[] = []
+    for (const part of text.split(/[\r\n\t]+/)) {
+      const { serial, matched } = validate(part)
+      if (!serial) continue
+      if (!matched) { wrong++; continue }   // skip wrong-item serials on paste
+      vals.push(serial)
+    }
+    if (wrong) notify('error', `Wrong item — ${wrong} serial(s) don't match ${line.code}`)
     setRows(rs => {
       const out = [...rs]
       let idx = i
@@ -263,6 +278,7 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
     for (let i = 0; i < normRows.length; i++) {
       const v = normRows[i].serial_no
       if (!v) continue
+      if (!validate(v).matched) { notify('error', `Wrong item — ${v} doesn't match ${line.code}`); return }
       const dup = normRows.some((r, idx) => idx !== i && r.serial_no.toLowerCase() === v.toLowerCase())
       if (dup || otherSerials.has(v.toLowerCase())) { notify('error', `Serial already scanned: ${v}`); return }
     }

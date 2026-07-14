@@ -20,11 +20,26 @@ export function MasterForm({ def, record, onDone, onCancel }:
   // Relation options carry code + name separately so the smart lookup can show
   // the code as a mono chip and the description beside it, and search both.
   const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string; sublabel?: string }[]>>({})
-  const { register, handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm({
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors, isDirty } } = useForm({
     mode: 'onChange',  // live validation: required errors clear the moment a field is filled
     defaultValues: record ?? { status: 'active', uom: 'PCS', unit: 'PCS' }
   })
   useUnsavedChanges(isDirty && !saving)
+
+  // Draft auto-save (new records only): keep the in-progress form in localStorage
+  // so a tab close / crash / accidental navigation doesn't lose the entry. The
+  // draft is restored on reopen and cleared once the record saves.
+  const draftKey = `draft:master:${def.key}`
+  useEffect(() => {
+    if (record) return
+    try { const d = localStorage.getItem(draftKey); if (d) { reset(JSON.parse(d)); notify('info', 'Draft restored') } } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (record) return
+    const sub = watch(v => { try { localStorage.setItem(draftKey, JSON.stringify(v)) } catch { /* storage full */ } })
+    return () => sub.unsubscribe()
+  }, [record, draftKey, watch])
 
   // Smart focus: land the cursor on the first real field when the form opens.
   // [name] targets react-hook-form inputs, skipping the combobox search inputs
@@ -81,6 +96,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
         ? await supabase.from(def.table as any).update(payload).eq('id', record.id)
         : await supabase.from(def.table as any).insert(payload)
       if (res.error) { notify('error', res.error.message); return }
+      try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
       notify('success', `${def.singular} ${record ? 'updated' : 'created'}`)
       onDone()
     } catch (e: any) {

@@ -27,8 +27,22 @@ export function OperationForm({ def, record, onDone, onCancel }:
     status: def.statuses[0]?.value,
     ...Object.fromEntries(def.fields.filter(f => f.type === 'date' && f.required).map(f => [f.name, today()]))
   }
-  const { register, handleSubmit, setValue, watch, formState: { errors, isDirty } } = useForm({ mode: 'onChange', defaultValues: defaults })
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors, isDirty } } = useForm({ mode: 'onChange', defaultValues: defaults })
   useUnsavedChanges(isDirty && !saving)
+
+  // Draft auto-save (new documents only): persist the in-progress form so a
+  // tab close / crash doesn't lose it; restored on reopen, cleared once saved.
+  const draftKey = `draft:op:${def.key}`
+  useEffect(() => {
+    if (record) return
+    try { const d = localStorage.getItem(draftKey); if (d) { reset(JSON.parse(d)); notify('info', 'Draft restored') } } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (record) return
+    const sub = watch(v => { try { localStorage.setItem(draftKey, JSON.stringify(v)) } catch { /* storage full */ } })
+    return () => sub.unsubscribe()
+  }, [record, draftKey, watch])
 
   // Smart focus: cursor on the first real field when the form opens ([name]
   // skips combobox search inputs so their dropdown doesn't open on mount).
@@ -90,6 +104,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
         res = await supabase.from(def.table as any).insert(payload)
       }
       if (res.error) { notify('error', res.error.message); return }
+      try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
       notify('success', `${def.singular} ${record ? 'updated' : 'created'}`)
       onDone()
     } catch (e: any) {

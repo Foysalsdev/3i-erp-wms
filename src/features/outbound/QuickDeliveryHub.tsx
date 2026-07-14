@@ -372,7 +372,7 @@ export default function QuickDeliveryHub() {
         {/* Center workspace — the item grid frame is always present; only the
             rows fill once an invoice is loaded. */}
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-surface-line px-5 py-2.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-surface-line px-4 py-2.5">
             <h2 className="text-sm font-semibold">Items to dispatch</h2>
             <span className="text-xs text-ink-soft">{ctx ? `${lines.length} lines · Invoice ${ctx.invoiceNo}` : 'No invoice loaded'}</span>
             <div className="ml-auto flex items-center gap-2">
@@ -401,7 +401,7 @@ export default function QuickDeliveryHub() {
           </div>
 
           {ctx && existing.length > 0 && (
-            <div className={cn('flex items-start gap-2 border-b px-5 py-2 text-xs',
+            <div className={cn('flex items-start gap-2 border-b px-4 py-2 text-xs',
               lines.every(l => l.remaining <= 0) ? 'border-bad/30 bg-bad/5 text-bad' : 'border-warn/30 bg-warn/10 text-warn')}>
               <Icon name="warning" className="mt-px text-[16px]" filled />
               <span>
@@ -571,7 +571,7 @@ function Header({ ctx, onExit, searchRef, onSelectInvoice, loadingInv, currentCl
                 onFocus={() => { if (sugs.length) setOpen(true) }}
                 onBlur={() => setTimeout(() => setOpen(false), 150)}
                 placeholder="Type invoice…  ( / )"
-                className="h-8 w-full rounded-lg border border-brand-500 bg-surface px-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-faint"
+                className="h-8 w-full rounded-lg border border-brand-500 bg-surface px-2.5 text-sm font-semibold outline-none placeholder:font-normal placeholder:text-ink/35 focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-faint"
               />
               {loadingInv && <span className="absolute right-2 top-[26px] text-[11px] text-ink-soft">…</span>}
               {open && sugs.length === 0 && q.trim().length >= 2 && (
@@ -714,9 +714,9 @@ function GuidedDeliveryModal({ del, patchDel, vehicles, vendors, drivers, courie
     </Modal>
   )
 }
-const bigInput = 'h-12 w-full rounded-xl border border-ink/50 bg-surface px-4 text-base outline-none transition-colors hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20'
+const bigInput = 'h-12 w-full rounded-xl border border-ink/50 bg-surface px-4 text-base outline-none transition-colors placeholder:font-normal placeholder:text-ink/35 hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20'
 
-const inputCls = 'h-9 w-full rounded-lg border border-ink/50 bg-surface px-2.5 text-sm outline-none transition-colors hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint'
+const inputCls = 'h-9 w-full rounded-lg border border-ink/50 bg-surface px-2.5 text-sm outline-none transition-colors placeholder:font-normal placeholder:text-ink/35 hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint'
 
 function Fact({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
@@ -786,13 +786,15 @@ function applyVehicle(id: string, vehicles: VehicleLite[], vendors: VendorLite[]
 // ===========================================================================
 // Item grid
 // ===========================================================================
-// 12-col grid keeps every cell aligned with the sticky header (Serial, Code,
-// Description, Invoiced, Delivered, Condition, Location, Remarks, Status).
-const GRID = 'grid grid-cols-[48px_120px_minmax(180px,1fr)_84px_96px_150px_140px_minmax(120px,1fr)_44px] items-center gap-3'
+// Columns sized to the actual data, not padded out: a 5-digit code needs no
+// more than ~74px, quantities are 2–3 digits, while Description (the long,
+// same-font product name) takes the lion's share and Remarks the rest.
+// Order: # · Item Code · Description · Invoiced · Delivered · Condition · Location · Remarks · ✓
+const GRID = 'grid grid-cols-[32px_74px_minmax(150px,2.4fr)_60px_82px_122px_108px_minmax(80px,1fr)_32px] items-center gap-2.5'
 
 function ItemHeaderRow() {
   return (
-    <div className={cn(GRID, 'sticky top-0 z-10 border-b border-surface-line bg-surface-sunken px-5 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-soft')}>
+    <div className={cn(GRID, 'sticky top-0 z-10 border-b border-surface-line bg-surface-sunken px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-soft')}>
       <span>#</span><span>Item Code</span><span>Description</span>
       <span className="text-right">Invoiced</span><span className="text-right">Delivered</span>
       <span>Condition</span><span>Location</span><span>Remarks</span><span className="text-center">✓</span>
@@ -810,9 +812,9 @@ function ItemRow({ i, l, locations, disabled, qtyRef, onQtyKey, onFocusQty, onQt
   const done = (l.alreadyDelivered + (Number(l.deliveredQty) || 0)) >= l.invoicedQty && l.invoicedQty > 0
   const cond = STOCK_CONDITIONS[l.condition]
   return (
-    <div className={cn(GRID, 'border-b border-surface-line px-5 py-1.5 text-sm', done ? 'bg-ok/5' : l.deliveredQty > 0 ? 'bg-brand-50/40' : '')}>
+    <div className={cn(GRID, 'border-b border-surface-line px-4 py-1.5 text-sm', done ? 'bg-ok/5' : l.deliveredQty > 0 ? 'bg-brand-50/40' : '')}>
       <span className="text-xs font-medium text-ink-soft tabular-nums">{i + 1}</span>
-      <span className="truncate font-semibold" title={l.code}>{l.code}</span>
+      <span className="truncate font-semibold tabular-nums" title={l.code}>{l.code}</span>
       <span className="truncate" title={l.name}>
         {l.name}
         {l.alreadyDelivered > 0 && <span className="ml-1.5 text-[11px] text-ink-soft">({formatNumber(l.alreadyDelivered)} already)</span>}
@@ -826,7 +828,7 @@ function ItemRow({ i, l, locations, disabled, qtyRef, onQtyKey, onFocusQty, onQt
         onChange={e => onQty(Math.max(0, Number(e.target.value) || 0))}
         onBlur={e => onCommitQty(Number(e.target.value) || 0)}
         placeholder="0"
-        className={cn('h-8 w-full rounded-md border px-2 text-right text-sm font-semibold tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
+        className={cn('h-8 w-full rounded-md border px-2 text-right text-sm font-semibold tabular-nums outline-none placeholder:font-normal placeholder:text-ink/35 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
           Number(l.deliveredQty) > l.remaining ? 'border-bad text-bad' : 'border-ink/40',
           (disabled || l.remaining <= 0) && 'bg-surface-sunken text-ink-faint')}
       />
@@ -839,8 +841,8 @@ function ItemRow({ i, l, locations, disabled, qtyRef, onQtyKey, onFocusQty, onQt
         <option value="">— Location —</option>
         {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.location_code}</option>)}
       </select>
-      <input value={l.remarks} disabled={disabled} onChange={e => onRemarks(e.target.value)} placeholder="—"
-        className="h-8 w-full rounded-md border border-ink/40 bg-surface px-2 text-xs outline-none focus:border-brand-500" />
+      <input value={l.remarks} disabled={disabled} onChange={e => onRemarks(e.target.value)} placeholder="note"
+        className="h-8 w-full rounded-md border border-ink/40 bg-surface px-2 text-xs outline-none placeholder:text-ink/35 focus:border-brand-500" />
       <span className="flex justify-center">
         {done
           ? <Icon name="check_circle" className="text-[20px] text-ok" filled />
@@ -990,7 +992,7 @@ function FooterBar({ stats, ctx, created, saving, canPost, canCreate, onGenerate
   const posted = !!created?.posted_at
   return (
     <footer className="shrink-0 border-t border-surface-line bg-surface">
-      <div className="flex items-center gap-5 px-5 py-2.5">
+      <div className="flex items-center gap-5 px-4 py-2.5">
         <div className="flex flex-1 flex-wrap items-center gap-x-6 gap-y-1">
           <Stat label="Invoice Qty" value={formatNumber(stats.invoiceQty)} />
           <Stat label="Delivered" value={formatNumber(stats.deliveredQty)} tone="brand" />

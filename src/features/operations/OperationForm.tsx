@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
@@ -27,8 +27,40 @@ export function OperationForm({ def, record, onDone, onCancel }:
     status: def.statuses[0]?.value,
     ...Object.fromEntries(def.fields.filter(f => f.type === 'date' && f.required).map(f => [f.name, today()]))
   }
-  const { register, handleSubmit, setValue, watch, formState: { errors, isDirty } } = useForm({ mode: 'onChange', defaultValues: defaults })
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors, isDirty } } = useForm({ mode: 'onChange', defaultValues: defaults })
   useUnsavedChanges(isDirty && !saving)
+
+  // Draft auto-save (new documents only): persist the in-progress form so a
+  // tab close / crash doesn't lose it; restored on reopen, cleared once saved.
+  const draftKey = `draft:op:${def.key}`
+  useEffect(() => {
+    if (record) return
+    try { const d = localStorage.getItem(draftKey); if (d) { reset(JSON.parse(d)); notify('info', 'Draft restored') } } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (record) return
+    const sub = watch(v => { try { localStorage.setItem(draftKey, JSON.stringify(v)) } catch { /* storage full */ } })
+    return () => sub.unsubscribe()
+  }, [record, draftKey, watch])
+
+  // Smart focus: cursor on the first real field when the form opens ([name]
+  // skips combobox search inputs so their dropdown doesn't open on mount).
+  const formRef = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    const el = formRef.current?.querySelector<HTMLElement>('input[name]:not([disabled]), textarea[name], select[name]')
+    el?.focus()
+  }, [])
+
+  // Keyboard-first: Enter on a plain input advances to the next field (comboboxes
+  // and textareas keep their own Enter; last field still submits).
+  const onFormKeyDown = (e: React.KeyboardEvent) => {
+    const t = e.target as HTMLElement
+    if (e.key !== 'Enter' || t.tagName !== 'INPUT' || !t.getAttribute('name')) return
+    const controls = Array.from(formRef.current?.querySelectorAll<HTMLElement>('input:not([type=checkbox]):not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? [])
+    const next = controls[controls.indexOf(t) + 1]
+    if (next) { e.preventDefault(); next.focus() }
+  }
 
   // Load linked dropdown options for relation fields.
   useEffect(() => {
@@ -72,6 +104,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
         res = await supabase.from(def.table as any).insert(payload)
       }
       if (res.error) { notify('error', res.error.message); return }
+      try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
       notify('success', `${def.singular} ${record ? 'updated' : 'created'}`)
       onDone()
     } catch (e: any) {
@@ -92,7 +125,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     : 'lg'
 
   return (
-    <form onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
+    <form ref={formRef} onKeyDown={onFormKeyDown} onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       {record && (
         <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm">
           <span className="text-ink-faint">Document No: </span>

@@ -22,6 +22,9 @@ const HrPage = lazy(() => import('@/features/hr/pages/HrPage'))
 const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'))
 const ReversePage = lazy(() => import('@/features/reverse/pages/ReversePage'))
 const FinancePage = lazy(() => import('@/features/finance/pages/FinancePage'))
+// Full-screen dispatch console — deliberately rendered OUTSIDE the AppShell so
+// it takes over the whole viewport (no sidebar/topbar/footer).
+const QuickDeliveryHub = lazy(() => import('@/features/outbound/QuickDeliveryHub'))
 
 // Modules still served by the generic operational register page.
 const OPERATIONS_MODULES = ['transport']
@@ -47,6 +50,8 @@ export default function App() {
       <ErrorBoundary>
       <Suspense fallback={<WhirlpoolLoader fullScreen />}>
         <Routes>
+          {/* Full-screen workspace: no AppShell chrome around it. */}
+          <Route path="/quick-delivery" element={<RequirePermission perm="outbound.view"><QuickDeliveryHub /></RequirePermission>} />
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard/:tab?" element={<RequirePermission perm="dashboard.view"><DashboardPage /></RequirePermission>} />

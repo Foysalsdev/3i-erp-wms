@@ -1,0 +1,883 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/store/auth'
+import { useUI } from '@/store/ui'
+import { Icon } from '@/components/ui/Icon'
+import { Button } from '@/components/ui/Button'
+import { cn, formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
+import { CONDITION_OPTIONS, STOCK_CONDITIONS } from '@/lib/conditions'
+import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
+import { nextChallanNumber } from '@/hooks/useDocNumber'
+import { loadSoInvoices } from './soInvoices'
+import { downloadChallanPdfFor } from './challanPdf'
+import { primeCompanyInfo } from '@/lib/settings'
+import type { Tables } from '@/types/database.types'
+
+// ---------------------------------------------------------------------------
+// Quick Delivery Hub — a full-screen warehouse dispatch console that opens on
+// top of the ERP (no sidebar/topbar/footer). One SAP invoice → one delivery
+// challan, driven from a single keyboard-first workspace: search the invoice,
+// verify delivery info (auto-suggested from recent challans), tweak delivered
+// quantities in a virtualized item grid, then generate the challan. It reuses
+// the exact same persistence pipeline as the classic Delivery Challan form
+// (nextChallanNumber, delivery_challans + _items, post_delivery_challan RPC,
+// downloadChallanPdfFor) so both surfaces produce identical documents.
+// ---------------------------------------------------------------------------
+
+type Notify = (kind: 'success' | 'error' | 'info', msg: string) => void
+const today = () => new Date().toISOString().slice(0, 10)
+
+type ProductLite = Pick<Tables<'products'>, 'id' | 'material_code' | 'name' | 'category' | 'uom'>
+type VehicleLite = Pick<Tables<'vehicles'>, 'id' | 'vehicle_number' | 'vehicle_type' | 'vendor_id' | 'driver_name' | 'driver_phone'>
+type VendorLite = Pick<Tables<'transport_vendors'>, 'id' | 'vendor_code' | 'name'>
+type DriverLite = Pick<Tables<'drivers'>, 'id' | 'name' | 'phone'>
+type CourierLite = Pick<Tables<'couriers'>, 'id' | 'courier_code' | 'name'>
+type LocationLite = Pick<Tables<'locations'>, 'id' | 'location_code'>
+type RecentChallan = Pick<Tables<'delivery_challans'>,
+  'id' | 'challan_no' | 'invoice_no' | 'created_at' | 'delivery_method' | 'vehicle_id' | 'transporter_id'
+  | 'transport_vendor' | 'driver_name' | 'driver_phone' | 'courier_id' | 'courier_name'
+  | 'ship_to_address' | 'receiver_name' | 'receiver_phone' | 'print_note'>
+
+// The customer + order context resolved from a picked invoice.
+interface InvoiceCtx {
+  invoiceId: string; invoiceNo: string; invoiceDate: string
+  soId: string; soNo: string; poNo: string; orderDate: string
+  customerId: string; customerCode: string; customerName: string
+  customerShipping: string; warehouseId: string | null
+}
+// One editable dispatch row, seeded from an invoice line.
+interface HubLine {
+  soItemId: string; productId: string; code: string; name: string; uom: string
+  invoicedQty: number      // qty on the invoice line
+  alreadyDelivered: number // delivered on prior issued challans
+  remaining: number        // cap for THIS challan (qty − delivered − planned)
+  deliveredQty: number     // editable — what leaves on this dispatch
+  condition: string; locationId: string; remarks: string
+}
+// Editable delivery header the operator confirms before generating.
+interface DeliveryInfo {
+  shipToAddress: string; receiverName: string; receiverPhone: string
+  deliveryMethod: 'transport' | 'courier'
+  transporterId: string; transportVendor: string
+  vehicleId: string; driverId: string; driverName: string; driverPhone: string
+  courierId: string; courierName: string
+  deliveryNote: string
+}
+const emptyDelivery = (): DeliveryInfo => ({
+  shipToAddress: '', receiverName: '', receiverPhone: '', deliveryMethod: 'transport',
+  transporterId: '', transportVendor: '', vehicleId: '', driverId: '', driverName: '',
+  driverPhone: '', courierId: '', courierName: '', deliveryNote: ''
+})
+
+export default function QuickDeliveryHub() {
+  const nav = useNavigate()
+  const { currentClientId, can, isPlatformAdmin, profile } = useAuth()
+  const notify = useUI(s => s.notify) as Notify
+  const canPost = can('outbound.approve') || can('outbound.post') || isPlatformAdmin
+
+  // Masters — loaded once, shared by every dispatch in the session.
+  const [products, setProducts] = useState<ProductLite[]>([])
+  const [vehicles, setVehicles] = useState<VehicleLite[]>([])
+  const [vendors, setVendors] = useState<VendorLite[]>([])
+  const [drivers, setDrivers] = useState<DriverLite[]>([])
+  const [couriers, setCouriers] = useState<CourierLite[]>([])
+  const [locations, setLocations] = useState<LocationLite[]>([])
+  const [recent, setRecent] = useState<RecentChallan[]>([])
+
+  // Current dispatch state.
+  const [ctx, setCtx] = useState<InvoiceCtx | null>(null)
+  const [lines, setLines] = useState<HubLine[]>([])
+  const [del, setDel] = useState<DeliveryInfo>(emptyDelivery())
+  const [printNote, setPrintNote] = useState(DEFAULT_CHALLAN_NOTE)
+  const [loadingInv, setLoadingInv] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [created, setCreated] = useState<Tables<'delivery_challans'> | null>(null)
+
+  const searchRef = useRef<HTMLInputElement>(null)
+  const patchDel = (p: Partial<DeliveryInfo>) => setDel(x => ({ ...x, ...p }))
+
+  useEffect(() => { primeCompanyInfo(currentClientId ?? null) }, [currentClientId])
+
+  // Load masters + the recent-challan history that powers the smart panel.
+  useEffect(() => {
+    if (!currentClientId) return
+    supabase.from('products').select('id,material_code,name,category,uom').then(({ data }) => setProducts(data ?? []))
+    supabase.from('vehicles').select('id,vehicle_number,vehicle_type,vendor_id,driver_name,driver_phone').then(({ data }) => setVehicles(data ?? []))
+    supabase.from('transport_vendors').select('id,vendor_code,name').eq('status', 'active').then(({ data }) => setVendors(data ?? []))
+    supabase.from('drivers').select('id,name,phone').order('name').then(({ data }) => setDrivers(data ?? []))
+    supabase.from('couriers').select('id,courier_code,name').eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
+    supabase.from('delivery_challans')
+      .select('id,challan_no,invoice_no,created_at,delivery_method,vehicle_id,transporter_id,transport_vendor,driver_name,driver_phone,courier_id,courier_name,ship_to_address,receiver_name,receiver_phone,print_note')
+      .neq('status', 'cancelled').order('created_at', { ascending: false }).limit(25)
+      .then(({ data }) => setRecent(data ?? []))
+  }, [currentClientId])
+
+  // Locations for the picked invoice's warehouse (for the per-line Location col).
+  useEffect(() => {
+    if (!ctx?.warehouseId) { setLocations([]); return }
+    supabase.from('locations').select('id,location_code').eq('warehouse_id', ctx.warehouseId).then(({ data }) => setLocations(data ?? []))
+  }, [ctx?.warehouseId])
+
+  // Cursor lands on the invoice search whenever a fresh dispatch starts.
+  useEffect(() => { if (!ctx) searchRef.current?.focus() }, [ctx])
+
+  const dirty = !!ctx && !created
+  // Warn before a browser-level navigation drops an in-progress dispatch.
+  useEffect(() => {
+    if (!dirty) return
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
+
+  const reset = useCallback(() => {
+    setCtx(null); setLines([]); setDel(emptyDelivery()); setPrintNote(DEFAULT_CHALLAN_NOTE)
+    setCreated(null); setLoadingInv(false)
+    setTimeout(() => searchRef.current?.focus(), 0)
+  }, [])
+
+  const exit = useCallback(() => {
+    if (dirty && !window.confirm('Leave Quick Delivery Hub? The current dispatch is not saved.')) return
+    nav('/outbound/delivery-challan')
+  }, [dirty, nav])
+
+  // Esc leaves the hub; "/" (outside a field) jumps to the invoice search.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(el?.tagName)
+      if (e.key === 'Escape' && !typing) { exit() }
+      if (e.key === '/' && !typing) { e.preventDefault(); searchRef.current?.focus() }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [exit])
+
+  const pmap = useMemo(() => Object.fromEntries(products.map(p => [p.id, p])), [products])
+
+  // Load an invoice's lines + customer/order context and seed the grid.
+  const selectInvoice = async (row: InvoiceSuggestion) => {
+    setLoadingInv(true); setCreated(null)
+    try {
+      const { items, invoices } = await loadSoInvoices(row.soId)
+      const inv = invoices.find(i => i.id === row.invoiceId)
+      if (!inv) { notify('error', 'Invoice has no lines to deliver'); setLoadingInv(false); return }
+      const seeded: HubLine[] = inv.lines.map(l => {
+        const it = items.find((x: any) => x.id === l.so_item_id)
+        const p = pmap[l.product_id]
+        const remaining = Math.max(0, l.qty - l.delivered - l.planned)
+        return {
+          soItemId: l.so_item_id, productId: l.product_id,
+          code: p?.material_code ?? '—', name: p?.name ?? it?.description ?? l.product_id,
+          uom: p?.uom ?? 'Pc', invoicedQty: l.qty, alreadyDelivered: l.delivered, remaining,
+          deliveredQty: remaining, condition: 'good', locationId: '', remarks: ''
+        }
+      })
+      setCtx({
+        invoiceId: inv.id, invoiceNo: inv.invoice_no, invoiceDate: inv.invoice_date,
+        soId: row.soId, soNo: row.soNo, poNo: row.poNo, orderDate: row.orderDate,
+        customerId: row.customerId, customerCode: row.customerCode, customerName: row.customerName,
+        customerShipping: row.customerShipping, warehouseId: row.warehouseId
+      })
+      setLines(seeded)
+      setDel(d => ({ ...d, shipToAddress: row.customerShipping || d.shipToAddress }))
+      setPrintNote(DEFAULT_CHALLAN_NOTE)
+      // Land the cursor on the first editable quantity for immediate keying.
+      setTimeout(() => qtyRefs.current[0]?.focus(), 40)
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not load invoice')
+    } finally {
+      setLoadingInv(false)
+    }
+  }
+
+  // --- per-line editing -----------------------------------------------------
+  const qtyRefs = useRef<(HTMLInputElement | null)[]>([])
+  const lastQtyIdx = useRef<number | null>(null)
+  const [recentQtys, setRecentQtys] = useState<number[]>([])
+  const rememberQty = (n: number) => {
+    if (!(n > 0)) return
+    setRecentQtys(prev => [n, ...prev.filter(x => x !== n)].slice(0, 5))
+  }
+  const patchLine = (i: number, p: Partial<HubLine>) =>
+    setLines(ls => ls.map((l, idx) => idx === i ? { ...l, ...p } : l))
+
+  // Arrow/Enter move the cursor down the quantity column for scanner-speed entry.
+  const onQtyKey = (e: React.KeyboardEvent, i: number) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); qtyRefs.current[i + 1]?.focus() }
+    if (e.key === 'ArrowUp') { e.preventDefault(); qtyRefs.current[i - 1]?.focus() }
+  }
+
+  // --- live footer statistics ----------------------------------------------
+  const stats = useMemo(() => {
+    const invoiceQty = lines.reduce((s, l) => s + l.invoicedQty, 0)
+    const alreadyDelivered = lines.reduce((s, l) => s + l.alreadyDelivered, 0)
+    const deliveredQty = lines.reduce((s, l) => s + (Number(l.deliveredQty) || 0), 0)
+    const pending = Math.max(0, invoiceQty - alreadyDelivered - deliveredQty)
+    const totalItems = lines.length
+    const completedItems = lines.filter(l => (l.alreadyDelivered + (Number(l.deliveredQty) || 0)) >= l.invoicedQty && l.invoicedQty > 0).length
+    const pct = totalItems ? Math.round((completedItems / totalItems) * 100) : 0
+    return { invoiceQty, alreadyDelivered, deliveredQty, pending, totalItems, completedItems, remaining: totalItems - completedItems, pct }
+  }, [lines])
+
+  // --- generate the challan -------------------------------------------------
+  const generate = async () => {
+    if (!ctx || !currentClientId) return
+    const active = lines.filter(l => Number(l.deliveredQty) > 0)
+    if (!ctx.warehouseId) { notify('error', 'This order has no warehouse set — cannot deduct stock'); return }
+    if (active.length === 0) { notify('error', 'Enter a delivered quantity on at least one item'); return }
+    const over = active.find(l => Number(l.deliveredQty) > l.remaining)
+    if (over) { notify('error', `Only ${over.remaining} remaining to deliver for ${over.code}`); return }
+    setSaving(true)
+    try {
+      const mode = del.deliveryMethod
+      const totalQty = active.reduce((s, l) => s + Number(l.deliveredQty), 0)
+      const header = {
+        sales_order_id: ctx.soId, invoice_id: ctx.invoiceId, invoice_no: ctx.invoiceNo,
+        customer_id: ctx.customerId, warehouse_id: ctx.warehouseId, po_no: ctx.poNo || null,
+        challan_date: today(), total_qty: totalQty, status: 'draft', delivery_method: mode,
+        vehicle_id: mode === 'transport' ? (del.vehicleId || null) : null,
+        driver_id: mode === 'transport' ? (del.driverId || null) : null,
+        driver_name: mode === 'transport' ? (del.driverName || null) : null,
+        driver_phone: mode === 'transport' ? (del.driverPhone || null) : null,
+        transporter_id: mode === 'transport' ? (del.transporterId || null) : null,
+        transport_vendor: mode === 'transport' ? (del.transportVendor || null) : null,
+        courier_id: mode === 'courier' ? (del.courierId || null) : null,
+        courier_name: mode === 'courier' ? (del.courierName || null) : null,
+        receiver_name: del.receiverName || null, receiver_phone: del.receiverPhone || null,
+        ship_to_address: del.shipToAddress || null, remarks: del.deliveryNote || null,
+        prepared_by: profile?.full_name || null, print_note: printNote || null
+      }
+      const challan_no = await nextChallanNumber(currentClientId, ctx.invoiceNo)
+      if (!challan_no) throw new Error('Could not generate challan number')
+      const { data: ch, error } = await supabase.from('delivery_challans').insert({ ...header, challan_no }).select('*').single()
+      if (error) throw error
+      const payload = active.map(l => ({
+        challan_id: ch.id, product_id: l.productId, qty: Number(l.deliveredQty),
+        unit_price: 0, stock_status: l.condition || 'good',
+        location_id: l.locationId || null, so_item_id: l.soItemId, remarks: l.remarks || null
+      }))
+      const { error: liErr } = await supabase.from('delivery_challan_items').insert(payload)
+      if (liErr) throw liErr
+      // Remember the vehicle ↔ vendor/driver combo for the next dispatch.
+      if (mode === 'transport' && del.vehicleId) {
+        supabase.from('vehicles').update({
+          driver_name: del.driverName || null, driver_phone: del.driverPhone || null, vendor_id: del.transporterId || null
+        }).eq('id', del.vehicleId).then(() => {})
+      }
+      setCreated(ch)
+      notify('success', `Challan ${ch.challan_no} generated`)
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not generate challan')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const printCreated = async () => {
+    if (!created || !ctx) return
+    try {
+      await downloadChallanPdfFor(created, {
+        customers: [{ id: ctx.customerId, customer_code: ctx.customerCode, name: ctx.customerName }],
+        vehicles, products
+      })
+    } catch (e: any) { notify('error', e?.message ?? 'Could not generate PDF') }
+  }
+
+  const confirmDispatch = async () => {
+    if (!created) return
+    setSaving(true)
+    try {
+      const { data: gpNo, error } = await supabase.rpc('post_delivery_challan', { p_challan_id: created.id })
+      if (error) throw error
+      setCreated({ ...created, posted_at: new Date().toISOString() })
+      notify('success', `${created.challan_no} dispatched — stock deducted${gpNo ? ' · gate pass ' + gpNo : ''}`)
+    } catch (e: any) {
+      notify('error', e?.message ?? 'Could not confirm dispatch')
+    } finally { setSaving(false) }
+  }
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const rowVirt = useVirtualizer({
+    count: lines.length, getScrollElement: () => scrollRef.current,
+    estimateSize: () => 48, overscan: 14
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-surface text-ink">
+      <Header
+        ctx={ctx} del={del} patchDel={patchDel} onExit={exit}
+        searchRef={searchRef} onSelectInvoice={selectInvoice} loadingInv={loadingInv}
+        vehicles={vehicles} vendors={vendors} drivers={drivers} couriers={couriers}
+        currentClientId={currentClientId} disabled={!!created}
+      />
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Center workspace — the item grid gets the most room. */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {!ctx ? (
+            <EmptyWorkspace onFocus={() => searchRef.current?.focus()} />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-surface-line px-5 py-2.5">
+                <h2 className="text-sm font-semibold">Items to dispatch</h2>
+                <span className="text-xs text-ink-soft">{lines.length} lines · Invoice {ctx.invoiceNo}</span>
+                {recentQtys.length > 0 && (
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <span className="text-[11px] font-medium text-ink-soft">Recent qty</span>
+                    {recentQtys.map(n => (
+                      <button key={n} type="button" onClick={() => {
+                        const i = lastQtyIdx.current
+                        if (i != null && lines[i]) patchLine(i, { deliveredQty: Math.min(n, lines[i].remaining) })
+                      }} className="rounded-md bg-surface-sunken px-2 py-0.5 text-xs font-semibold tabular-nums hover:bg-brand-100">
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <ItemHeaderRow />
+              <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+                <div style={{ height: rowVirt.getTotalSize(), position: 'relative' }}>
+                  {rowVirt.getVirtualItems().map(v => {
+                    const i = v.index; const l = lines[i]
+                    return (
+                      <div key={l.soItemId} data-index={i} ref={rowVirt.measureElement}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}>
+                        <ItemRow
+                          i={i} l={l} locations={locations} disabled={!!created}
+                          qtyRef={el => { qtyRefs.current[i] = el }}
+                          onQtyKey={e => onQtyKey(e, i)}
+                          onFocusQty={() => { lastQtyIdx.current = i }}
+                          onQty={val => patchLine(i, { deliveredQty: val })}
+                          onCommitQty={val => rememberQty(val)}
+                          onCondition={c => patchLine(i, { condition: c })}
+                          onLocation={loc => patchLine(i, { locationId: loc })}
+                          onRemarks={r => patchLine(i, { remarks: r })}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </main>
+
+        {/* Right smart panel — one-click reuse of recent dispatch info. */}
+        <SmartPanel
+          recent={recent} vehicles={vehicles} disabled={!ctx || !!created}
+          onApplyVehicle={id => applyVehicle(id, vehicles, vendors, patchDel)}
+          onApplyDriver={(name, phone) => patchDel({ driverName: name, driverPhone: phone || '', driverId: '' })}
+          onApplyVendor={(id, name) => patchDel({ transporterId: id || '', transportVendor: name })}
+          onApplyAddress={a => patchDel({ shipToAddress: a })}
+          onApplyReceiver={(name, phone) => patchDel({ receiverName: name, receiverPhone: phone || '' })}
+          onApplyNote={n => setPrintNote(n)}
+        />
+      </div>
+
+      <FooterBar
+        stats={stats} ctx={ctx} created={created} saving={saving} canPost={canPost}
+        onGenerate={generate} onPrint={printCreated} onConfirm={confirmDispatch} onNew={reset}
+      />
+    </div>
+  )
+}
+
+// ===========================================================================
+// Header — exit + invoice search + resolved identity + editable delivery info
+// ===========================================================================
+interface InvoiceSuggestion {
+  invoiceId: string; invoiceNo: string; invoiceDate: string
+  soId: string; soNo: string; poNo: string; orderDate: string
+  customerId: string; customerCode: string; customerName: string
+  customerShipping: string; warehouseId: string | null
+}
+
+function Header({ ctx, del, patchDel, onExit, searchRef, onSelectInvoice, loadingInv, vehicles, vendors, drivers, couriers, currentClientId, disabled }: {
+  ctx: InvoiceCtx | null; del: DeliveryInfo; patchDel: (p: Partial<DeliveryInfo>) => void; onExit: () => void
+  searchRef: React.RefObject<HTMLInputElement>; onSelectInvoice: (s: InvoiceSuggestion) => void; loadingInv: boolean
+  vehicles: VehicleLite[]; vendors: VendorLite[]; drivers: DriverLite[]; couriers: CourierLite[]
+  currentClientId: string | null; disabled: boolean
+}) {
+  const [q, setQ] = useState('')
+  const [sugs, setSugs] = useState<InvoiceSuggestion[]>([])
+  const [open, setOpen] = useState(false)
+  const [hi, setHi] = useState(0)
+  const [showDetails, setShowDetails] = useState(true)
+
+  // Debounced invoice lookup: so_invoices → sales_order → customer, one query.
+  useEffect(() => {
+    const term = q.trim()
+    if (!currentClientId || term.length < 2) { setSugs([]); return }
+    let active = true
+    const t = setTimeout(async () => {
+      const { data } = await (supabase as any).from('so_invoices')
+        .select('id,invoice_no,invoice_date,so_id,sales_orders(id,so_no,reference_no,order_date,customer_id,warehouse_id,customers(id,customer_code,name,shipping_address))')
+        .ilike('invoice_no', `%${term}%`).order('invoice_date', { ascending: false }).limit(8)
+      if (!active) return
+      const rows: InvoiceSuggestion[] = (data ?? []).map((r: any) => {
+        const so = r.sales_orders || {}; const c = so.customers || {}
+        return {
+          invoiceId: r.id, invoiceNo: r.invoice_no, invoiceDate: r.invoice_date,
+          soId: r.so_id, soNo: so.so_no ?? '', poNo: so.reference_no ?? '', orderDate: so.order_date ?? '',
+          customerId: c.id ?? so.customer_id ?? '', customerCode: c.customer_code ?? '', customerName: c.name ?? '',
+          customerShipping: c.shipping_address ?? '', warehouseId: so.warehouse_id ?? null
+        }
+      })
+      setSugs(rows); setHi(0); setOpen(true)
+    }, 220)
+    return () => { active = false; clearTimeout(t) }
+  }, [q, currentClientId])
+
+  const pick = (s: InvoiceSuggestion) => { setQ(''); setSugs([]); setOpen(false); onSelectInvoice(s) }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!open || !sugs.length) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi(h => Math.min(h + 1, sugs.length - 1)) }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(h - 1, 0)) }
+    if (e.key === 'Enter') { e.preventDefault(); pick(sugs[hi]) }
+    if (e.key === 'Escape') { setOpen(false) }
+  }
+
+  return (
+    <header className="shrink-0 border-b border-surface-line bg-surface">
+      <div className="flex items-center gap-3 px-5 py-3">
+        <button onClick={onExit} title="Exit (Esc)"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-surface-sunken">
+          <Icon name="arrow_back" className="text-[22px]" />
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-100 text-brand-700"><Icon name="bolt" className="text-[20px]" /></span>
+          <div className="leading-tight">
+            <p className="text-sm font-bold tracking-tight">Quick Delivery Hub</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-soft">Warehouse Dispatch</p>
+          </div>
+        </div>
+
+        {/* Invoice search — the operator's entry point, always in reach. */}
+        <div className="relative ml-2 max-w-xl flex-1">
+          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-ink-soft" />
+          <input
+            ref={searchRef} value={q} disabled={disabled}
+            onChange={e => setQ(e.target.value)} onKeyDown={onKey}
+            onFocus={() => { if (sugs.length) setOpen(true) }}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder="Scan or type SAP Invoice Number…   ( / to focus )"
+            className="h-11 w-full rounded-xl border border-ink/60 bg-surface pl-11 pr-4 text-[15px] font-medium outline-none transition-colors hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint"
+          />
+          {loadingInv && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-soft">Loading…</span>}
+          {open && sugs.length > 0 && (
+            <ul className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-80 overflow-y-auto rounded-xl border border-surface-line bg-surface p-1 shadow-pop">
+              {sugs.map((s, i) => (
+                <li key={s.invoiceId}>
+                  <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}
+                    className={cn('flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left', i === hi ? 'bg-brand-100' : 'hover:bg-surface-sunken')}>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{s.invoiceNo}</span>
+                      <span className="block truncate text-xs text-ink-soft">{s.customerCode ? s.customerCode + ' · ' : ''}{s.customerName || 'Unknown customer'}</span>
+                    </span>
+                    <span className="shrink-0 text-xs text-ink-soft tabular-nums">{formatDate(s.invoiceDate)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {ctx && (
+          <button onClick={() => setShowDetails(v => !v)}
+            className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-sunken">
+            <Icon name={showDetails ? 'expand_less' : 'expand_more'} className="text-[18px]" />
+            {showDetails ? 'Hide' : 'Delivery'} details
+          </button>
+        )}
+      </div>
+
+      {ctx && (
+        <>
+          {/* Resolved identity strip — read-only facts from the invoice. */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 border-t border-surface-line bg-surface-sunken/50 px-5 py-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Fact label="Invoice" value={ctx.invoiceNo} strong />
+            <Fact label="Customer Code" value={ctx.customerCode || '—'} />
+            <Fact label="Customer" value={ctx.customerName || '—'} />
+            <Fact label="PO Number" value={ctx.poNo || '—'} />
+            <Fact label="Order Date" value={ctx.orderDate ? formatDate(ctx.orderDate) : '—'} />
+            <Fact label="Invoice Date" value={ctx.invoiceDate ? formatDate(ctx.invoiceDate) : '—'} />
+          </div>
+
+          {showDetails && (
+            <div className="border-t border-surface-line px-5 py-3">
+              <div className="mb-2 flex gap-2">
+                {(['transport', 'courier'] as const).map(m => (
+                  <button key={m} type="button" disabled={disabled} onClick={() => patchDel({ deliveryMethod: m })}
+                    className={cn('flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold',
+                      del.deliveryMethod === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-line text-ink-soft hover:bg-surface-sunken')}>
+                    <Icon name={m === 'transport' ? 'local_shipping' : 'local_post_office'} className="text-[16px]" />
+                    {m === 'transport' ? 'Transport' : 'Courier'}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                <MiniField label="Ship-To Address" className="col-span-2 lg:col-span-2">
+                  <input value={del.shipToAddress} disabled={disabled} onChange={e => patchDel({ shipToAddress: e.target.value })} className={inputCls} placeholder="Delivery address" />
+                </MiniField>
+                <MiniField label="Receiver Name">
+                  <input value={del.receiverName} disabled={disabled} onChange={e => patchDel({ receiverName: e.target.value })} className={inputCls} />
+                </MiniField>
+                <MiniField label="Receiver Mobile">
+                  <input value={del.receiverPhone} disabled={disabled} onChange={e => patchDel({ receiverPhone: e.target.value })} className={inputCls} />
+                </MiniField>
+                {del.deliveryMethod === 'transport' ? (
+                  <>
+                    <MiniField label="Transport Vendor">
+                      <PickList disabled={disabled} value={del.transportVendor || (vendors.find(v => v.id === del.transporterId)?.name ?? '')}
+                        options={vendors.map(v => ({ id: v.id, label: v.name, sub: v.vendor_code }))}
+                        onPick={o => patchDel({ transporterId: o?.id ?? '', transportVendor: o?.label ?? '' })}
+                        onFree={t => patchDel({ transporterId: '', transportVendor: t })} placeholder="Vendor" />
+                    </MiniField>
+                    <MiniField label="Vehicle">
+                      <PickList disabled={disabled} value={vehicles.find(v => v.id === del.vehicleId)?.vehicle_number ?? ''}
+                        options={vehicles.map(v => ({ id: v.id, label: formatVehicleNo(v.vehicle_number) || v.vehicle_number, sub: v.vehicle_type ?? undefined }))}
+                        onPick={o => applyVehicle(o?.id ?? '', vehicles, vendors, patchDel)}
+                        onFree={() => {}} placeholder="Vehicle" />
+                    </MiniField>
+                    <MiniField label="Driver">
+                      <PickList disabled={disabled} value={del.driverName}
+                        options={drivers.map(d => ({ id: d.id, label: d.name, sub: d.phone ?? undefined }))}
+                        onPick={o => { const d = drivers.find(x => x.id === o?.id); patchDel({ driverId: o?.id ?? '', driverName: o?.label ?? '', driverPhone: d?.phone ?? del.driverPhone }) }}
+                        onFree={t => patchDel({ driverId: '', driverName: t })} placeholder="Driver" />
+                    </MiniField>
+                    <MiniField label="Driver Mobile">
+                      <input value={del.driverPhone} disabled={disabled} onChange={e => patchDel({ driverPhone: e.target.value })} className={inputCls} />
+                    </MiniField>
+                  </>
+                ) : (
+                  <MiniField label="Courier">
+                    <PickList disabled={disabled} value={del.courierName}
+                      options={couriers.map(c => ({ id: c.id, label: c.name, sub: c.courier_code }))}
+                      onPick={o => patchDel({ courierId: o?.id ?? '', courierName: o?.label ?? '' })}
+                      onFree={t => patchDel({ courierId: '', courierName: t })} placeholder="Courier" />
+                  </MiniField>
+                )}
+                <MiniField label="Delivery Note" className="col-span-2 lg:col-span-2">
+                  <input value={del.deliveryNote} disabled={disabled} onChange={e => patchDel({ deliveryNote: e.target.value })} className={inputCls} placeholder="Remarks on the challan" />
+                </MiniField>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </header>
+  )
+}
+
+const inputCls = 'h-9 w-full rounded-lg border border-ink/50 bg-surface px-2.5 text-sm outline-none transition-colors hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint'
+
+function Fact({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
+      <p className={cn('truncate text-sm', strong ? 'font-bold' : 'font-medium')} title={value}>{value}</p>
+    </div>
+  )
+}
+function MiniField({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('min-w-0', className)}>
+      <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-soft">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+// Compact searchable pick list — a native <datalist>-style lookup that also
+// accepts free text (for ad-hoc vendors/drivers) without a heavy dropdown.
+function PickList({ value, options, onPick, onFree, placeholder, disabled }: {
+  value: string; options: { id: string; label: string; sub?: string }[]
+  onPick: (o: { id: string; label: string } | null) => void; onFree: (t: string) => void
+  placeholder?: string; disabled?: boolean
+}) {
+  const [text, setText] = useState(value)
+  const [open, setOpen] = useState(false)
+  useEffect(() => { setText(value) }, [value])
+  const filtered = text.trim()
+    ? options.filter(o => (o.label + ' ' + (o.sub ?? '')).toLowerCase().includes(text.toLowerCase())).slice(0, 8)
+    : options.slice(0, 8)
+  return (
+    <div className="relative">
+      <input value={text} disabled={disabled} placeholder={placeholder} className={inputCls}
+        onChange={e => { setText(e.target.value); onFree(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} />
+      {open && filtered.length > 0 && (
+        <ul className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-56 overflow-y-auto rounded-lg border border-surface-line bg-surface p-1 shadow-pop">
+          {filtered.map(o => (
+            <li key={o.id}>
+              <button type="button" onMouseDown={e => e.preventDefault()}
+                onClick={() => { setText(o.label); onPick(o); setOpen(false) }}
+                className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-surface-sunken">
+                <span className="truncate">{o.label}</span>
+                {o.sub && <span className="shrink-0 text-xs text-ink-soft">{o.sub}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// Picking a vehicle auto-fills its last vendor + driver (remembered on save).
+function applyVehicle(id: string, vehicles: VehicleLite[], vendors: VendorLite[], patchDel: (p: Partial<DeliveryInfo>) => void) {
+  const v = vehicles.find(x => x.id === id)
+  const vendor = v?.vendor_id ? vendors.find(t => t.id === v.vendor_id) : null
+  patchDel({
+    vehicleId: id,
+    ...(v?.driver_name ? { driverId: '', driverName: v.driver_name } : {}),
+    ...(v?.driver_phone ? { driverPhone: v.driver_phone } : {}),
+    ...(vendor ? { transporterId: vendor.id, transportVendor: vendor.name } : {})
+  })
+}
+
+// ===========================================================================
+// Item grid
+// ===========================================================================
+// 12-col grid keeps every cell aligned with the sticky header (Serial, Code,
+// Description, Invoiced, Delivered, Condition, Location, Remarks, Status).
+const GRID = 'grid grid-cols-[48px_120px_minmax(180px,1fr)_84px_96px_150px_140px_minmax(120px,1fr)_44px] items-center gap-3'
+
+function ItemHeaderRow() {
+  return (
+    <div className={cn(GRID, 'sticky top-0 z-10 border-b border-surface-line bg-surface-sunken px-5 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-soft')}>
+      <span>#</span><span>Item Code</span><span>Description</span>
+      <span className="text-right">Invoiced</span><span className="text-right">Delivered</span>
+      <span>Condition</span><span>Location</span><span>Remarks</span><span className="text-center">✓</span>
+    </div>
+  )
+}
+
+function ItemRow({ i, l, locations, disabled, qtyRef, onQtyKey, onFocusQty, onQty, onCommitQty, onCondition, onLocation, onRemarks }: {
+  i: number; l: HubLine; locations: LocationLite[]; disabled: boolean
+  qtyRef: (el: HTMLInputElement | null) => void
+  onQtyKey: (e: React.KeyboardEvent) => void; onFocusQty: () => void
+  onQty: (v: number) => void; onCommitQty: (v: number) => void
+  onCondition: (c: string) => void; onLocation: (l: string) => void; onRemarks: (r: string) => void
+}) {
+  const done = (l.alreadyDelivered + (Number(l.deliveredQty) || 0)) >= l.invoicedQty && l.invoicedQty > 0
+  const cond = STOCK_CONDITIONS[l.condition]
+  return (
+    <div className={cn(GRID, 'border-b border-surface-line px-5 py-1.5 text-sm', done ? 'bg-ok/5' : l.deliveredQty > 0 ? 'bg-brand-50/40' : '')}>
+      <span className="text-xs font-medium text-ink-soft tabular-nums">{i + 1}</span>
+      <span className="truncate font-semibold" title={l.code}>{l.code}</span>
+      <span className="truncate" title={l.name}>
+        {l.name}
+        {l.alreadyDelivered > 0 && <span className="ml-1.5 text-[11px] text-ink-soft">({formatNumber(l.alreadyDelivered)} already)</span>}
+      </span>
+      <span className="text-right tabular-nums text-ink-soft">{formatNumber(l.invoicedQty)}</span>
+      <input
+        ref={qtyRef} type="number" inputMode="numeric" disabled={disabled || l.remaining <= 0}
+        value={l.deliveredQty === 0 ? '' : l.deliveredQty}
+        onFocus={e => { onFocusQty(); e.currentTarget.select() }}
+        onKeyDown={onQtyKey}
+        onChange={e => onQty(Math.max(0, Number(e.target.value) || 0))}
+        onBlur={e => onCommitQty(Number(e.target.value) || 0)}
+        placeholder="0"
+        className={cn('h-8 w-full rounded-md border px-2 text-right text-sm font-semibold tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
+          Number(l.deliveredQty) > l.remaining ? 'border-bad text-bad' : 'border-ink/40',
+          (disabled || l.remaining <= 0) && 'bg-surface-sunken text-ink-faint')}
+      />
+      <select value={l.condition} disabled={disabled} onChange={e => onCondition(e.target.value)}
+        className="h-8 w-full rounded-md border border-ink/40 bg-surface px-1.5 text-xs outline-none focus:border-brand-500">
+        {CONDITION_OPTIONS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+      </select>
+      <select value={l.locationId} disabled={disabled} onChange={e => onLocation(e.target.value)}
+        className="h-8 w-full rounded-md border border-ink/40 bg-surface px-1.5 text-xs outline-none focus:border-brand-500">
+        <option value="">— Location —</option>
+        {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.location_code}</option>)}
+      </select>
+      <input value={l.remarks} disabled={disabled} onChange={e => onRemarks(e.target.value)} placeholder="—"
+        className="h-8 w-full rounded-md border border-ink/40 bg-surface px-2 text-xs outline-none focus:border-brand-500" />
+      <span className="flex justify-center">
+        {done
+          ? <Icon name="check_circle" className="text-[20px] text-ok" filled />
+          : <span title={cond?.label}
+              className={cn('inline-block h-2.5 w-2.5 rounded-full',
+                l.deliveredQty > 0 ? 'bg-brand-400' : 'bg-surface-line ring-1 ring-ink/20')} />}
+      </span>
+    </div>
+  )
+}
+
+// ===========================================================================
+// Right smart panel
+// ===========================================================================
+function SmartPanel({ recent, vehicles, disabled, onApplyVehicle, onApplyDriver, onApplyVendor, onApplyAddress, onApplyReceiver, onApplyNote }: {
+  recent: RecentChallan[]; vehicles: VehicleLite[]; disabled: boolean
+  onApplyVehicle: (id: string) => void; onApplyDriver: (name: string, phone?: string) => void
+  onApplyVendor: (id: string, name: string) => void; onApplyAddress: (a: string) => void
+  onApplyReceiver: (name: string, phone?: string) => void; onApplyNote: (n: string) => void
+}) {
+  const vehById = useMemo(() => Object.fromEntries(vehicles.map(v => [v.id, v])), [vehicles])
+  // Distinct, most-recent-first values pulled from the last challans.
+  const uniq = <T,>(arr: T[], key: (t: T) => string) => {
+    const seen = new Set<string>(); const out: T[] = []
+    for (const x of arr) { const k = key(x); if (k && !seen.has(k)) { seen.add(k); out.push(x) } }
+    return out
+  }
+  const recentVehicles = uniq(recent.filter(r => r.vehicle_id), r => r.vehicle_id!).slice(0, 5)
+  const recentDrivers = uniq(recent.filter(r => r.driver_name), r => r.driver_name!).slice(0, 5)
+  const recentVendors = uniq(recent.filter(r => r.transport_vendor), r => r.transport_vendor!).slice(0, 5)
+  const recentAddrs = uniq(recent.filter(r => r.ship_to_address), r => r.ship_to_address!).slice(0, 4)
+  const recentReceivers = uniq(recent.filter(r => r.receiver_name), r => r.receiver_name!).slice(0, 5)
+  const recentNotes = uniq(recent.filter(r => r.print_note && r.print_note !== DEFAULT_CHALLAN_NOTE), r => r.print_note!).slice(0, 3)
+
+  return (
+    <aside className={cn('hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-surface-line bg-surface-sunken/30 xl:flex', disabled && 'pointer-events-none opacity-50')}>
+      <div className="flex items-center gap-2 border-b border-surface-line px-4 py-3">
+        <Icon name="auto_awesome" className="text-[18px] text-brand-600" />
+        <h3 className="text-sm font-bold">Smart Fill</h3>
+        <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-ink-soft">One-click</span>
+      </div>
+      <div className="space-y-4 p-4">
+        <PanelGroup icon="local_shipping" title="Recent Vehicle" empty={!recentVehicles.length}>
+          {recentVehicles.map(r => (
+            <Chip key={r.id} onClick={() => onApplyVehicle(r.vehicle_id!)}
+              main={formatVehicleNo(vehById[r.vehicle_id!]?.vehicle_number) || vehById[r.vehicle_id!]?.vehicle_number || '—'}
+              sub={r.driver_name || undefined} />
+          ))}
+        </PanelGroup>
+        <PanelGroup icon="person" title="Recent Driver" empty={!recentDrivers.length}>
+          {recentDrivers.map(r => (
+            <Chip key={r.id} onClick={() => onApplyDriver(r.driver_name!, r.driver_phone ?? undefined)} main={r.driver_name!} sub={r.driver_phone || undefined} />
+          ))}
+        </PanelGroup>
+        <PanelGroup icon="business" title="Recent Transport Vendor" empty={!recentVendors.length}>
+          {recentVendors.map(r => (
+            <Chip key={r.id} onClick={() => onApplyVendor(r.transporter_id ?? '', r.transport_vendor!)} main={r.transport_vendor!} />
+          ))}
+        </PanelGroup>
+        <PanelGroup icon="location_on" title="Recent Shipping Address" empty={!recentAddrs.length}>
+          {recentAddrs.map(r => (
+            <Chip key={r.id} onClick={() => onApplyAddress(r.ship_to_address!)} main={r.ship_to_address!} multiline />
+          ))}
+        </PanelGroup>
+        <PanelGroup icon="how_to_reg" title="Receiver History" empty={!recentReceivers.length}>
+          {recentReceivers.map(r => (
+            <Chip key={r.id} onClick={() => onApplyReceiver(r.receiver_name!, r.receiver_phone ?? undefined)} main={r.receiver_name!} sub={r.receiver_phone || undefined} />
+          ))}
+        </PanelGroup>
+        {recentNotes.length > 0 && (
+          <PanelGroup icon="sticky_note_2" title="Frequent Delivery Notes" empty={false}>
+            {recentNotes.map(r => (
+              <Chip key={r.id} onClick={() => onApplyNote(r.print_note!)} main={r.print_note!} multiline />
+            ))}
+          </PanelGroup>
+        )}
+      </div>
+    </aside>
+  )
+}
+
+function PanelGroup({ icon, title, empty, children }: { icon: string; title: string; empty: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <Icon name={icon} className="text-[15px] text-ink-soft" />
+        <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{title}</p>
+      </div>
+      {empty ? <p className="pl-1 text-xs text-ink-faint">No history yet</p> : <div className="space-y-1">{children}</div>}
+    </div>
+  )
+}
+function Chip({ main, sub, multiline, onClick }: { main: string; sub?: string; multiline?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick}
+      className="group flex w-full items-start justify-between gap-2 rounded-lg border border-surface-line bg-surface px-2.5 py-1.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50">
+      <span className="min-w-0">
+        <span className={cn('block text-xs font-semibold text-ink', !multiline && 'truncate')}>{main}</span>
+        {sub && <span className="block truncate text-[11px] text-ink-soft">{sub}</span>}
+      </span>
+      <Icon name="add" className="mt-0.5 shrink-0 text-[16px] text-ink-faint group-hover:text-brand-600" />
+    </button>
+  )
+}
+
+// ===========================================================================
+// Footer — live statistics + primary action area
+// ===========================================================================
+function FooterBar({ stats, ctx, created, saving, canPost, onGenerate, onPrint, onConfirm, onNew }: {
+  stats: { invoiceQty: number; deliveredQty: number; pending: number; totalItems: number; completedItems: number; remaining: number; pct: number }
+  ctx: InvoiceCtx | null; created: Tables<'delivery_challans'> | null; saving: boolean; canPost: boolean
+  onGenerate: () => void; onPrint: () => void; onConfirm: () => void; onNew: () => void
+}) {
+  const posted = !!created?.posted_at
+  return (
+    <footer className="shrink-0 border-t border-surface-line bg-surface">
+      <div className="flex items-center gap-5 px-5 py-2.5">
+        <div className="flex flex-1 flex-wrap items-center gap-x-6 gap-y-1">
+          <Stat label="Invoice Qty" value={formatNumber(stats.invoiceQty)} />
+          <Stat label="Delivered" value={formatNumber(stats.deliveredQty)} tone="brand" />
+          <Stat label="Pending" value={formatNumber(stats.pending)} tone={stats.pending > 0 ? 'warn' : 'ok'} />
+          <Divider />
+          <Stat label="Total Items" value={String(stats.totalItems)} />
+          <Stat label="Completed" value={String(stats.completedItems)} tone="ok" />
+          <Stat label="Remaining" value={String(stats.remaining)} tone={stats.remaining > 0 ? 'warn' : 'ok'} />
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-28 overflow-hidden rounded-full bg-surface-sunken">
+              <div className="h-full rounded-full bg-brand-400 transition-all" style={{ width: `${stats.pct}%` }} />
+            </div>
+            <span className="text-sm font-bold tabular-nums">{stats.pct}%</span>
+          </div>
+        </div>
+
+        {/* Primary action area (bottom-right). */}
+        <div className="flex shrink-0 items-center gap-2">
+          {!ctx ? (
+            <span className="text-xs text-ink-faint">Search an invoice to begin</span>
+          ) : !created ? (
+            <Button icon="local_shipping" size="md" loading={saving} onClick={onGenerate} className="h-11 px-6 text-[15px]">
+              Generate Delivery Challan
+            </Button>
+          ) : (
+            <>
+              <span className="mr-1 flex items-center gap-1.5 rounded-lg bg-ok/10 px-3 py-1.5 text-sm font-semibold text-ok">
+                <Icon name="check_circle" className="text-[18px]" filled /> {created.challan_no}{posted ? ' · Dispatched' : ''}
+              </span>
+              <Button variant="secondary" icon="print" onClick={onPrint}>Print PDF</Button>
+              {canPost && !posted && <Button variant="secondary" icon="task_alt" loading={saving} onClick={onConfirm}>Confirm Dispatch</Button>}
+              <Button icon="add" onClick={onNew}>New Dispatch</Button>
+            </>
+          )}
+        </div>
+      </div>
+    </footer>
+  )
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: 'brand' | 'ok' | 'warn' }) {
+  const c = tone === 'brand' ? 'text-brand-600' : tone === 'ok' ? 'text-ok' : tone === 'warn' ? 'text-warn' : 'text-ink'
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{label}</span>
+      <span className={cn('text-base font-bold tabular-nums', c)}>{value}</span>
+    </div>
+  )
+}
+const Divider = () => <span className="hidden h-6 w-px bg-surface-line sm:block" />
+
+function EmptyWorkspace({ onFocus }: { onFocus: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-10 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
+        <Icon name="barcode_scanner" className="text-[34px]" />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold">Scan a SAP Invoice to start dispatch</h2>
+        <p className="mt-1 max-w-md text-sm text-ink-soft">Type or scan the invoice number in the search bar above. Customer, order and line items load instantly — then verify delivery info and generate the challan.</p>
+      </div>
+      <Button variant="secondary" icon="search" onClick={onFocus}>Focus invoice search  ( / )</Button>
+    </div>
+  )
+}

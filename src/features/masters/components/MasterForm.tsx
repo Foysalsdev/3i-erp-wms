@@ -35,6 +35,17 @@ export function MasterForm({ def, record, onDone, onCancel }:
     el?.focus()
   }, [])
 
+  // Keyboard-first: Enter on a plain input moves to the next field instead of
+  // submitting. Comboboxes (no name — they use Enter to pick) and textareas
+  // (newline) keep their own behaviour; on the last field Enter still submits.
+  const onFormKeyDown = (e: React.KeyboardEvent) => {
+    const t = e.target as HTMLElement
+    if (e.key !== 'Enter' || t.tagName !== 'INPUT' || !t.getAttribute('name')) return
+    const controls = Array.from(formRef.current?.querySelectorAll<HTMLElement>('input:not([type=checkbox]):not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? [])
+    const next = controls[controls.indexOf(t) + 1]
+    if (next) { e.preventDefault(); next.focus() }
+  }
+
   // Load linked dropdown options for relation fields
   useEffect(() => {
     if (!clientId) return
@@ -91,7 +102,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
     : 'lg'
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
+    <form ref={formRef} onKeyDown={onFormKeyDown} onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
         {def.fields.map(f => {
           if (f.type === 'image')

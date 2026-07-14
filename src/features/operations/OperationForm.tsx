@@ -38,6 +38,16 @@ export function OperationForm({ def, record, onDone, onCancel }:
     el?.focus()
   }, [])
 
+  // Keyboard-first: Enter on a plain input advances to the next field (comboboxes
+  // and textareas keep their own Enter; last field still submits).
+  const onFormKeyDown = (e: React.KeyboardEvent) => {
+    const t = e.target as HTMLElement
+    if (e.key !== 'Enter' || t.tagName !== 'INPUT' || !t.getAttribute('name')) return
+    const controls = Array.from(formRef.current?.querySelectorAll<HTMLElement>('input:not([type=checkbox]):not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? [])
+    const next = controls[controls.indexOf(t) + 1]
+    if (next) { e.preventDefault(); next.focus() }
+  }
+
   // Load linked dropdown options for relation fields.
   useEffect(() => {
     if (!clientId) return
@@ -100,7 +110,7 @@ export function OperationForm({ def, record, onDone, onCancel }:
     : 'lg'
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
+    <form ref={formRef} onKeyDown={onFormKeyDown} onSubmit={handleSubmit(submit, onInvalid)} className="space-y-4">
       {record && (
         <div className="rounded-lg bg-surface-sunken px-3 py-2 text-sm">
           <span className="text-ink-faint">Document No: </span>

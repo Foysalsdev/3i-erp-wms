@@ -93,6 +93,9 @@ export default function QuickDeliveryHub() {
 
   // Current dispatch state.
   const [ctx, setCtx] = useState<InvoiceCtx | null>(null)
+  // Challans that ALREADY exist for the picked invoice — the basis for
+  // duplicate detection (shown as a banner, re-checked at generate time).
+  const [existing, setExisting] = useState<{ challan_no: string; status: string; posted_at: string | null }[]>([])
   const [lines, setLines] = useState<HubLine[]>([])
   const [del, setDel] = useState<DeliveryInfo>(emptyDelivery())
   const [printNote, setPrintNote] = useState(DEFAULT_CHALLAN_NOTE)
@@ -141,7 +144,7 @@ export default function QuickDeliveryHub() {
 
   const reset = useCallback(() => {
     setCtx(null); setLines([]); setDel(emptyDelivery()); setPrintNote(DEFAULT_CHALLAN_NOTE)
-    setCreated(null); setLoadingInv(false); setGuideOpen(false)
+    setCreated(null); setLoadingInv(false); setGuideOpen(false); setExisting([])
     setTimeout(() => searchRef.current?.focus(), 0)
   }, [])
 
@@ -168,9 +171,13 @@ export default function QuickDeliveryHub() {
   const selectInvoice = async (row: InvoiceSuggestion) => {
     setLoadingInv(true); setCreated(null)
     try {
-      const { items, invoices } = await loadSoInvoices(row.soId)
+      const { items, invoices, challans } = await loadSoInvoices(row.soId)
       const inv = invoices.find(i => i.id === row.invoiceId)
       if (!inv) { notify('error', 'Invoice has no lines to deliver'); setLoadingInv(false); return }
+      // Challans already raised against THIS invoice — surfaced as a duplicate
+      // warning so the operator knows a delivery for it may already exist.
+      setExisting((challans ?? []).filter((c: any) => c.invoice_id === inv.id)
+        .map((c: any) => ({ challan_no: c.challan_no, status: c.status, posted_at: c.posted_at })))
       const seeded: HubLine[] = inv.lines.map(l => {
         const it = items.find((x: any) => x.id === l.so_item_id)
         const p = pmap[l.product_id]
@@ -241,8 +248,26 @@ export default function QuickDeliveryHub() {
     if (active.length === 0) { notify('error', 'Enter a delivered quantity on at least one item'); return }
     const over = active.find(l => Number(l.deliveredQty) > l.remaining)
     if (over) { notify('error', `Only ${over.remaining} remaining to deliver for ${over.code}`); return }
+    // Duplicate guard: make the operator consciously acknowledge that this
+    // invoice already carries challan(s) before adding another.
+    if (existing.length > 0 &&
+      !window.confirm(`This invoice already has ${existing.length} challan(s): ${existing.map(e => e.challan_no).join(', ')}.\nCreate another for the remaining quantity?`)) return
     setSaving(true)
     try {
+      // Re-read the invoice's live figures right before inserting, so a challan
+      // another operator raised in the meantime can't be duplicated: every line
+      // is re-validated against the freshly-computed remaining.
+      const { invoices: fresh } = await loadSoInvoices(ctx.soId)
+      const finv = fresh.find(i => i.id === ctx.invoiceId)
+      for (const l of active) {
+        const fl = finv?.lines.find((x: any) => x.so_item_id === l.soItemId)
+        const rem = fl ? Math.max(0, fl.qty - fl.delivered - fl.planned) : 0
+        if (Number(l.deliveredQty) > rem) {
+          setSaving(false)
+          notify('error', `${l.code}: only ${rem} left to deliver now — another challan for this invoice was just created. Reload the invoice.`)
+          return
+        }
+      }
       const mode = del.deliveryMethod
       const totalQty = active.reduce((s, l) => s + Number(l.deliveredQty), 0)
       const header = {
@@ -346,6 +371,20 @@ export default function QuickDeliveryHub() {
               </div>
             )}
           </div>
+
+          {ctx && existing.length > 0 && (
+            <div className={cn('flex items-start gap-2 border-b px-5 py-2 text-xs',
+              lines.every(l => l.remaining <= 0) ? 'border-bad/30 bg-bad/5 text-bad' : 'border-warn/30 bg-warn/10 text-warn')}>
+              <Icon name="warning" className="mt-px text-[16px]" filled />
+              <span>
+                <b>Possible duplicate — </b>
+                this invoice already has {existing.length} challan(s): {existing.map(e => e.challan_no).join(', ')}.
+                {lines.every(l => l.remaining <= 0)
+                  ? ' Everything on it is already delivered or planned — nothing left to dispatch.'
+                  : ' Only the still-remaining quantity is pre-filled below.'}
+              </span>
+            </div>
+          )}
 
           <ItemHeaderRow />
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">

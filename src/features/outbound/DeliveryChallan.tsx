@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
@@ -57,6 +58,7 @@ const DC_STATUS = ['draft', 'issued', 'delivered', 'cancelled']
 
 export function DeliveryChallan() {
   const { data, loading, refresh } = useCollection('delivery_challans', { order: 'created_at' })
+  const nav = useNavigate()
   const { currentClientId, can, isPlatformAdmin } = useAuth()
   const notify = useUI(s => s.notify)
   const canEdit = can('outbound.create') || can('outbound.edit')
@@ -202,7 +204,8 @@ export function DeliveryChallan() {
           </div>
         </FilterPanel>
         <span className="text-sm text-ink-soft">{rows.length} records</span>
-        {canEdit && <Button className="ml-auto" icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Challan</Button>}
+        {canEdit && <Button variant="secondary" className="ml-auto" icon="bolt" onClick={() => nav('/quick-delivery')}>Quick Delivery Hub</Button>}
+        {canEdit && <Button icon="add" onClick={() => { setEditing(null); setModal(true) }}>New Challan</Button>}
       </div>
 
       <SavedViewsBar scope="delivery-challan" current={{ q, statusFilter, customerFilter, dateFrom, dateTo }}

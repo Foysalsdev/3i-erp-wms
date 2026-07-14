@@ -17,6 +17,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
   const clientId = useAuth(s => s.currentClientId)
   const notify = useUI(s => s.notify)
   const [saving, setSaving] = useState(false)
+  const [dupCode, setDupCode] = useState(false)
   // Relation options carry code + name separately so the smart lookup can show
   // the code as a mono chip and the description beside it, and search both.
   const [relOptions, setRelOptions] = useState<Record<string, { id: string; label: string; sublabel?: string }[]>>({})
@@ -25,6 +26,22 @@ export function MasterForm({ def, record, onDone, onCancel }:
     defaultValues: record ?? { status: 'active', uom: 'PCS', unit: 'PCS' }
   })
   useUnsavedChanges(isDirty && !saving)
+
+  // Duplicate detection: debounce-check the code field against existing records
+  // so a clashing code is flagged before saving (the DB unique constraint is the
+  // backstop; this is the friendly early warning).
+  const codeVal = watch(def.codeField)
+  useEffect(() => {
+    const v = String(codeVal ?? '').trim()
+    if (!v || !clientId) { setDupCode(false); return }
+    const h = setTimeout(async () => {
+      let q = supabase.from(def.table as any).select('id').eq(def.codeField, v).limit(1)
+      if (record?.id) q = q.neq('id', record.id)
+      const { data } = await q
+      setDupCode(!!(data && data.length))
+    }, 400)
+    return () => clearTimeout(h)
+  }, [codeVal, def.table, def.codeField, clientId, record])
 
   // Draft auto-save (new records only): keep the in-progress form in localStorage
   // so a tab close / crash / accidental navigation doesn't lose the entry. The
@@ -159,6 +176,7 @@ export function MasterForm({ def, record, onDone, onCancel }:
                   onChange={f.format === 'vehicleNo' ? (e: React.ChangeEvent<HTMLInputElement>) => { e.target.value = formatVehicleNo(e.target.value); reg.onChange(e) } : reg.onChange} />
               })()}
               {f.help && <p className="mt-1 text-[11px] text-ink-faint">{f.help}</p>}
+              {f.name === def.codeField && dupCode && <p className="mt-1 text-[11px] font-medium text-warn">This {def.singular.toLowerCase()} code is already in use.</p>}
             </Field>
           )
         })}

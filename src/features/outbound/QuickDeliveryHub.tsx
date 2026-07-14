@@ -55,6 +55,7 @@ interface HubLine {
   alreadyDelivered: number // delivered on prior issued challans
   remaining: number        // cap for THIS challan (qty − delivered − planned)
   deliveredQty: number     // editable — what leaves on this dispatch
+  unitPrice: number        // carried from the SO line (for line valuation)
   condition: string; locationId: string; remarks: string
 }
 // Editable delivery header the operator confirms before generating.
@@ -76,6 +77,9 @@ export default function QuickDeliveryHub() {
   const nav = useNavigate()
   const { currentClientId, can, isPlatformAdmin, profile } = useAuth()
   const notify = useUI(s => s.notify) as Notify
+  // Same permission gates as the classic Delivery Challan surface: creating a
+  // challan needs create/edit, dispatching (stock + gate pass) needs approve/post.
+  const canCreate = can('outbound.create') || can('outbound.edit') || isPlatformAdmin
   const canPost = can('outbound.approve') || can('outbound.post') || isPlatformAdmin
 
   // Masters — loaded once, shared by every dispatch in the session.
@@ -175,7 +179,8 @@ export default function QuickDeliveryHub() {
           soItemId: l.so_item_id, productId: l.product_id,
           code: p?.material_code ?? '—', name: p?.name ?? it?.description ?? l.product_id,
           uom: p?.uom ?? 'Pc', invoicedQty: l.qty, alreadyDelivered: l.delivered, remaining,
-          deliveredQty: remaining, condition: 'good', locationId: '', remarks: ''
+          deliveredQty: remaining, unitPrice: Number(it?.unit_price) || 0,
+          condition: 'good', locationId: '', remarks: ''
         }
       })
       setCtx({
@@ -230,6 +235,7 @@ export default function QuickDeliveryHub() {
   // --- generate the challan -------------------------------------------------
   const generate = async () => {
     if (!ctx || !currentClientId) return
+    if (!canCreate) { notify('error', 'You do not have permission to create delivery challans'); return }
     const active = lines.filter(l => Number(l.deliveredQty) > 0)
     if (!ctx.warehouseId) { notify('error', 'This order has no warehouse set — cannot deduct stock'); return }
     if (active.length === 0) { notify('error', 'Enter a delivered quantity on at least one item'); return }
@@ -261,7 +267,7 @@ export default function QuickDeliveryHub() {
       if (error) throw error
       const payload = active.map(l => ({
         challan_id: ch.id, product_id: l.productId, qty: Number(l.deliveredQty),
-        unit_price: 0, stock_status: l.condition || 'good',
+        unit_price: l.unitPrice || 0, stock_status: l.condition || 'good',
         location_id: l.locationId || null, so_item_id: l.soItemId, remarks: l.remarks || null
       }))
       const { error: liErr } = await supabase.from('delivery_challan_items').insert(payload)
@@ -386,7 +392,7 @@ export default function QuickDeliveryHub() {
       </div>
 
       <FooterBar
-        stats={stats} ctx={ctx} created={created} saving={saving} canPost={canPost}
+        stats={stats} ctx={ctx} created={created} saving={saving} canPost={canPost} canCreate={canCreate}
         onGenerate={generate} onPrint={printCreated} onConfirm={confirmDispatch} onNew={reset}
       />
 
@@ -892,9 +898,9 @@ function Chip({ main, sub, multiline, onClick }: { main: string; sub?: string; m
 // ===========================================================================
 // Footer — live statistics + primary action area
 // ===========================================================================
-function FooterBar({ stats, ctx, created, saving, canPost, onGenerate, onPrint, onConfirm, onNew }: {
+function FooterBar({ stats, ctx, created, saving, canPost, canCreate, onGenerate, onPrint, onConfirm, onNew }: {
   stats: { invoiceQty: number; deliveredQty: number; pending: number; totalItems: number; completedItems: number; remaining: number; pct: number }
-  ctx: InvoiceCtx | null; created: Tables<'delivery_challans'> | null; saving: boolean; canPost: boolean
+  ctx: InvoiceCtx | null; created: Tables<'delivery_challans'> | null; saving: boolean; canPost: boolean; canCreate: boolean
   onGenerate: () => void; onPrint: () => void; onConfirm: () => void; onNew: () => void
 }) {
   const posted = !!created?.posted_at
@@ -922,7 +928,8 @@ function FooterBar({ stats, ctx, created, saving, canPost, onGenerate, onPrint, 
           {!ctx ? (
             <span className="text-xs text-ink-faint">Search an invoice to begin</span>
           ) : !created ? (
-            <Button icon="local_shipping" size="md" loading={saving} onClick={onGenerate} className="h-11 px-6 text-[15px]">
+            <Button icon="local_shipping" size="md" loading={saving} disabled={!canCreate} onClick={onGenerate}
+              className="h-11 px-6 text-[15px]" title={canCreate ? undefined : 'You do not have permission to create challans'}>
               Generate Delivery Challan
             </Button>
           ) : (

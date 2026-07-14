@@ -6,6 +6,7 @@ import { useAuth } from '@/store/auth'
 import { useUI } from '@/store/ui'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { cn, formatNumber, formatDate, formatVehicleNo } from '@/lib/utils'
 import { CONDITION_OPTIONS, STOCK_CONDITIONS } from '@/lib/conditions'
 import { DEFAULT_CHALLAN_NOTE } from '@/lib/constants'
@@ -94,6 +95,8 @@ export default function QuickDeliveryHub() {
   const [loadingInv, setLoadingInv] = useState(false)
   const [saving, setSaving] = useState(false)
   const [created, setCreated] = useState<Tables<'delivery_challans'> | null>(null)
+  // The guided delivery-info popup (asks each field one at a time).
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const searchRef = useRef<HTMLInputElement>(null)
   const patchDel = (p: Partial<DeliveryInfo>) => setDel(x => ({ ...x, ...p }))
@@ -134,7 +137,7 @@ export default function QuickDeliveryHub() {
 
   const reset = useCallback(() => {
     setCtx(null); setLines([]); setDel(emptyDelivery()); setPrintNote(DEFAULT_CHALLAN_NOTE)
-    setCreated(null); setLoadingInv(false)
+    setCreated(null); setLoadingInv(false); setGuideOpen(false)
     setTimeout(() => searchRef.current?.focus(), 0)
   }, [])
 
@@ -184,8 +187,10 @@ export default function QuickDeliveryHub() {
       setLines(seeded)
       setDel(d => ({ ...d, shipToAddress: row.customerShipping || d.shipToAddress }))
       setPrintNote(DEFAULT_CHALLAN_NOTE)
-      // Land the cursor on the first editable quantity for immediate keying.
-      setTimeout(() => qtyRefs.current[0]?.focus(), 40)
+      // Open the guided popup so the operator is asked each delivery field one
+      // at a time. Quantities are a separate step (the item grid) — the popup
+      // never touches them.
+      setGuideOpen(true)
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not load invoice')
     } finally {
@@ -308,10 +313,10 @@ export default function QuickDeliveryHub() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-surface text-ink">
       <Header
-        ctx={ctx} del={del} patchDel={patchDel} onExit={exit}
+        ctx={ctx} del={del} onExit={exit}
         searchRef={searchRef} onSelectInvoice={selectInvoice} loadingInv={loadingInv}
-        vehicles={vehicles} vendors={vendors} drivers={drivers} couriers={couriers}
-        currentClientId={currentClientId} disabled={!!created}
+        vehicles={vehicles} currentClientId={currentClientId} disabled={!!created}
+        onEditInfo={() => setGuideOpen(true)}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -384,6 +389,12 @@ export default function QuickDeliveryHub() {
         stats={stats} ctx={ctx} created={created} saving={saving} canPost={canPost}
         onGenerate={generate} onPrint={printCreated} onConfirm={confirmDispatch} onNew={reset}
       />
+
+      {guideOpen && ctx && !created && (
+        <GuidedDeliveryModal del={del} patchDel={patchDel}
+          vehicles={vehicles} vendors={vendors} drivers={drivers} couriers={couriers}
+          onClose={() => setGuideOpen(false)} />
+      )}
     </div>
   )
 }
@@ -398,19 +409,21 @@ interface InvoiceSuggestion {
   customerShipping: string; warehouseId: string | null
 }
 
-function Header({ ctx, del, patchDel, onExit, searchRef, onSelectInvoice, loadingInv, vehicles, vendors, drivers, couriers, currentClientId, disabled }: {
-  ctx: InvoiceCtx | null; del: DeliveryInfo; patchDel: (p: Partial<DeliveryInfo>) => void; onExit: () => void
+function Header({ ctx, del, onExit, searchRef, onSelectInvoice, loadingInv, vehicles, currentClientId, disabled, onEditInfo }: {
+  ctx: InvoiceCtx | null; del: DeliveryInfo; onExit: () => void
   searchRef: React.RefObject<HTMLInputElement>; onSelectInvoice: (s: InvoiceSuggestion) => void; loadingInv: boolean
-  vehicles: VehicleLite[]; vendors: VendorLite[]; drivers: DriverLite[]; couriers: CourierLite[]
-  currentClientId: string | null; disabled: boolean
+  vehicles: VehicleLite[]; currentClientId: string | null; disabled: boolean; onEditInfo: () => void
 }) {
   const [q, setQ] = useState('')
   const [sugs, setSugs] = useState<InvoiceSuggestion[]>([])
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(0)
-  // Delivery fields exist in the fixed frame from the start; they only become
-  // editable once an invoice is loaded (and lock again after it's generated).
-  const fieldsDisabled = disabled || !ctx
+
+  const vehName = formatVehicleNo(vehicles.find(v => v.id === del.vehicleId)?.vehicle_number) || ''
+  const carrier = del.deliveryMethod === 'transport'
+    ? [vehName, del.driverName, del.transportVendor].filter(Boolean).join(' · ')
+    : del.courierName
+  const anyFilled = !!(del.shipToAddress || del.receiverName || del.receiverPhone || del.vehicleId || del.driverName || del.transportVendor || del.courierName || del.deliveryNote)
 
   // Debounced invoice lookup. Kept as separate queries (so_invoices →
   // sales_orders → customers) instead of a nested embed — the same resilient
@@ -520,67 +533,131 @@ function Header({ ctx, del, patchDel, onExit, searchRef, onSelectInvoice, loadin
         <Fact label="Invoice Date" value={ctx?.invoiceDate ? formatDate(ctx.invoiceDate) : '—'} />
       </div>
 
-      {/* Editable delivery info — always present; enabled once an invoice loads. */}
-      <div className="border-t border-surface-line px-5 py-3">
-        <div className="mb-2 flex gap-2">
-          {(['transport', 'courier'] as const).map(m => (
-            <button key={m} type="button" disabled={fieldsDisabled} onClick={() => patchDel({ deliveryMethod: m })}
-              className={cn('rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50',
-                del.deliveryMethod === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-line text-ink-soft hover:bg-surface-sunken')}>
-              {m === 'transport' ? 'Transport' : 'Courier'}
-            </button>
-          ))}
+      {/* Delivery info summary — filled by the guided popup, shown here read-only
+          with a button to (re)open the popup. */}
+      <div className="flex items-start gap-4 border-t border-surface-line px-5 py-2.5">
+        <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-5">
+          <Fact label="Ship-To Address" value={del.shipToAddress || '—'} />
+          <Fact label="Receiver" value={[del.receiverName, del.receiverPhone].filter(Boolean).join(' · ') || '—'} />
+          <Fact label="Delivery Type" value={ctx ? (del.deliveryMethod === 'transport' ? 'Transport' : 'Courier') : '—'} />
+          <Fact label={del.deliveryMethod === 'transport' ? 'Vehicle / Driver / Vendor' : 'Courier'} value={carrier || '—'} />
+          <Fact label="Delivery Note" value={del.deliveryNote || '—'} />
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          <MiniField label="Ship-To Address" className="col-span-2 lg:col-span-2">
-            <input value={del.shipToAddress} disabled={fieldsDisabled} onChange={e => patchDel({ shipToAddress: e.target.value })} className={inputCls} placeholder="Delivery address" />
-          </MiniField>
-          <MiniField label="Receiver Name">
-            <input value={del.receiverName} disabled={fieldsDisabled} onChange={e => patchDel({ receiverName: e.target.value })} className={inputCls} />
-          </MiniField>
-          <MiniField label="Receiver Mobile">
-            <input value={del.receiverPhone} disabled={fieldsDisabled} onChange={e => patchDel({ receiverPhone: e.target.value })} className={inputCls} />
-          </MiniField>
-          {del.deliveryMethod === 'transport' ? (
-            <>
-              <MiniField label="Transport Vendor">
-                <PickList disabled={fieldsDisabled} value={del.transportVendor || (vendors.find(v => v.id === del.transporterId)?.name ?? '')}
-                  options={vendors.map(v => ({ id: v.id, label: v.name, sub: v.vendor_code }))}
-                  onPick={o => patchDel({ transporterId: o?.id ?? '', transportVendor: o?.label ?? '' })}
-                  onFree={t => patchDel({ transporterId: '', transportVendor: t })} placeholder="Vendor" />
-              </MiniField>
-              <MiniField label="Vehicle">
-                <PickList disabled={fieldsDisabled} value={vehicles.find(v => v.id === del.vehicleId)?.vehicle_number ?? ''}
-                  options={vehicles.map(v => ({ id: v.id, label: formatVehicleNo(v.vehicle_number) || v.vehicle_number, sub: v.vehicle_type ?? undefined }))}
-                  onPick={o => applyVehicle(o?.id ?? '', vehicles, vendors, patchDel)}
-                  onFree={() => {}} placeholder="Vehicle" />
-              </MiniField>
-              <MiniField label="Driver">
-                <PickList disabled={fieldsDisabled} value={del.driverName}
-                  options={drivers.map(d => ({ id: d.id, label: d.name, sub: d.phone ?? undefined }))}
-                  onPick={o => { const d = drivers.find(x => x.id === o?.id); patchDel({ driverId: o?.id ?? '', driverName: o?.label ?? '', driverPhone: d?.phone ?? del.driverPhone }) }}
-                  onFree={t => patchDel({ driverId: '', driverName: t })} placeholder="Driver" />
-              </MiniField>
-              <MiniField label="Driver Mobile">
-                <input value={del.driverPhone} disabled={fieldsDisabled} onChange={e => patchDel({ driverPhone: e.target.value })} className={inputCls} />
-              </MiniField>
-            </>
-          ) : (
-            <MiniField label="Courier">
-              <PickList disabled={fieldsDisabled} value={del.courierName}
-                options={couriers.map(c => ({ id: c.id, label: c.name, sub: c.courier_code }))}
-                onPick={o => patchDel({ courierId: o?.id ?? '', courierName: o?.label ?? '' })}
-                onFree={t => patchDel({ courierId: '', courierName: t })} placeholder="Courier" />
-            </MiniField>
-          )}
-          <MiniField label="Delivery Note" className="col-span-2 lg:col-span-2">
-            <input value={del.deliveryNote} disabled={fieldsDisabled} onChange={e => patchDel({ deliveryNote: e.target.value })} className={inputCls} placeholder="Remarks on the challan" />
-          </MiniField>
-        </div>
+        <button onClick={onEditInfo} disabled={disabled || !ctx}
+          className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-500 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-40">
+          <Icon name="edit" className="text-[16px]" /> {anyFilled ? 'Edit delivery info' : 'Fill delivery info'}
+        </button>
       </div>
     </header>
   )
 }
+
+// ===========================================================================
+// Guided delivery-info popup — asks one field at a time; Enter → next.
+// Kept intentionally simple: a single question, one control, a progress bar.
+// It never touches quantities (those are a separate step in the item grid).
+// ===========================================================================
+function GuidedDeliveryModal({ del, patchDel, vehicles, vendors, drivers, couriers, onClose }: {
+  del: DeliveryInfo; patchDel: (p: Partial<DeliveryInfo>) => void
+  vehicles: VehicleLite[]; vendors: VendorLite[]; drivers: DriverLite[]; couriers: CourierLite[]
+  onClose: () => void
+}) {
+  const steps = useMemo(() => {
+    const base = [
+      { key: 'shipToAddress', q: 'Where should this be delivered?', hint: 'Shipping Address' },
+      { key: 'receiverName', q: 'Who will receive it?', hint: 'Receiver Name' },
+      { key: 'receiverPhone', q: 'Receiver mobile number?', hint: 'Receiver Mobile' },
+      { key: 'deliveryMethod', q: 'Delivery by Transport or Courier?', hint: 'Delivery Type' }
+    ]
+    const mid = del.deliveryMethod === 'transport'
+      ? [
+          { key: 'transportVendor', q: 'Which transport vendor?', hint: 'Transport Vendor' },
+          { key: 'vehicle', q: 'Which vehicle?', hint: 'Vehicle' },
+          { key: 'driver', q: 'Driver name?', hint: 'Driver' },
+          { key: 'driverPhone', q: 'Driver mobile number?', hint: 'Driver Mobile' }
+        ]
+      : [{ key: 'courier', q: 'Which courier?', hint: 'Courier' }]
+    return [...base, ...mid, { key: 'deliveryNote', q: 'Any note on the challan?', hint: 'Delivery Note (optional)' }]
+  }, [del.deliveryMethod])
+
+  const [i, setI] = useState(0)
+  const idx = Math.min(i, steps.length - 1)
+  const cur = steps[idx]
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  // Focus the current control each time the step changes.
+  useEffect(() => { const el = inputRef.current; if (el) { el.focus(); el.select?.() } }, [idx])
+
+  const next = () => { if (idx + 1 >= steps.length) onClose(); else setI(idx + 1) }
+  const back = () => setI(Math.max(0, idx - 1))
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); next() }
+  }
+
+  const control = () => {
+    switch (cur.key) {
+      case 'shipToAddress': return <input ref={inputRef} onKeyDown={onKey} value={del.shipToAddress} onChange={e => patchDel({ shipToAddress: e.target.value })} className={bigInput} placeholder="Type the delivery address" />
+      case 'receiverName': return <input ref={inputRef} onKeyDown={onKey} value={del.receiverName} onChange={e => patchDel({ receiverName: e.target.value })} className={bigInput} placeholder="Receiver name" />
+      case 'receiverPhone': return <input ref={inputRef} onKeyDown={onKey} value={del.receiverPhone} onChange={e => patchDel({ receiverPhone: e.target.value })} className={bigInput} placeholder="Mobile number" />
+      case 'deliveryMethod': return (
+        <div className="flex gap-3">
+          {(['transport', 'courier'] as const).map(m => (
+            // Picking the type immediately advances — one tap, on to the next.
+            <button key={m} type="button" onClick={() => { patchDel({ deliveryMethod: m }); setI(idx + 1) }}
+              className={cn('flex-1 rounded-xl border px-4 py-3 text-sm font-semibold',
+                del.deliveryMethod === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink/40 text-ink-soft hover:bg-surface-sunken')}>
+              {m === 'transport' ? 'Transport' : 'Courier'}
+            </button>
+          ))}
+        </div>
+      )
+      case 'transportVendor': return <PickList inputRef={el => { inputRef.current = el }} onStepKey={onKey} value={del.transportVendor || (vendors.find(v => v.id === del.transporterId)?.name ?? '')}
+        options={vendors.map(v => ({ id: v.id, label: v.name, sub: v.vendor_code }))}
+        onPick={o => patchDel({ transporterId: o?.id ?? '', transportVendor: o?.label ?? '' })}
+        onFree={t => patchDel({ transporterId: '', transportVendor: t })} placeholder="Search or type vendor" big />
+      case 'vehicle': return <PickList inputRef={el => { inputRef.current = el }} onStepKey={onKey} value={vehicles.find(v => v.id === del.vehicleId)?.vehicle_number ?? ''}
+        options={vehicles.map(v => ({ id: v.id, label: formatVehicleNo(v.vehicle_number) || v.vehicle_number, sub: v.vehicle_type ?? undefined }))}
+        onPick={o => applyVehicle(o?.id ?? '', vehicles, vendors, patchDel)} onFree={() => {}} placeholder="Search vehicle" big />
+      case 'driver': return <PickList inputRef={el => { inputRef.current = el }} onStepKey={onKey} value={del.driverName}
+        options={drivers.map(d => ({ id: d.id, label: d.name, sub: d.phone ?? undefined }))}
+        onPick={o => { const d = drivers.find(x => x.id === o?.id); patchDel({ driverId: o?.id ?? '', driverName: o?.label ?? '', driverPhone: d?.phone ?? del.driverPhone }) }}
+        onFree={t => patchDel({ driverId: '', driverName: t })} placeholder="Search or type driver" big />
+      case 'driverPhone': return <input ref={inputRef} onKeyDown={onKey} value={del.driverPhone} onChange={e => patchDel({ driverPhone: e.target.value })} className={bigInput} placeholder="Driver mobile" />
+      case 'courier': return <PickList inputRef={el => { inputRef.current = el }} onStepKey={onKey} value={del.courierName}
+        options={couriers.map(c => ({ id: c.id, label: c.name, sub: c.courier_code }))}
+        onPick={o => patchDel({ courierId: o?.id ?? '', courierName: o?.label ?? '' })}
+        onFree={t => patchDel({ courierId: '', courierName: t })} placeholder="Search or type courier" big />
+      case 'deliveryNote': return <input ref={inputRef} onKeyDown={onKey} value={del.deliveryNote} onChange={e => patchDel({ deliveryNote: e.target.value })} className={bigInput} placeholder="Optional note on the challan" />
+      default: return null
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Delivery information" size="md">
+      {/* Trap Escape here so it closes the popup instead of bubbling to the
+          hub's global handler (which would exit the whole console). */}
+      <div className="space-y-4" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken">
+          <div className="h-full rounded-full bg-brand-400 transition-all" style={{ width: `${((idx + 1) / steps.length) * 100}%` }} />
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">Step {idx + 1} of {steps.length} · {cur.hint}</p>
+          <h3 className="mt-0.5 text-lg font-bold">{cur.q}</h3>
+        </div>
+        {control()}
+        <div className="flex items-center justify-between border-t border-surface-line pt-4">
+          <Button variant="ghost" onClick={back} disabled={idx === 0}>Back</Button>
+          <div className="flex items-center gap-2">
+            <span className="hidden text-xs text-ink-soft sm:block">Press Enter</span>
+            <Button icon={idx + 1 >= steps.length ? 'check' : 'arrow_forward'} onClick={next}>
+              {idx + 1 >= steps.length ? 'Done' : 'Next'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+const bigInput = 'h-12 w-full rounded-xl border border-ink/50 bg-surface px-4 text-base outline-none transition-colors hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20'
 
 const inputCls = 'h-9 w-full rounded-lg border border-ink/50 bg-surface px-2.5 text-sm outline-none transition-colors hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint'
 
@@ -592,21 +669,14 @@ function Fact({ label, value, strong }: { label: string; value: string; strong?:
     </div>
   )
 }
-function MiniField({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('min-w-0', className)}>
-      <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-soft">{label}</label>
-      {children}
-    </div>
-  )
-}
-
 // Compact searchable pick list — a native <datalist>-style lookup that also
 // accepts free text (for ad-hoc vendors/drivers) without a heavy dropdown.
-function PickList({ value, options, onPick, onFree, placeholder, disabled }: {
+// Participates in the guided flow via inputRef (auto-focus) + onStepKey (Enter).
+function PickList({ value, options, onPick, onFree, placeholder, disabled, inputRef, onStepKey, big }: {
   value: string; options: { id: string; label: string; sub?: string }[]
   onPick: (o: { id: string; label: string } | null) => void; onFree: (t: string) => void
-  placeholder?: string; disabled?: boolean
+  placeholder?: string; disabled?: boolean; big?: boolean
+  inputRef?: (el: HTMLInputElement | null) => void; onStepKey?: (e: React.KeyboardEvent) => void
 }) {
   const [text, setText] = useState(value)
   const [open, setOpen] = useState(false)
@@ -616,7 +686,14 @@ function PickList({ value, options, onPick, onFree, placeholder, disabled }: {
     : options.slice(0, 8)
   return (
     <div className="relative">
-      <input value={text} disabled={disabled} placeholder={placeholder} className={inputCls}
+      <input ref={inputRef} value={text} disabled={disabled} placeholder={placeholder} className={big ? bigInput : inputCls}
+        onKeyDown={e => {
+          // Enter selects the single obvious match (if any), then advances.
+          if (e.key === 'Enter') {
+            if (open && filtered.length === 1) { setText(filtered[0].label); onPick(filtered[0]) }
+            setOpen(false); onStepKey?.(e)
+          }
+        }}
         onChange={e => { setText(e.target.value); onFree(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} />
       {open && filtered.length > 0 && (

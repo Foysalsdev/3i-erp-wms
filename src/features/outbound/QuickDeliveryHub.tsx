@@ -55,6 +55,7 @@ interface HubLine {
   alreadyDelivered: number // delivered on prior issued challans
   remaining: number        // cap for THIS challan (qty − delivered − planned)
   deliveredQty: number     // editable — what leaves on this dispatch
+  unitPrice: number        // carried from the SO line (for line valuation)
   condition: string; locationId: string; remarks: string
 }
 // Editable delivery header the operator confirms before generating.
@@ -76,6 +77,9 @@ export default function QuickDeliveryHub() {
   const nav = useNavigate()
   const { currentClientId, can, isPlatformAdmin, profile } = useAuth()
   const notify = useUI(s => s.notify) as Notify
+  // Same permission gates as the classic Delivery Challan surface: creating a
+  // challan needs create/edit, dispatching (stock + gate pass) needs approve/post.
+  const canCreate = can('outbound.create') || can('outbound.edit') || isPlatformAdmin
   const canPost = can('outbound.approve') || can('outbound.post') || isPlatformAdmin
 
   // Masters — loaded once, shared by every dispatch in the session.
@@ -89,6 +93,12 @@ export default function QuickDeliveryHub() {
 
   // Current dispatch state.
   const [ctx, setCtx] = useState<InvoiceCtx | null>(null)
+  // Challans that ALREADY exist for the picked invoice — the basis for
+  // duplicate detection (shown as a banner, re-checked at generate time).
+  const [existing, setExisting] = useState<{ challan_no: string; status: string; posted_at: string | null }[]>([])
+  // Ship-To addresses already on the customer master — used to decide whether a
+  // typed address is new (and worth saving back as a side-delivery address).
+  const [custAddrs, setCustAddrs] = useState<string[]>([])
   const [lines, setLines] = useState<HubLine[]>([])
   const [del, setDel] = useState<DeliveryInfo>(emptyDelivery())
   const [printNote, setPrintNote] = useState(DEFAULT_CHALLAN_NOTE)
@@ -137,7 +147,7 @@ export default function QuickDeliveryHub() {
 
   const reset = useCallback(() => {
     setCtx(null); setLines([]); setDel(emptyDelivery()); setPrintNote(DEFAULT_CHALLAN_NOTE)
-    setCreated(null); setLoadingInv(false); setGuideOpen(false)
+    setCreated(null); setLoadingInv(false); setGuideOpen(false); setExisting([]); setCustAddrs([])
     setTimeout(() => searchRef.current?.focus(), 0)
   }, [])
 
@@ -164,9 +174,13 @@ export default function QuickDeliveryHub() {
   const selectInvoice = async (row: InvoiceSuggestion) => {
     setLoadingInv(true); setCreated(null)
     try {
-      const { items, invoices } = await loadSoInvoices(row.soId)
+      const { items, invoices, challans } = await loadSoInvoices(row.soId)
       const inv = invoices.find(i => i.id === row.invoiceId)
       if (!inv) { notify('error', 'Invoice has no lines to deliver'); setLoadingInv(false); return }
+      // Challans already raised against THIS invoice — surfaced as a duplicate
+      // warning so the operator knows a delivery for it may already exist.
+      setExisting((challans ?? []).filter((c: any) => c.invoice_id === inv.id)
+        .map((c: any) => ({ challan_no: c.challan_no, status: c.status, posted_at: c.posted_at })))
       const seeded: HubLine[] = inv.lines.map(l => {
         const it = items.find((x: any) => x.id === l.so_item_id)
         const p = pmap[l.product_id]
@@ -175,7 +189,8 @@ export default function QuickDeliveryHub() {
           soItemId: l.so_item_id, productId: l.product_id,
           code: p?.material_code ?? '—', name: p?.name ?? it?.description ?? l.product_id,
           uom: p?.uom ?? 'Pc', invoicedQty: l.qty, alreadyDelivered: l.delivered, remaining,
-          deliveredQty: remaining, condition: 'good', locationId: '', remarks: ''
+          deliveredQty: remaining, unitPrice: Number(it?.unit_price) || 0,
+          condition: 'good', locationId: '', remarks: ''
         }
       })
       setCtx({
@@ -185,7 +200,11 @@ export default function QuickDeliveryHub() {
         customerShipping: row.customerShipping, warehouseId: row.warehouseId
       })
       setLines(seeded)
+      // Ship-To auto-fills from the customer's default address; the operator can
+      // change it, and a changed one is saved back to the master (see generate).
       setDel(d => ({ ...d, shipToAddress: row.customerShipping || d.shipToAddress }))
+      supabase.from('customer_addresses').select('address').eq('customer_id', row.customerId)
+        .then(({ data }) => setCustAddrs((data ?? []).map(a => a.address)))
       setPrintNote(DEFAULT_CHALLAN_NOTE)
       // Open the guided popup so the operator is asked each delivery field one
       // at a time. Quantities are a separate step (the item grid) — the popup
@@ -230,13 +249,32 @@ export default function QuickDeliveryHub() {
   // --- generate the challan -------------------------------------------------
   const generate = async () => {
     if (!ctx || !currentClientId) return
+    if (!canCreate) { notify('error', 'You do not have permission to create delivery challans'); return }
     const active = lines.filter(l => Number(l.deliveredQty) > 0)
     if (!ctx.warehouseId) { notify('error', 'This order has no warehouse set — cannot deduct stock'); return }
     if (active.length === 0) { notify('error', 'Enter a delivered quantity on at least one item'); return }
     const over = active.find(l => Number(l.deliveredQty) > l.remaining)
     if (over) { notify('error', `Only ${over.remaining} remaining to deliver for ${over.code}`); return }
+    // Duplicate guard: make the operator consciously acknowledge that this
+    // invoice already carries challan(s) before adding another.
+    if (existing.length > 0 &&
+      !window.confirm(`This invoice already has ${existing.length} challan(s): ${existing.map(e => e.challan_no).join(', ')}.\nCreate another for the remaining quantity?`)) return
     setSaving(true)
     try {
+      // Re-read the invoice's live figures right before inserting, so a challan
+      // another operator raised in the meantime can't be duplicated: every line
+      // is re-validated against the freshly-computed remaining.
+      const { invoices: fresh } = await loadSoInvoices(ctx.soId)
+      const finv = fresh.find(i => i.id === ctx.invoiceId)
+      for (const l of active) {
+        const fl = finv?.lines.find((x: any) => x.so_item_id === l.soItemId)
+        const rem = fl ? Math.max(0, fl.qty - fl.delivered - fl.planned) : 0
+        if (Number(l.deliveredQty) > rem) {
+          setSaving(false)
+          notify('error', `${l.code}: only ${rem} left to deliver now — another challan for this invoice was just created. Reload the invoice.`)
+          return
+        }
+      }
       const mode = del.deliveryMethod
       const totalQty = active.reduce((s, l) => s + Number(l.deliveredQty), 0)
       const header = {
@@ -261,7 +299,7 @@ export default function QuickDeliveryHub() {
       if (error) throw error
       const payload = active.map(l => ({
         challan_id: ch.id, product_id: l.productId, qty: Number(l.deliveredQty),
-        unit_price: 0, stock_status: l.condition || 'good',
+        unit_price: l.unitPrice || 0, stock_status: l.condition || 'good',
         location_id: l.locationId || null, so_item_id: l.soItemId, remarks: l.remarks || null
       }))
       const { error: liErr } = await supabase.from('delivery_challan_items').insert(payload)
@@ -271,6 +309,18 @@ export default function QuickDeliveryHub() {
         supabase.from('vehicles').update({
           driver_name: del.driverName || null, driver_phone: del.driverPhone || null, vendor_id: del.transporterId || null
         }).eq('id', del.vehicleId).then(() => {})
+      }
+      // If the operator changed the Ship-To to an address the customer master
+      // doesn't have yet, save it back as a side-delivery address so it's
+      // available next time (fire-and-forget — never blocks the challan).
+      const shipAddr = (del.shipToAddress || '').trim()
+      if (shipAddr) {
+        const known = new Set([ctx.customerShipping, ...custAddrs].map(a => (a || '').trim().toLowerCase()).filter(Boolean))
+        if (!known.has(shipAddr.toLowerCase())) {
+          supabase.from('customer_addresses')
+            .insert({ customer_id: ctx.customerId, address: shipAddr, address_type: 'Shipping', is_default: false, label: 'Side Delivery' })
+            .then(({ error }) => { if (!error) setCustAddrs(a => [...a, shipAddr]) })
+        }
       }
       setCreated(ch)
       notify('success', `Challan ${ch.challan_no} generated`)
@@ -313,10 +363,9 @@ export default function QuickDeliveryHub() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-surface text-ink">
       <Header
-        ctx={ctx} del={del} onExit={exit}
+        ctx={ctx} onExit={exit}
         searchRef={searchRef} onSelectInvoice={selectInvoice} loadingInv={loadingInv}
-        vehicles={vehicles} currentClientId={currentClientId} disabled={!!created}
-        onEditInfo={() => setGuideOpen(true)}
+        currentClientId={currentClientId} disabled={!!created}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -326,20 +375,44 @@ export default function QuickDeliveryHub() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-surface-line px-5 py-2.5">
             <h2 className="text-sm font-semibold">Items to dispatch</h2>
             <span className="text-xs text-ink-soft">{ctx ? `${lines.length} lines · Invoice ${ctx.invoiceNo}` : 'No invoice loaded'}</span>
-            {ctx && !created && recentQtys.length > 0 && (
-              <div className="ml-auto flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-ink-soft">Recent qty</span>
-                {recentQtys.map(n => (
-                  <button key={n} type="button" onClick={() => {
-                    const i = lastQtyIdx.current
-                    if (i != null && lines[i]) patchLine(i, { deliveredQty: Math.min(n, lines[i].remaining) })
-                  }} className="rounded-md bg-surface-sunken px-2 py-0.5 text-xs font-semibold tabular-nums hover:bg-brand-100">
-                    {n}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              {/* Reachable delivery-info opener for narrow screens where the right
+                  panel (which also holds it) is hidden. */}
+              {ctx && !created && (
+                <button onClick={() => setGuideOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-brand-500 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 lg:hidden">
+                  <Icon name="local_shipping" className="text-[14px]" /> Delivery info
+                </button>
+              )}
+              {ctx && !created && recentQtys.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-ink-soft">Recent qty</span>
+                  {recentQtys.map(n => (
+                    <button key={n} type="button" onClick={() => {
+                      const i = lastQtyIdx.current
+                      if (i != null && lines[i]) patchLine(i, { deliveredQty: Math.min(n, lines[i].remaining) })
+                    }} className="rounded-md bg-surface-sunken px-2 py-0.5 text-xs font-semibold tabular-nums hover:bg-brand-100">
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
+          {ctx && existing.length > 0 && (
+            <div className={cn('flex items-start gap-2 border-b px-5 py-2 text-xs',
+              lines.every(l => l.remaining <= 0) ? 'border-bad/30 bg-bad/5 text-bad' : 'border-warn/30 bg-warn/10 text-warn')}>
+              <Icon name="warning" className="mt-px text-[16px]" filled />
+              <span>
+                <b>Possible duplicate — </b>
+                this invoice already has {existing.length} challan(s): {existing.map(e => e.challan_no).join(', ')}.
+                {lines.every(l => l.remaining <= 0)
+                  ? ' Everything on it is already delivered or planned — nothing left to dispatch.'
+                  : ' Only the still-remaining quantity is pre-filled below.'}
+              </span>
+            </div>
+          )}
 
           <ItemHeaderRow />
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
@@ -373,9 +446,11 @@ export default function QuickDeliveryHub() {
           </div>
         </main>
 
-        {/* Right smart panel — one-click reuse of recent dispatch info. */}
+        {/* Right panel — the delivery info (summary + edit) plus one-click reuse
+            of recent dispatch info. */}
         <SmartPanel
           recent={recent} vehicles={vehicles} disabled={!!created}
+          del={del} ctx={ctx} onEditInfo={() => setGuideOpen(true)}
           onApplyVehicle={id => applyVehicle(id, vehicles, vendors, patchDel)}
           onApplyDriver={(name, phone) => patchDel({ driverName: name, driverPhone: phone || '', driverId: '' })}
           onApplyVendor={(id, name) => patchDel({ transporterId: id || '', transportVendor: name })}
@@ -386,7 +461,7 @@ export default function QuickDeliveryHub() {
       </div>
 
       <FooterBar
-        stats={stats} ctx={ctx} created={created} saving={saving} canPost={canPost}
+        stats={stats} ctx={ctx} created={created} saving={saving} canPost={canPost} canCreate={canCreate}
         onGenerate={generate} onPrint={printCreated} onConfirm={confirmDispatch} onNew={reset}
       />
 
@@ -409,21 +484,15 @@ interface InvoiceSuggestion {
   customerShipping: string; warehouseId: string | null
 }
 
-function Header({ ctx, del, onExit, searchRef, onSelectInvoice, loadingInv, vehicles, currentClientId, disabled, onEditInfo }: {
-  ctx: InvoiceCtx | null; del: DeliveryInfo; onExit: () => void
+function Header({ ctx, onExit, searchRef, onSelectInvoice, loadingInv, currentClientId, disabled }: {
+  ctx: InvoiceCtx | null; onExit: () => void
   searchRef: React.RefObject<HTMLInputElement>; onSelectInvoice: (s: InvoiceSuggestion) => void; loadingInv: boolean
-  vehicles: VehicleLite[]; currentClientId: string | null; disabled: boolean; onEditInfo: () => void
+  currentClientId: string | null; disabled: boolean
 }) {
   const [q, setQ] = useState('')
   const [sugs, setSugs] = useState<InvoiceSuggestion[]>([])
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(0)
-
-  const vehName = formatVehicleNo(vehicles.find(v => v.id === del.vehicleId)?.vehicle_number) || ''
-  const carrier = del.deliveryMethod === 'transport'
-    ? [vehName, del.driverName, del.transportVendor].filter(Boolean).join(' · ')
-    : del.courierName
-  const anyFilled = !!(del.shipToAddress || del.receiverName || del.receiverPhone || del.vehicleId || del.driverName || del.transportVendor || del.courierName || del.deliveryNote)
 
   // Debounced invoice lookup. Kept as separate queries (so_invoices →
   // sales_orders → customers) instead of a nested embed — the same resilient
@@ -477,76 +546,64 @@ function Header({ ctx, del, onExit, searchRef, onSelectInvoice, loadingInv, vehi
 
   return (
     <header className="shrink-0 border-b border-surface-line bg-surface">
-      <div className="flex items-center gap-3 px-5 py-3">
+      <div className="flex items-center gap-2.5 px-4 py-2">
         <button onClick={onExit} title="Exit (Esc)"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-surface-sunken">
-          <Icon name="arrow_back" className="text-[22px]" />
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-surface-sunken">
+          <Icon name="arrow_back" className="text-[20px]" />
         </button>
         <div className="leading-tight">
-          <p className="text-sm font-bold tracking-tight">Quick Delivery Hub</p>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-soft">Warehouse Dispatch</p>
+          <p className="text-[13px] font-bold tracking-tight">Quick Delivery Hub</p>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-ink-soft">Warehouse Dispatch</p>
         </div>
-
-        {/* Invoice search — the operator's entry point, always in reach. */}
-        <div className="relative ml-auto max-w-xl flex-1">
-          <input
-            ref={searchRef} value={q} disabled={disabled}
-            onChange={e => setQ(e.target.value)} onKeyDown={onKey}
-            onFocus={() => { if (sugs.length) setOpen(true) }}
-            onBlur={() => setTimeout(() => setOpen(false), 150)}
-            placeholder="Type SAP Invoice Number…   ( press / )"
-            className="h-11 w-full rounded-xl border border-ink/60 bg-surface px-4 text-[15px] font-medium outline-none transition-colors hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint"
-          />
-          {loadingInv && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-soft">Loading…</span>}
-          {open && sugs.length === 0 && q.trim().length >= 2 && (
-            <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 rounded-xl border border-surface-line bg-surface px-4 py-3 text-sm text-ink-soft shadow-pop">
-              No invoice found for “{q.trim()}”.
-            </div>
-          )}
-          {open && sugs.length > 0 && (
-            <ul className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-80 overflow-y-auto rounded-xl border border-surface-line bg-surface p-1 shadow-pop">
-              {sugs.map((s, i) => (
-                <li key={s.invoiceId}>
-                  <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}
-                    className={cn('flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left', i === hi ? 'bg-brand-100' : 'hover:bg-surface-sunken')}>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold">{s.invoiceNo}</span>
-                      <span className="block truncate text-xs text-ink-soft">{s.customerCode ? s.customerCode + ' · ' : ''}{s.customerName || 'Unknown customer'}</span>
-                    </span>
-                    <span className="shrink-0 text-xs text-ink-soft tabular-nums">{formatDate(s.invoiceDate)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
       </div>
 
-      {/* Resolved identity strip — always present; fills from the invoice. */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-1 border-t border-surface-line bg-surface-sunken/50 px-5 py-2 sm:grid-cols-3 lg:grid-cols-6">
-        <Fact label="Invoice" value={ctx?.invoiceNo || '—'} strong />
+      {/* One compact identity row: the invoice number is an input here (empty),
+          or the resolved value once picked, sitting inline with the customer /
+          PO / date facts it fills. No oversized search box. */}
+      <div className="grid grid-cols-2 items-start gap-x-6 gap-y-2 border-t border-surface-line bg-surface-sunken/40 px-4 py-2 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="relative min-w-0">
+          <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-soft">Invoice No</label>
+          {!ctx ? (
+            <>
+              <input
+                ref={searchRef} value={q} disabled={disabled}
+                onChange={e => setQ(e.target.value)} onKeyDown={onKey}
+                onFocus={() => { if (sugs.length) setOpen(true) }}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                placeholder="Type invoice…  ( / )"
+                className="h-8 w-full rounded-lg border border-brand-500 bg-surface px-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-faint"
+              />
+              {loadingInv && <span className="absolute right-2 top-[26px] text-[11px] text-ink-soft">…</span>}
+              {open && sugs.length === 0 && q.trim().length >= 2 && (
+                <div className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-[280px] rounded-lg border border-surface-line bg-surface px-3 py-2 text-xs text-ink-soft shadow-pop">
+                  No invoice found for “{q.trim()}”.
+                </div>
+              )}
+              {open && sugs.length > 0 && (
+                <ul className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-80 min-w-[300px] overflow-y-auto rounded-lg border border-surface-line bg-surface p-1 shadow-pop">
+                  {sugs.map((s, i) => (
+                    <li key={s.invoiceId}>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}
+                        className={cn('flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left', i === hi ? 'bg-brand-100' : 'hover:bg-surface-sunken')}>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">{s.invoiceNo}</span>
+                          <span className="block truncate text-xs text-ink-soft">{s.customerCode ? s.customerCode + ' · ' : ''}{s.customerName || 'Unknown customer'}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-ink-soft tabular-nums">{formatDate(s.invoiceDate)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <p className="truncate text-sm font-bold" title={ctx.invoiceNo}>{ctx.invoiceNo}</p>
+          )}
+        </div>
         <Fact label="Customer Code" value={ctx?.customerCode || '—'} />
-        <Fact label="Customer" value={ctx?.customerName || '—'} />
+        <Fact label="Customer Name" value={ctx?.customerName || '—'} />
         <Fact label="PO Number" value={ctx?.poNo || '—'} />
-        <Fact label="Order Date" value={ctx?.orderDate ? formatDate(ctx.orderDate) : '—'} />
         <Fact label="Invoice Date" value={ctx?.invoiceDate ? formatDate(ctx.invoiceDate) : '—'} />
-      </div>
-
-      {/* Delivery info summary — filled by the guided popup, shown here read-only
-          with a button to (re)open the popup. */}
-      <div className="flex items-start gap-4 border-t border-surface-line px-5 py-2.5">
-        <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-5">
-          <Fact label="Ship-To Address" value={del.shipToAddress || '—'} />
-          <Fact label="Receiver" value={[del.receiverName, del.receiverPhone].filter(Boolean).join(' · ') || '—'} />
-          <Fact label="Delivery Type" value={ctx ? (del.deliveryMethod === 'transport' ? 'Transport' : 'Courier') : '—'} />
-          <Fact label={del.deliveryMethod === 'transport' ? 'Vehicle / Driver / Vendor' : 'Courier'} value={carrier || '—'} />
-          <Fact label="Delivery Note" value={del.deliveryNote || '—'} />
-        </div>
-        <button onClick={onEditInfo} disabled={disabled || !ctx}
-          className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-500 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-40">
-          <Icon name="edit" className="text-[16px]" /> {anyFilled ? 'Edit delivery info' : 'Fill delivery info'}
-        </button>
       </div>
     </header>
   )
@@ -798,13 +855,18 @@ function ItemRow({ i, l, locations, disabled, qtyRef, onQtyKey, onFocusQty, onQt
 // ===========================================================================
 // Right smart panel
 // ===========================================================================
-function SmartPanel({ recent, vehicles, disabled, onApplyVehicle, onApplyDriver, onApplyVendor, onApplyAddress, onApplyReceiver, onApplyNote }: {
+function SmartPanel({ recent, vehicles, disabled, del, ctx, onEditInfo, onApplyVehicle, onApplyDriver, onApplyVendor, onApplyAddress, onApplyReceiver, onApplyNote }: {
   recent: RecentChallan[]; vehicles: VehicleLite[]; disabled: boolean
+  del: DeliveryInfo; ctx: InvoiceCtx | null; onEditInfo: () => void
   onApplyVehicle: (id: string) => void; onApplyDriver: (name: string, phone?: string) => void
   onApplyVendor: (id: string, name: string) => void; onApplyAddress: (a: string) => void
   onApplyReceiver: (name: string, phone?: string) => void; onApplyNote: (n: string) => void
 }) {
   const vehById = useMemo(() => Object.fromEntries(vehicles.map(v => [v.id, v])), [vehicles])
+  const vehName = formatVehicleNo(vehById[del.vehicleId]?.vehicle_number) || ''
+  const carrier = del.deliveryMethod === 'transport'
+    ? [vehName, del.driverName, del.transportVendor].filter(Boolean).join(' · ')
+    : del.courierName
   // Distinct, most-recent-first values pulled from the last challans.
   const uniq = <T,>(arr: T[], key: (t: T) => string) => {
     const seen = new Set<string>(); const out: T[] = []
@@ -819,10 +881,30 @@ function SmartPanel({ recent, vehicles, disabled, onApplyVehicle, onApplyDriver,
   const recentNotes = uniq(recent.filter(r => r.print_note && r.print_note !== DEFAULT_CHALLAN_NOTE), r => r.print_note!).slice(0, 3)
 
   return (
-    <aside className={cn('hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-surface-line bg-surface-sunken/30 xl:flex', disabled && 'pointer-events-none opacity-50')}>
-      <div className="flex items-center gap-2 border-b border-surface-line px-4 py-3">
-        <Icon name="auto_awesome" className="text-[18px] text-brand-600" />
-        <h3 className="text-sm font-bold">Smart Fill</h3>
+    <aside className={cn('hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-surface-line bg-surface-sunken/30 lg:flex', disabled && 'pointer-events-none opacity-50')}>
+      {/* Delivery info — the "rest of the data" lives here; the button opens the
+          guided popup to fill/edit it. */}
+      <div className="border-b border-surface-line px-4 py-3">
+        <div className="mb-2 flex items-center gap-2">
+          <Icon name="local_shipping" className="text-[18px] text-brand-600" />
+          <h3 className="text-sm font-bold">Delivery Info</h3>
+          <button onClick={onEditInfo} disabled={!ctx}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-brand-500 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-40">
+            <Icon name="edit" className="text-[14px]" /> Edit
+          </button>
+        </div>
+        <div className="space-y-1.5">
+          <PanelKV label="Ship-To" value={del.shipToAddress} />
+          <PanelKV label="Receiver" value={[del.receiverName, del.receiverPhone].filter(Boolean).join(' · ')} />
+          <PanelKV label="Type" value={ctx ? (del.deliveryMethod === 'transport' ? 'Transport' : 'Courier') : ''} />
+          <PanelKV label={del.deliveryMethod === 'transport' ? 'Vehicle / Driver' : 'Courier'} value={carrier} />
+          <PanelKV label="Note" value={del.deliveryNote} />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 border-b border-surface-line px-4 py-2.5">
+        <Icon name="auto_awesome" className="text-[16px] text-brand-600" />
+        <h3 className="text-xs font-bold uppercase tracking-wide">Smart Fill</h3>
         <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-ink-soft">One-click</span>
       </div>
       <div className="space-y-4 p-4">
@@ -865,6 +947,14 @@ function SmartPanel({ recent, vehicles, disabled, onApplyVehicle, onApplyDriver,
   )
 }
 
+function PanelKV({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2 text-xs">
+      <span className="w-16 shrink-0 font-semibold text-ink-soft">{label}</span>
+      <span className={cn('min-w-0 flex-1', value ? 'text-ink' : 'text-ink-faint')}>{value || '—'}</span>
+    </div>
+  )
+}
 function PanelGroup({ icon, title, empty, children }: { icon: string; title: string; empty: boolean; children: React.ReactNode }) {
   return (
     <div>
@@ -892,9 +982,9 @@ function Chip({ main, sub, multiline, onClick }: { main: string; sub?: string; m
 // ===========================================================================
 // Footer — live statistics + primary action area
 // ===========================================================================
-function FooterBar({ stats, ctx, created, saving, canPost, onGenerate, onPrint, onConfirm, onNew }: {
+function FooterBar({ stats, ctx, created, saving, canPost, canCreate, onGenerate, onPrint, onConfirm, onNew }: {
   stats: { invoiceQty: number; deliveredQty: number; pending: number; totalItems: number; completedItems: number; remaining: number; pct: number }
-  ctx: InvoiceCtx | null; created: Tables<'delivery_challans'> | null; saving: boolean; canPost: boolean
+  ctx: InvoiceCtx | null; created: Tables<'delivery_challans'> | null; saving: boolean; canPost: boolean; canCreate: boolean
   onGenerate: () => void; onPrint: () => void; onConfirm: () => void; onNew: () => void
 }) {
   const posted = !!created?.posted_at
@@ -922,7 +1012,8 @@ function FooterBar({ stats, ctx, created, saving, canPost, onGenerate, onPrint, 
           {!ctx ? (
             <span className="text-xs text-ink-faint">Search an invoice to begin</span>
           ) : !created ? (
-            <Button icon="local_shipping" size="md" loading={saving} onClick={onGenerate} className="h-11 px-6 text-[15px]">
+            <Button icon="local_shipping" size="md" loading={saving} disabled={!canCreate} onClick={onGenerate}
+              className="h-11 px-6 text-[15px]" title={canCreate ? undefined : 'You do not have permission to create challans'}>
               Generate Delivery Challan
             </Button>
           ) : (

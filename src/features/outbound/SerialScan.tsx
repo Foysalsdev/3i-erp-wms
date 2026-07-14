@@ -308,7 +308,7 @@ function SerialGrid({ line, otherSerials, canEdit, onBack, onConfirm }: {
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (commitRow(i)) focusNextEmpty(i) } }}
                       onPaste={e => pasteFill(i, e)}
                       placeholder="Scan or paste serial(s)…"
-                      className="w-full rounded-md border border-brand-200/70 bg-surface px-2.5 py-1.5 font-mono text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken" />
+                      className="fiori-input w-full font-mono" />
                   </td>
                   {canEdit && (
                     <td className="px-3 py-1.5 text-center">

@@ -158,7 +158,7 @@ export function VehicleLoadingScan({ challan, vehicles, onClose, onDone }: {
               <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); scan() } }}
                 placeholder="Scan or type a serial number…"
-                className="w-full rounded-lg border border-brand-200/70 bg-surface px-3 py-2.5 font-mono text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25" />
+                className="fiori-input w-full font-mono" />
               <p className="mt-1 text-[11px] text-ink-faint">Press Enter after each scan. Only serials reserved on this order are accepted.</p>
             </div>
 

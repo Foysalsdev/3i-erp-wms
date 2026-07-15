@@ -37,7 +37,7 @@ type DriverLite = Pick<Tables<'drivers'>, 'id' | 'name' | 'phone'>
 type CourierLite = Pick<Tables<'couriers'>, 'id' | 'courier_code' | 'name'>
 type LocationLite = Pick<Tables<'locations'>, 'id' | 'location_code'>
 type RecentChallan = Pick<Tables<'delivery_challans'>,
-  'id' | 'challan_no' | 'invoice_no' | 'created_at' | 'delivery_method' | 'vehicle_id' | 'transporter_id'
+  'id' | 'challan_no' | 'invoice_no' | 'created_at' | 'customer_id' | 'delivery_method' | 'vehicle_id' | 'transporter_id'
   | 'transport_vendor' | 'driver_name' | 'driver_phone' | 'courier_id' | 'courier_name'
   | 'ship_to_address' | 'receiver_name' | 'receiver_phone' | 'print_note'>
 
@@ -122,7 +122,7 @@ export default function QuickDeliveryHub() {
     supabase.from('drivers').select('id,name,phone').order('name').then(({ data }) => setDrivers(data ?? []))
     supabase.from('couriers').select('id,courier_code,name').eq('status', 'active').then(({ data }) => setCouriers(data ?? []))
     supabase.from('delivery_challans')
-      .select('id,challan_no,invoice_no,created_at,delivery_method,vehicle_id,transporter_id,transport_vendor,driver_name,driver_phone,courier_id,courier_name,ship_to_address,receiver_name,receiver_phone,print_note')
+      .select('id,challan_no,invoice_no,created_at,customer_id,delivery_method,vehicle_id,transporter_id,transport_vendor,driver_name,driver_phone,courier_id,courier_name,ship_to_address,receiver_name,receiver_phone,print_note')
       .neq('status', 'cancelled').order('created_at', { ascending: false }).limit(25)
       .then(({ data }) => setRecent(data ?? []))
   }, [currentClientId])
@@ -452,11 +452,10 @@ export default function QuickDeliveryHub() {
             plus one-click reuse of recent dispatch info. */}
         <SmartPanel
           recent={recent} vehicles={vehicles} vendors={vendors} drivers={drivers} couriers={couriers}
-          disabled={!!created} del={del} ctx={ctx} patchDel={patchDel} onEditInfo={() => setGuideOpen(true)}
+          disabled={!!created} del={del} ctx={ctx} custAddrs={custAddrs} patchDel={patchDel} onEditInfo={() => setGuideOpen(true)}
           onApplyVehicle={id => applyVehicle(id, vehicles, vendors, patchDel)}
           onApplyDriver={(name, phone) => patchDel({ driverName: name, driverPhone: phone || '', driverId: '' })}
           onApplyVendor={(id, name) => patchDel({ transporterId: id || '', transportVendor: name })}
-          onApplyAddress={a => patchDel({ shipToAddress: a })}
           onApplyReceiver={(name, phone) => patchDel({ receiverName: name, receiverPhone: phone || '' })}
           onApplyNote={n => setPrintNote(n)}
         />
@@ -859,12 +858,12 @@ function ItemRow({ i, l, locations, disabled, qtyRef, onQtyKey, onFocusQty, onQt
 // ===========================================================================
 // Right smart panel
 // ===========================================================================
-function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, del, ctx, patchDel, onEditInfo, onApplyVehicle, onApplyDriver, onApplyVendor, onApplyAddress, onApplyReceiver, onApplyNote }: {
+function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, del, ctx, custAddrs, patchDel, onEditInfo, onApplyVehicle, onApplyDriver, onApplyVendor, onApplyReceiver, onApplyNote }: {
   recent: RecentChallan[]; vehicles: VehicleLite[]; vendors: VendorLite[]; drivers: DriverLite[]; couriers: CourierLite[]
-  disabled: boolean; del: DeliveryInfo; ctx: InvoiceCtx | null
+  disabled: boolean; del: DeliveryInfo; ctx: InvoiceCtx | null; custAddrs: string[]
   patchDel: (p: Partial<DeliveryInfo>) => void; onEditInfo: () => void
   onApplyVehicle: (id: string) => void; onApplyDriver: (name: string, phone?: string) => void
-  onApplyVendor: (id: string, name: string) => void; onApplyAddress: (a: string) => void
+  onApplyVendor: (id: string, name: string) => void
   onApplyReceiver: (name: string, phone?: string) => void; onApplyNote: (n: string) => void
 }) {
   const fd = disabled || !ctx // fields editable only once an invoice is loaded
@@ -875,11 +874,23 @@ function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, de
     return out
   }
   const vehById = useMemo(() => Object.fromEntries(vehicles.map(v => [v.id, v])), [vehicles])
+  // The customer's saved Ship-To addresses (default + side deliveries) become a
+  // searchable list — the right way to handle a customer with 10–15 addresses.
+  const shipOptions = useMemo(() => {
+    const seen = new Set<string>(); const out: { id: string; label: string }[] = []
+    for (const a of [ctx?.customerShipping, ...custAddrs]) {
+      const t = (a || '').trim(); const k = t.toLowerCase()
+      if (t && !seen.has(k)) { seen.add(k); out.push({ id: t, label: t }) }
+    }
+    return out
+  }, [ctx?.customerShipping, custAddrs])
+  // Fleet-wide recents (vehicle/driver/vendor) are global; receiver history is
+  // scoped to THIS customer so it stays relevant.
+  const forCustomer = (r: RecentChallan) => !ctx || r.customer_id === ctx.customerId
   const recentVehicles = uniq(recent.filter(r => r.vehicle_id), r => r.vehicle_id!).slice(0, 5)
   const recentDrivers = uniq(recent.filter(r => r.driver_name), r => r.driver_name!).slice(0, 5)
   const recentVendors = uniq(recent.filter(r => r.transport_vendor), r => r.transport_vendor!).slice(0, 5)
-  const recentAddrs = uniq(recent.filter(r => r.ship_to_address), r => r.ship_to_address!).slice(0, 4)
-  const recentReceivers = uniq(recent.filter(r => r.receiver_name), r => r.receiver_name!).slice(0, 5)
+  const recentReceivers = uniq(recent.filter(r => r.receiver_name && forCustomer(r)), r => r.receiver_name!).slice(0, 5)
   const recentNotes = uniq(recent.filter(r => r.print_note && r.print_note !== DEFAULT_CHALLAN_NOTE), r => r.print_note!).slice(0, 3)
 
   return (
@@ -897,7 +908,11 @@ function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, de
         </div>
         <div className="space-y-2">
           <PanelField label="Ship-To Address">
-            <input value={del.shipToAddress} disabled={fd} onChange={e => patchDel({ shipToAddress: e.target.value })} className={panelInput} placeholder="Delivery address" />
+            {/* Searchable over the customer's saved addresses; free text is fine
+                too (a new one is saved back as a side-delivery on generate). */}
+            <PickList disabled={fd} value={del.shipToAddress} options={shipOptions}
+              onPick={o => patchDel({ shipToAddress: o?.label ?? '' })}
+              onFree={t => patchDel({ shipToAddress: t })} placeholder="Search / type address" />
           </PanelField>
           <div className="grid grid-cols-2 gap-2">
             <PanelField label="Receiver Name">
@@ -978,11 +993,6 @@ function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, de
         <PanelGroup icon="business" title="Recent Transport Vendor" empty={!recentVendors.length}>
           {recentVendors.map(r => (
             <Chip key={r.id} onClick={() => onApplyVendor(r.transporter_id ?? '', r.transport_vendor!)} main={r.transport_vendor!} />
-          ))}
-        </PanelGroup>
-        <PanelGroup icon="location_on" title="Recent Shipping Address" empty={!recentAddrs.length}>
-          {recentAddrs.map(r => (
-            <Chip key={r.id} onClick={() => onApplyAddress(r.ship_to_address!)} main={r.ship_to_address!} multiline />
           ))}
         </PanelGroup>
         <PanelGroup icon="how_to_reg" title="Receiver History" empty={!recentReceivers.length}>

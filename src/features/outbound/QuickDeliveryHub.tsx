@@ -206,10 +206,8 @@ export default function QuickDeliveryHub() {
       supabase.from('customer_addresses').select('address').eq('customer_id', row.customerId)
         .then(({ data }) => setCustAddrs((data ?? []).map(a => a.address)))
       setPrintNote(DEFAULT_CHALLAN_NOTE)
-      // Open the guided popup so the operator is asked each delivery field one
-      // at a time. Quantities are a separate step (the item grid) — the popup
-      // never touches them.
-      setGuideOpen(true)
+      // Delivery info fills straight in the right panel now; the guided popup
+      // stays available on demand (its button) rather than auto-opening over it.
     } catch (e: any) {
       notify('error', e?.message ?? 'Could not load invoice')
     } finally {
@@ -380,7 +378,7 @@ export default function QuickDeliveryHub() {
                   panel (which also holds it) is hidden. */}
               {ctx && !created && (
                 <button onClick={() => setGuideOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-brand-500 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 lg:hidden">
+                  className="inline-flex items-center gap-1 rounded-lg border border-brand-500 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 md:hidden">
                   <Icon name="local_shipping" className="text-[14px]" /> Delivery info
                 </button>
               )}
@@ -414,43 +412,47 @@ export default function QuickDeliveryHub() {
             </div>
           )}
 
-          <ItemHeaderRow />
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-            {lines.length === 0 ? (
-              <div className="flex h-full items-center justify-center p-10 text-center">
-                <p className="text-sm text-ink-soft">Enter an invoice number above to load its items.</p>
-              </div>
-            ) : (
-              <div style={{ height: rowVirt.getTotalSize(), position: 'relative' }}>
-                {rowVirt.getVirtualItems().map(v => {
-                  const i = v.index; const l = lines[i]
-                  return (
-                    <div key={l.soItemId} data-index={i} ref={rowVirt.measureElement}
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}>
-                      <ItemRow
-                        i={i} l={l} locations={locations} disabled={!!created}
-                        qtyRef={el => { qtyRefs.current[i] = el }}
-                        onQtyKey={e => onQtyKey(e, i)}
-                        onFocusQty={() => { lastQtyIdx.current = i }}
-                        onQty={val => patchLine(i, { deliveredQty: val })}
-                        onCommitQty={val => rememberQty(val)}
-                        onCondition={c => patchLine(i, { condition: c })}
-                        onLocation={loc => patchLine(i, { locationId: loc })}
-                        onRemarks={r => patchLine(i, { remarks: r })}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+          {/* Both axes scroll: the header row + rows share one min-width track so
+              columns never crush when the right panel steals horizontal room. */}
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+            <div className="min-w-[760px]">
+              <ItemHeaderRow />
+              {lines.length === 0 ? (
+                <div className="flex items-center justify-center p-10 text-center">
+                  <p className="text-sm text-ink-soft">Enter an invoice number above to load its items.</p>
+                </div>
+              ) : (
+                <div style={{ height: rowVirt.getTotalSize(), position: 'relative' }}>
+                  {rowVirt.getVirtualItems().map(v => {
+                    const i = v.index; const l = lines[i]
+                    return (
+                      <div key={l.soItemId} data-index={i} ref={rowVirt.measureElement}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}>
+                        <ItemRow
+                          i={i} l={l} locations={locations} disabled={!!created}
+                          qtyRef={el => { qtyRefs.current[i] = el }}
+                          onQtyKey={e => onQtyKey(e, i)}
+                          onFocusQty={() => { lastQtyIdx.current = i }}
+                          onQty={val => patchLine(i, { deliveredQty: val })}
+                          onCommitQty={val => rememberQty(val)}
+                          onCondition={c => patchLine(i, { condition: c })}
+                          onLocation={loc => patchLine(i, { locationId: loc })}
+                          onRemarks={r => patchLine(i, { remarks: r })}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </main>
 
-        {/* Right panel — the delivery info (summary + edit) plus one-click reuse
-            of recent dispatch info. */}
+        {/* Right panel — the live, editable delivery-info form (fills as you go),
+            plus one-click reuse of recent dispatch info. */}
         <SmartPanel
-          recent={recent} vehicles={vehicles} disabled={!!created}
-          del={del} ctx={ctx} onEditInfo={() => setGuideOpen(true)}
+          recent={recent} vehicles={vehicles} vendors={vendors} drivers={drivers} couriers={couriers}
+          disabled={!!created} del={del} ctx={ctx} patchDel={patchDel} onEditInfo={() => setGuideOpen(true)}
           onApplyVehicle={id => applyVehicle(id, vehicles, vendors, patchDel)}
           onApplyDriver={(name, phone) => patchDel({ driverName: name, driverPhone: phone || '', driverId: '' })}
           onApplyVendor={(id, name) => patchDel({ transporterId: id || '', transportVendor: name })}
@@ -857,24 +859,22 @@ function ItemRow({ i, l, locations, disabled, qtyRef, onQtyKey, onFocusQty, onQt
 // ===========================================================================
 // Right smart panel
 // ===========================================================================
-function SmartPanel({ recent, vehicles, disabled, del, ctx, onEditInfo, onApplyVehicle, onApplyDriver, onApplyVendor, onApplyAddress, onApplyReceiver, onApplyNote }: {
-  recent: RecentChallan[]; vehicles: VehicleLite[]; disabled: boolean
-  del: DeliveryInfo; ctx: InvoiceCtx | null; onEditInfo: () => void
+function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, del, ctx, patchDel, onEditInfo, onApplyVehicle, onApplyDriver, onApplyVendor, onApplyAddress, onApplyReceiver, onApplyNote }: {
+  recent: RecentChallan[]; vehicles: VehicleLite[]; vendors: VendorLite[]; drivers: DriverLite[]; couriers: CourierLite[]
+  disabled: boolean; del: DeliveryInfo; ctx: InvoiceCtx | null
+  patchDel: (p: Partial<DeliveryInfo>) => void; onEditInfo: () => void
   onApplyVehicle: (id: string) => void; onApplyDriver: (name: string, phone?: string) => void
   onApplyVendor: (id: string, name: string) => void; onApplyAddress: (a: string) => void
   onApplyReceiver: (name: string, phone?: string) => void; onApplyNote: (n: string) => void
 }) {
-  const vehById = useMemo(() => Object.fromEntries(vehicles.map(v => [v.id, v])), [vehicles])
-  const vehName = formatVehicleNo(vehById[del.vehicleId]?.vehicle_number) || ''
-  const carrier = del.deliveryMethod === 'transport'
-    ? [vehName, del.driverName, del.transportVendor].filter(Boolean).join(' · ')
-    : del.courierName
+  const fd = disabled || !ctx // fields editable only once an invoice is loaded
   // Distinct, most-recent-first values pulled from the last challans.
   const uniq = <T,>(arr: T[], key: (t: T) => string) => {
     const seen = new Set<string>(); const out: T[] = []
     for (const x of arr) { const k = key(x); if (k && !seen.has(k)) { seen.add(k); out.push(x) } }
     return out
   }
+  const vehById = useMemo(() => Object.fromEntries(vehicles.map(v => [v.id, v])), [vehicles])
   const recentVehicles = uniq(recent.filter(r => r.vehicle_id), r => r.vehicle_id!).slice(0, 5)
   const recentDrivers = uniq(recent.filter(r => r.driver_name), r => r.driver_name!).slice(0, 5)
   const recentVendors = uniq(recent.filter(r => r.transport_vendor), r => r.transport_vendor!).slice(0, 5)
@@ -883,33 +883,86 @@ function SmartPanel({ recent, vehicles, disabled, del, ctx, onEditInfo, onApplyV
   const recentNotes = uniq(recent.filter(r => r.print_note && r.print_note !== DEFAULT_CHALLAN_NOTE), r => r.print_note!).slice(0, 3)
 
   return (
-    <aside className={cn('hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-surface-line bg-surface-sunken/30 lg:flex', disabled && 'pointer-events-none opacity-50')}>
-      {/* Delivery info — the "rest of the data" lives here; the button opens the
-          guided popup to fill/edit it. */}
-      <div className="border-b border-surface-line px-4 py-3">
+    <aside className={cn('hidden w-72 shrink-0 flex-col overflow-y-auto border-l border-surface-line bg-surface-sunken/30 md:flex', disabled && 'pointer-events-none opacity-50')}>
+      {/* Delivery info — the "rest of the data" lives and fills right here as
+          compact fields. The Guided button opens the same fields as a popup. */}
+      <div className="border-b border-surface-line px-3 py-2.5">
         <div className="mb-2 flex items-center gap-2">
-          <Icon name="local_shipping" className="text-[18px] text-brand-600" />
-          <h3 className="text-sm font-bold">Delivery Info</h3>
-          <button onClick={onEditInfo} disabled={!ctx}
-            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-brand-500 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-40">
-            <Icon name="edit" className="text-[14px]" /> Edit
+          <Icon name="local_shipping" className="text-[16px] text-brand-600" />
+          <h3 className="text-[13px] font-bold">Delivery Info</h3>
+          <button onClick={onEditInfo} disabled={fd}
+            className="ml-auto inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-40">
+            <Icon name="dynamic_form" className="text-[13px]" /> Guided
           </button>
         </div>
-        <div className="space-y-1.5">
-          <PanelKV label="Ship-To" value={del.shipToAddress} />
-          <PanelKV label="Receiver" value={[del.receiverName, del.receiverPhone].filter(Boolean).join(' · ')} />
-          <PanelKV label="Type" value={ctx ? (del.deliveryMethod === 'transport' ? 'Transport' : 'Courier') : ''} />
-          <PanelKV label={del.deliveryMethod === 'transport' ? 'Vehicle / Driver' : 'Courier'} value={carrier} />
-          <PanelKV label="Note" value={del.deliveryNote} />
+        <div className="space-y-2">
+          <PanelField label="Ship-To Address">
+            <input value={del.shipToAddress} disabled={fd} onChange={e => patchDel({ shipToAddress: e.target.value })} className={panelInput} placeholder="Delivery address" />
+          </PanelField>
+          <div className="grid grid-cols-2 gap-2">
+            <PanelField label="Receiver Name">
+              <input value={del.receiverName} disabled={fd} onChange={e => patchDel({ receiverName: e.target.value })} className={panelInput} placeholder="Name" />
+            </PanelField>
+            <PanelField label="Receiver Mobile">
+              <input value={del.receiverPhone} disabled={fd} onChange={e => patchDel({ receiverPhone: e.target.value })} className={panelInput} placeholder="Mobile" />
+            </PanelField>
+          </div>
+          <PanelField label="Delivery Type">
+            <div className="flex gap-1.5">
+              {(['transport', 'courier'] as const).map(m => (
+                <button key={m} type="button" disabled={fd} onClick={() => patchDel({ deliveryMethod: m })}
+                  className={cn('h-8 flex-1 rounded-md border text-[11px] font-semibold disabled:opacity-50',
+                    del.deliveryMethod === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink/40 text-ink-soft hover:bg-surface-sunken')}>
+                  {m === 'transport' ? 'Transport' : 'Courier'}
+                </button>
+              ))}
+            </div>
+          </PanelField>
+          {del.deliveryMethod === 'transport' ? (
+            <>
+              <PanelField label="Transport Vendor">
+                <PickList disabled={fd} value={del.transportVendor || (vendors.find(v => v.id === del.transporterId)?.name ?? '')}
+                  options={vendors.map(v => ({ id: v.id, label: v.name, sub: v.vendor_code }))}
+                  onPick={o => patchDel({ transporterId: o?.id ?? '', transportVendor: o?.label ?? '' })}
+                  onFree={t => patchDel({ transporterId: '', transportVendor: t })} placeholder="Vendor" />
+              </PanelField>
+              <PanelField label="Vehicle">
+                <PickList disabled={fd} value={vehById[del.vehicleId]?.vehicle_number ?? ''}
+                  options={vehicles.map(v => ({ id: v.id, label: formatVehicleNo(v.vehicle_number) || v.vehicle_number, sub: v.vehicle_type ?? undefined }))}
+                  onPick={o => onApplyVehicle(o?.id ?? '')} onFree={() => {}} placeholder="Vehicle" />
+              </PanelField>
+              <div className="grid grid-cols-2 gap-2">
+                <PanelField label="Driver">
+                  <PickList disabled={fd} value={del.driverName}
+                    options={drivers.map(d => ({ id: d.id, label: d.name, sub: d.phone ?? undefined }))}
+                    onPick={o => { const d = drivers.find(x => x.id === o?.id); patchDel({ driverId: o?.id ?? '', driverName: o?.label ?? '', driverPhone: d?.phone ?? del.driverPhone }) }}
+                    onFree={t => patchDel({ driverId: '', driverName: t })} placeholder="Driver" />
+                </PanelField>
+                <PanelField label="Driver Mobile">
+                  <input value={del.driverPhone} disabled={fd} onChange={e => patchDel({ driverPhone: e.target.value })} className={panelInput} placeholder="Mobile" />
+                </PanelField>
+              </div>
+            </>
+          ) : (
+            <PanelField label="Courier">
+              <PickList disabled={fd} value={del.courierName}
+                options={couriers.map(c => ({ id: c.id, label: c.name, sub: c.courier_code }))}
+                onPick={o => patchDel({ courierId: o?.id ?? '', courierName: o?.label ?? '' })}
+                onFree={t => patchDel({ courierId: '', courierName: t })} placeholder="Courier" />
+            </PanelField>
+          )}
+          <PanelField label="Delivery Note">
+            <input value={del.deliveryNote} disabled={fd} onChange={e => patchDel({ deliveryNote: e.target.value })} className={panelInput} placeholder="Note on challan" />
+          </PanelField>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-surface-line px-4 py-2.5">
-        <Icon name="auto_awesome" className="text-[16px] text-brand-600" />
-        <h3 className="text-xs font-bold uppercase tracking-wide">Smart Fill</h3>
+      <div className="flex items-center gap-2 border-b border-surface-line px-3 py-2">
+        <Icon name="auto_awesome" className="text-[15px] text-brand-600" />
+        <h3 className="text-[11px] font-bold uppercase tracking-wide">Smart Fill</h3>
         <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-ink-soft">One-click</span>
       </div>
-      <div className="space-y-4 p-4">
+      <div className="space-y-4 p-3">
         <PanelGroup icon="local_shipping" title="Recent Vehicle" empty={!recentVehicles.length}>
           {recentVehicles.map(r => (
             <Chip key={r.id} onClick={() => onApplyVehicle(r.vehicle_id!)}
@@ -949,11 +1002,13 @@ function SmartPanel({ recent, vehicles, disabled, del, ctx, onEditInfo, onApplyV
   )
 }
 
-function PanelKV({ label, value }: { label: string; value: string }) {
+// Compact panel field: tiny label over a tight-padding control.
+const panelInput = 'h-8 w-full rounded-md border border-ink/40 bg-surface px-2 text-xs outline-none placeholder:font-normal placeholder:text-ink/35 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-faint'
+function PanelField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex gap-2 text-xs">
-      <span className="w-16 shrink-0 font-semibold text-ink-soft">{label}</span>
-      <span className={cn('min-w-0 flex-1', value ? 'text-ink' : 'text-ink-faint')}>{value || '—'}</span>
+    <div className="min-w-0">
+      <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-soft">{label}</label>
+      {children}
     </div>
   )
 }

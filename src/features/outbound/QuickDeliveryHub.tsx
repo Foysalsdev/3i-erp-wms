@@ -560,9 +560,11 @@ function Header({ ctx, onExit, searchRef, onSelectInvoice, loadingInv, currentCl
 
       {/* One compact identity row: the invoice number is an input here (empty),
           or the resolved value once picked, sitting inline with the customer /
-          PO / date facts it fills. No oversized search box. */}
-      <div className="grid grid-cols-2 items-start gap-x-6 gap-y-2 border-t border-surface-line bg-surface-sunken/40 px-4 py-2 sm:grid-cols-3 lg:grid-cols-5">
-        <div className="relative min-w-0">
+          PO / date facts it fills. flex-wrap (not a full-width grid) so the
+          blocks hug their content instead of stretching into wide gaps on a
+          large monitor — a grid-cols-5 spread 1600px across looked scattered. */}
+      <div className="flex flex-wrap items-start gap-x-10 gap-y-2 border-t border-surface-line bg-surface-sunken/40 px-4 py-2">
+        <div className="relative w-44 shrink-0">
           <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-soft">Invoice No</label>
           {!ctx ? (
             <>
@@ -601,10 +603,10 @@ function Header({ ctx, onExit, searchRef, onSelectInvoice, loadingInv, currentCl
             <p className="truncate text-sm font-bold" title={ctx.invoiceNo}>{ctx.invoiceNo}</p>
           )}
         </div>
-        <Fact label="Customer Code" value={ctx?.customerCode || '—'} />
-        <Fact label="Customer Name" value={ctx?.customerName || '—'} />
-        <Fact label="PO Number" value={ctx?.poNo || '—'} />
-        <Fact label="Invoice Date" value={ctx?.invoiceDate ? formatDate(ctx.invoiceDate) : '—'} />
+        <Fact label="Customer Code" value={ctx?.customerCode || '—'} className="w-28" />
+        <Fact label="Customer Name" value={ctx?.customerName || '—'} className="w-64" />
+        <Fact label="PO Number" value={ctx?.poNo || '—'} className="w-32" />
+        <Fact label="Invoice Date" value={ctx?.invoiceDate ? formatDate(ctx.invoiceDate) : '—'} className="w-28" />
       </div>
     </header>
   )
@@ -717,11 +719,11 @@ function GuidedDeliveryModal({ del, patchDel, vehicles, vendors, drivers, courie
 }
 const bigInput = 'h-12 w-full rounded-xl border border-ink/50 bg-surface px-4 text-base outline-none transition-colors placeholder:font-normal placeholder:text-ink/35 hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20'
 
-const inputCls = 'h-9 w-full rounded-lg border border-ink/50 bg-surface px-2.5 text-sm outline-none transition-colors placeholder:font-normal placeholder:text-ink/35 hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint'
+const inputCls = 'h-9 w-full rounded-lg border border-ink/50 bg-surface px-2.5 text-sm outline-none transition-colors placeholder:font-normal placeholder:text-ink/35 hover:border-ink focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-sunken disabled:text-ink-faint 2xl:h-10 2xl:text-[15px]'
 
-function Fact({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Fact({ label, value, strong, className }: { label: string; value: string; strong?: boolean; className?: string }) {
   return (
-    <div className="min-w-0">
+    <div className={cn('w-40 min-w-0 shrink-0', className)}>
       <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
       <p className={cn('truncate text-sm', strong ? 'font-bold' : 'font-medium')} title={value}>{value}</p>
     </div>
@@ -894,7 +896,10 @@ function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, de
   const recentNotes = uniq(recent.filter(r => r.print_note && r.print_note !== DEFAULT_CHALLAN_NOTE), r => r.print_note!).slice(0, 3)
 
   return (
-    <aside className={cn('hidden w-72 shrink-0 flex-col overflow-y-auto border-l border-surface-line bg-surface-sunken/30 md:flex', disabled && 'pointer-events-none opacity-50')}>
+    // Width scales up on larger monitors instead of staying pinned narrow —
+    // a fixed 288px strip looked cramped/tiny against a big desktop screen
+    // with the rest of the layout already filling its space.
+    <aside className={cn('hidden w-72 shrink-0 flex-col overflow-y-auto border-l border-surface-line bg-surface-sunken/30 md:flex xl:w-80 2xl:w-96', disabled && 'pointer-events-none opacity-50')}>
       {/* Delivery info — the "rest of the data" lives and fills right here as
           compact fields. The Guided button opens the same fields as a popup. */}
       <div className="border-b border-surface-line px-3 py-2.5">
@@ -1013,11 +1018,13 @@ function SmartPanel({ recent, vehicles, vendors, drivers, couriers, disabled, de
 }
 
 // Compact panel field: tiny label over a tight-padding control.
-const panelInput = 'h-8 w-full rounded-md border border-ink/40 bg-surface px-2 text-xs outline-none placeholder:font-normal placeholder:text-ink/35 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-faint'
+// Text/height step up a notch on very large monitors (2xl) — a tiny 32px
+// field with 12px text looked cramped once the panel itself grew wider.
+const panelInput = 'h-8 w-full rounded-md border border-ink/40 bg-surface px-2 text-xs outline-none placeholder:font-normal placeholder:text-ink/35 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-faint 2xl:h-9 2xl:text-sm'
 function PanelField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-soft">{label}</label>
+      <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-soft 2xl:text-[11px]">{label}</label>
       {children}
     </div>
   )
